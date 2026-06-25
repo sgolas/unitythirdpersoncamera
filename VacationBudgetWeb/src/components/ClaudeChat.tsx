@@ -1,8 +1,16 @@
 import { useState, useRef, useEffect } from 'react';
-import { Send, Sparkles, ChevronDown, ChevronUp, Bot, User, Trash2 } from 'lucide-react';
-import type { Budget } from '../types';
+import { Send, Sparkles, ChevronDown, ChevronUp, Bot, User, Trash2, CheckCircle, XCircle, CalendarPlus, Pencil } from 'lucide-react';
+import type { Budget, ItineraryEvent } from '../types';
+import { formatTime } from '../utils/formatters';
 
 interface Message { role: 'user' | 'assistant'; content: string; }
+
+interface ToolCall {
+  type: 'add_event' | 'update_event';
+  id: string;
+  input: Partial<ItineraryEvent> & { id?: string };
+  status: 'pending' | 'confirmed' | 'dismissed';
+}
 
 const QUICK_PROMPTS = [
   '🗺️ Plan a day-by-day itinerary',
@@ -13,20 +21,27 @@ const QUICK_PROMPTS = [
   '💡 Budget travel tips',
 ];
 
-interface Props { budget: Budget; selectedDate: string; }
+interface Props {
+  budget: Budget;
+  selectedDate: string;
+  events: ItineraryEvent[];
+  onAddEvent: (e: ItineraryEvent) => void;
+  onUpdateEvent: (e: ItineraryEvent) => void;
+}
 
-export function ClaudeChat({ budget, selectedDate }: Props) {
-  const [open,     setOpen]     = useState(false);
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [input,    setInput]    = useState('');
-  const [loading,  setLoading]  = useState(false);
-  const [error,    setError]    = useState('');
+export function ClaudeChat({ budget, selectedDate, events, onAddEvent, onUpdateEvent }: Props) {
+  const [open,      setOpen]      = useState(false);
+  const [messages,  setMessages]  = useState<Message[]>([]);
+  const [toolCalls, setToolCalls] = useState<ToolCall[]>([]);
+  const [input,     setInput]     = useState('');
+  const [loading,   setLoading]   = useState(false);
+  const [error,     setError]     = useState('');
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef  = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (open) bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, open, loading]);
+  }, [messages, toolCalls, open, loading]);
 
   useEffect(() => {
     if (open) setTimeout(() => inputRef.current?.focus(), 150);
@@ -51,12 +66,27 @@ export function ClaudeChat({ budget, selectedDate }: Props) {
           messages: updated,
           destination: budget.destination || undefined,
           tripName: budget.tripName,
+          events,
+          selectedDate,
         }),
       });
 
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Unknown error');
-      setMessages(prev => [...prev, { role: 'assistant', content: data.content }]);
+
+      if (data.content) {
+        setMessages(prev => [...prev, { role: 'assistant', content: data.content }]);
+      }
+
+      if (data.toolCalls?.length > 0) {
+        const pending: ToolCall[] = data.toolCalls.map((tc: any) => ({
+          type: tc.type,
+          id: tc.id,
+          input: tc.input,
+          status: 'pending',
+        }));
+        setToolCalls(prev => [...prev, ...pending]);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Connection failed. Try again.');
       setMessages(prev => prev.slice(0, -1));
@@ -65,7 +95,42 @@ export function ClaudeChat({ budget, selectedDate }: Props) {
     }
   }
 
+  function confirmToolCall(toolId: string) {
+    const tc = toolCalls.find(t => t.id === toolId);
+    if (!tc) return;
+
+    if (tc.type === 'add_event') {
+      const newEvent: ItineraryEvent = {
+        id: crypto.randomUUID(),
+        title: tc.input.title ?? 'Untitled',
+        description: tc.input.description ?? '',
+        location: tc.input.location ?? '',
+        date: tc.input.date ?? selectedDate,
+        startTime: tc.input.startTime ?? '09:00',
+        endTime: tc.input.endTime ?? '10:00',
+      };
+      onAddEvent(newEvent);
+    } else if (tc.type === 'update_event' && tc.input.id) {
+      const existing = events.find(e => e.id === tc.input.id);
+      if (existing) {
+        onUpdateEvent({ ...existing, ...tc.input as Partial<ItineraryEvent> });
+      }
+    }
+
+    setToolCalls(prev => prev.map(t => t.id === toolId ? { ...t, status: 'confirmed' } : t));
+  }
+
+  function dismissToolCall(toolId: string) {
+    setToolCalls(prev => prev.map(t => t.id === toolId ? { ...t, status: 'dismissed' } : t));
+  }
+
+  function clearChat() {
+    setMessages([]);
+    setToolCalls([]);
+  }
+
   const hasDestination = Boolean(budget.destination);
+  const pendingCount = toolCalls.filter(t => t.status === 'pending').length;
 
   return (
     <div className="mx-4 mb-4">
@@ -78,16 +143,21 @@ export function ClaudeChat({ budget, selectedDate }: Props) {
         <div className="flex items-center gap-2.5">
           <Sparkles size={18} />
           <span>AI Travel Assistant</span>
-          {messages.length > 0 && (
+          {pendingCount > 0 && (
+            <span className="bg-amber-400 text-amber-900 text-xs px-2 py-0.5 rounded-full font-bold">
+              {pendingCount} pending
+            </span>
+          )}
+          {messages.length > 0 && pendingCount === 0 && (
             <span className="bg-white/25 text-xs px-2 py-0.5 rounded-full">
               {messages.length}
             </span>
           )}
         </div>
         <div className="flex items-center gap-2">
-          {messages.length > 0 && open && (
+          {(messages.length > 0 || toolCalls.length > 0) && open && (
             <span
-              onClick={e => { e.stopPropagation(); setMessages([]); }}
+              onClick={e => { e.stopPropagation(); clearChat(); }}
               className="p-1 hover:bg-white/20 rounded-lg transition-colors"
             >
               <Trash2 size={14} />
@@ -100,12 +170,22 @@ export function ClaudeChat({ budget, selectedDate }: Props) {
       {/* Chat panel */}
       {open && (
         <div className="bg-white rounded-b-2xl border border-t-0 border-slate-100 shadow-lg fade-in overflow-hidden">
-          {/* Messages */}
           <div className="h-72 overflow-y-auto p-4 space-y-3 scroll-smooth">
-            {messages.length === 0 ? (
+            {messages.length === 0 && toolCalls.length === 0 ? (
               <EmptyChat destination={budget.destination} />
             ) : (
-              messages.map((msg, i) => <Bubble key={i} msg={msg} />)
+              <>
+                {messages.map((msg, i) => <Bubble key={i} msg={msg} />)}
+                {toolCalls.map(tc => (
+                  <ToolCallCard
+                    key={tc.id}
+                    toolCall={tc}
+                    events={events}
+                    onConfirm={() => confirmToolCall(tc.id)}
+                    onDismiss={() => dismissToolCall(tc.id)}
+                  />
+                ))}
+              </>
             )}
 
             {loading && <TypingIndicator />}
@@ -115,7 +195,7 @@ export function ClaudeChat({ budget, selectedDate }: Props) {
             <div ref={bottomRef} />
           </div>
 
-          {/* Quick prompts — only when chat is empty */}
+          {/* Quick prompts */}
           {messages.length === 0 && (
             <div className="px-4 pb-3 flex gap-2 overflow-x-auto">
               {QUICK_PROMPTS.map(p => (
@@ -130,10 +210,9 @@ export function ClaudeChat({ budget, selectedDate }: Props) {
             </div>
           )}
 
-          {/* Destination hint */}
           {!hasDestination && messages.length === 0 && (
             <p className="text-xs text-amber-600 bg-amber-50 mx-4 mb-3 px-3 py-2 rounded-xl">
-              💡 Set a destination in your Budget tab so Claude can give tailored suggestions.
+              💡 Set a destination in your Budget tab for tailored suggestions.
             </p>
           )}
 
@@ -144,7 +223,7 @@ export function ClaudeChat({ budget, selectedDate }: Props) {
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(input); } }}
-              placeholder={hasDestination ? `Ask about ${budget.destination}…` : 'Ask about your trip…'}
+              placeholder={hasDestination ? `Ask about ${budget.destination} or say "add an event"…` : 'Ask about your trip or say "add an event"…'}
               className="flex-1 border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300 focus:border-violet-400 transition-all"
               disabled={loading}
             />
@@ -162,6 +241,82 @@ export function ClaudeChat({ budget, selectedDate }: Props) {
     </div>
   );
 }
+
+/* ── Tool call confirmation card ─────────────────────────── */
+
+function ToolCallCard({ toolCall, events, onConfirm, onDismiss }: {
+  toolCall: ToolCall;
+  events: ItineraryEvent[];
+  onConfirm: () => void;
+  onDismiss: () => void;
+}) {
+  const isAdd = toolCall.type === 'add_event';
+  const input = toolCall.input;
+  const existingEvent = !isAdd && input.id ? events.find(e => e.id === input.id) : null;
+
+  const label = isAdd ? 'Add to calendar' : `Edit: ${existingEvent?.title ?? 'event'}`;
+  const Icon = isAdd ? CalendarPlus : Pencil;
+  const accentColor = isAdd ? '#2EC4B6' : '#0077B6';
+
+  if (toolCall.status === 'confirmed') {
+    return (
+      <div className="flex items-center gap-2 text-xs text-emerald-600 bg-emerald-50 rounded-xl px-3 py-2">
+        <CheckCircle size={14} /> {isAdd ? 'Added to calendar' : 'Event updated'}
+        {input.title && `: "${input.title}"`}
+      </div>
+    );
+  }
+
+  if (toolCall.status === 'dismissed') {
+    return (
+      <div className="flex items-center gap-2 text-xs text-slate-400 bg-slate-50 rounded-xl px-3 py-2">
+        <XCircle size={14} /> Dismissed
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-2xl border-2 overflow-hidden" style={{ borderColor: accentColor + '40' }}>
+      {/* Header */}
+      <div className="flex items-center gap-2 px-3 py-2" style={{ backgroundColor: accentColor + '15' }}>
+        <Icon size={14} style={{ color: accentColor }} />
+        <span className="text-xs font-bold" style={{ color: accentColor }}>{label}</span>
+      </div>
+
+      {/* Event details */}
+      <div className="px-3 py-2.5 text-xs text-slate-600 space-y-1">
+        {input.title && <p className="font-semibold text-slate-800 text-sm">{input.title}</p>}
+        {input.date && (
+          <p>📅 {new Date(input.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</p>
+        )}
+        {(input.startTime || input.endTime) && (
+          <p>🕐 {input.startTime ? formatTime(input.startTime) : '?'} – {input.endTime ? formatTime(input.endTime) : '?'}</p>
+        )}
+        {input.location && <p>📍 {input.location}</p>}
+        {input.description && <p className="text-slate-400 italic">{input.description}</p>}
+      </div>
+
+      {/* Actions */}
+      <div className="flex gap-2 px-3 pb-3">
+        <button
+          onClick={onConfirm}
+          className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-white text-xs font-semibold transition-all active:scale-95"
+          style={{ backgroundColor: accentColor }}
+        >
+          <CheckCircle size={13} /> {isAdd ? 'Add to Calendar' : 'Apply Changes'}
+        </button>
+        <button
+          onClick={onDismiss}
+          className="px-3 py-2 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 text-xs font-semibold transition-colors"
+        >
+          Dismiss
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ── Sub-components ──────────────────────────────────────── */
 
 function Bubble({ msg }: { msg: Message }) {
   const isUser = msg.role === 'user';
@@ -207,10 +362,10 @@ function EmptyChat({ destination }: { destination: string }) {
     <div className="flex flex-col items-center justify-center h-full text-center gap-2 py-4">
       <span className="text-4xl">✨</span>
       <p className="font-semibold text-slate-700">Your AI travel planner</p>
-      <p className="text-sm text-slate-400 max-w-[220px]">
+      <p className="text-sm text-slate-400 max-w-[240px]">
         {destination
-          ? `Ask me anything about your trip to ${destination}!`
-          : 'Ask me about activities, restaurants, packing tips and more.'}
+          ? `Ask me anything about ${destination}, or say "add a visit to the Colosseum at 10am tomorrow"`
+          : 'Ask about activities, restaurants, or say "add an event to my calendar"'}
       </p>
     </div>
   );

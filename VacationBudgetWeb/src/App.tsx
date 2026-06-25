@@ -6,6 +6,8 @@ import { LoginPage } from './pages/LoginPage';
 import { ResetPasswordPage } from './pages/ResetPasswordPage';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { useVacationData } from './hooks/useVacationData';
+import type { Expense, ExpenseCategory } from './types';
+import { CATEGORY_META, CURRENCY_SYMBOLS } from './types';
 
 type Tab = 'budget' | 'itinerary';
 
@@ -23,6 +25,31 @@ function AppContent() {
     addEvent, updateEvent, deleteEvent,
   } = useVacationData();
 
+  const DEFAULT_TIMES: Record<ExpenseCategory, [string, string]> = {
+    FOOD:          ['12:00', '13:00'],
+    ACCOMMODATION: ['15:00', '15:30'],
+    TRANSPORT:     ['09:00', '10:00'],
+    ACTIVITIES:    ['10:00', '12:00'],
+    SHOPPING:      ['11:00', '12:00'],
+    OTHER:         ['12:00', '13:00'],
+  };
+
+  function handleAddExpense(expense: Expense) {
+    addExpense(expense);
+    const meta = CATEGORY_META[expense.category];
+    const [startTime, endTime] = DEFAULT_TIMES[expense.category];
+    const symbol = CURRENCY_SYMBOLS[budget.currency];
+    addEvent({
+      id: crypto.randomUUID(),
+      title: `${meta.emoji} ${expense.name}`,
+      description: `${symbol}${expense.amount.toFixed(2)} · ${meta.label}${expense.notes ? ' · ' + expense.notes : ''}`,
+      location: expense.location || '',
+      date: expense.date,
+      startTime,
+      endTime,
+    });
+  }
+
   if (authLoading)    return <Splash />;
   if (isPasswordReset) return <ResetPasswordPage />;
   if (!user)          return <LoginPage />;
@@ -36,7 +63,7 @@ function AppContent() {
           <BudgetTab
             budget={budget} expenses={expenses}
             onUpdateBudget={updateBudget}
-            onAddExpense={addExpense} onUpdateExpense={updateExpense} onDeleteExpense={deleteExpense}
+            onAddExpense={handleAddExpense} onUpdateExpense={updateExpense} onDeleteExpense={deleteExpense}
           />
         ) : (
           <ItineraryTab

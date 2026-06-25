@@ -20,8 +20,9 @@ type CalView = 'week' | 'month';
 export function ItineraryTab({ budget, expenses, events, onAddEvent, onUpdateEvent, onDeleteEvent }: Props) {
   const [selectedDate, setSelectedDate] = useState(todayStr());
   const [calView,      setCalView]      = useState<CalView>('week');
-  const [showDialog,   setShowDialog]   = useState(false);
-  const [editingEvent, setEditingEvent] = useState<ItineraryEvent | null>(null);
+  const [showDialog,      setShowDialog]      = useState(false);
+  const [editingEvent,    setEditingEvent]    = useState<ItineraryEvent | null>(null);
+  const [confirmingEvent, setConfirmingEvent] = useState<ItineraryEvent | null>(null);
 
   const today = todayStr();
 
@@ -148,7 +149,7 @@ export function ItineraryTab({ budget, expenses, events, onAddEvent, onUpdateEve
               event={event}
               index={i}
               onEdit={() => setEditingEvent(event)}
-              onDelete={() => onDeleteEvent(event.id)}
+              onDelete={() => setConfirmingEvent(event)}
             />
           ))}
         </div>
@@ -162,6 +163,28 @@ export function ItineraryTab({ budget, expenses, events, onAddEvent, onUpdateEve
       >
         <Plus size={20} /> Add Activity
       </button>
+
+      {/* Delete confirmation */}
+      {confirmingEvent && (
+        <div className="fixed inset-0 bg-black/50 flex items-end z-[300]" onClick={() => setConfirmingEvent(null)}>
+          <div className="bg-white w-full rounded-t-3xl p-6 pb-10" onClick={e => e.stopPropagation()}>
+            <h3 className="font-bold text-slate-800 text-lg mb-1">Delete Activity?</h3>
+            <p className="text-slate-500 text-sm mb-6">
+              "{confirmingEvent.title}" will be permanently removed.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setConfirmingEvent(null)}
+                className="flex-1 py-3 rounded-2xl font-semibold text-slate-600 bg-slate-100 active:bg-slate-200 transition-colors"
+              >Cancel</button>
+              <button
+                onClick={() => { onDeleteEvent(confirmingEvent.id); setConfirmingEvent(null); }}
+                className="flex-1 py-3 rounded-2xl font-semibold text-white bg-red-500 active:bg-red-600 transition-colors"
+              >Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showDialog && (
         <EventDialog

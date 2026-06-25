@@ -28,6 +28,7 @@ export function BudgetTab({ budget, expenses, onUpdateBudget, onAddExpense, onUp
   const [undoVisible,       setUndoVisible]       = useState(false);
   const [emailingId,        setEmailingId]        = useState<string | null>(null);
   const [emailToast,        setEmailToast]        = useState('');
+  const [confirmingExpense, setConfirmingExpense] = useState<Expense | null>(null);
 
   const totalSpent = expenses.reduce((s, e) => s + e.amount, 0);
   const remaining  = budget.totalAmount - totalSpent;
@@ -36,10 +37,16 @@ export function BudgetTab({ budget, expenses, onUpdateBudget, onAddExpense, onUp
 
   const filtered = filter === ALL ? expenses : expenses.filter(e => e.category === filter);
 
-  function handleDelete(expense: Expense) {
-    setUndoExpense(expense);
+  function handleDeleteClick(expense: Expense) {
+    setConfirmingExpense(expense);
+  }
+
+  function confirmDelete() {
+    if (!confirmingExpense) return;
+    setUndoExpense(confirmingExpense);
     setUndoVisible(true);
-    onDeleteExpense(expense.id);
+    onDeleteExpense(confirmingExpense.id);
+    setConfirmingExpense(null);
   }
 
   useEffect(() => {
@@ -169,7 +176,7 @@ export function BudgetTab({ budget, expenses, onUpdateBudget, onAddExpense, onUp
               currency={budget.currency}
               emailingId={emailingId}
               onEdit={() => setEditingExpense(expense)}
-              onDelete={() => handleDelete(expense)}
+              onDelete={() => handleDeleteClick(expense)}
               onEmail={() => emailReceipt(expense)}
             />
           ))}
@@ -184,6 +191,28 @@ export function BudgetTab({ budget, expenses, onUpdateBudget, onAddExpense, onUp
       >
         <Plus size={20} /> Add Expense
       </button>
+
+      {/* Delete confirmation */}
+      {confirmingExpense && (
+        <div className="fixed inset-0 bg-black/50 flex items-end z-[300]" onClick={() => setConfirmingExpense(null)}>
+          <div className="bg-white w-full rounded-t-3xl p-6 pb-10" onClick={e => e.stopPropagation()}>
+            <h3 className="font-bold text-slate-800 text-lg mb-1">Delete Expense?</h3>
+            <p className="text-slate-500 text-sm mb-6">
+              "{confirmingExpense.name}" will be permanently removed.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setConfirmingExpense(null)}
+                className="flex-1 py-3 rounded-2xl font-semibold text-slate-600 bg-slate-100 active:bg-slate-200 transition-colors"
+              >Cancel</button>
+              <button
+                onClick={confirmDelete}
+                className="flex-1 py-3 rounded-2xl font-semibold text-white bg-red-500 active:bg-red-600 transition-colors"
+              >Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Undo snackbar */}
       {undoVisible && (

@@ -1,7 +1,8 @@
-import { useState } from 'react';
-import { X, MapPin, FileText, Calendar, Clock, ExternalLink } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { X, FileText, Calendar, Clock, ExternalLink } from 'lucide-react';
 import { ItineraryEvent } from '../types';
 import { Overlay } from './BudgetDialog';
+import { LocationInput } from './LocationInput';
 import { todayStr } from '../utils/formatters';
 
 interface Props {
@@ -11,19 +12,36 @@ interface Props {
   onClose: () => void;
 }
 
+const DRAFT_KEY = 'draft_event';
+
 export function EventDialog({ event, defaultDate, onSave, onClose }: Props) {
-  const [title,       setTitle]       = useState(event?.title       ?? '');
-  const [description, setDescription] = useState(event?.description ?? '');
-  const [location,    setLocation]    = useState(event?.location    ?? '');
-  const [date,        setDate]        = useState(event?.date        ?? defaultDate ?? todayStr());
-  const [startTime,   setStartTime]   = useState(event?.startTime   ?? '09:00');
-  const [endTime,     setEndTime]     = useState(event?.endTime     ?? '10:00');
+  const isEditing = event !== null;
+
+  function getInitial() {
+    if (isEditing) return null;
+    try { return JSON.parse(sessionStorage.getItem(DRAFT_KEY) ?? 'null'); } catch { return null; }
+  }
+  const draft = getInitial();
+
+  const [title,       setTitle]       = useState(event?.title       ?? draft?.title       ?? '');
+  const [description, setDescription] = useState(event?.description ?? draft?.description ?? '');
+  const [location,    setLocation]    = useState(event?.location    ?? draft?.location    ?? '');
+  const [date,        setDate]        = useState(event?.date        ?? draft?.date        ?? defaultDate ?? todayStr());
+  const [startTime,   setStartTime]   = useState(event?.startTime   ?? draft?.startTime   ?? '09:00');
+  const [endTime,     setEndTime]     = useState(event?.endTime     ?? draft?.endTime     ?? '10:00');
   const [titleErr,    setTitleErr]    = useState(false);
 
-  const isEditing = event !== null;
+  // Persist draft while typing (new events only)
+  useEffect(() => {
+    if (isEditing) return;
+    sessionStorage.setItem(DRAFT_KEY, JSON.stringify({ title, description, location, date, startTime, endTime }));
+  }, [title, description, location, date, startTime, endTime, isEditing]);
+
+  function clearDraft() { sessionStorage.removeItem(DRAFT_KEY); }
 
   function handleSave() {
     if (title.trim() === '') { setTitleErr(true); return; }
+    clearDraft();
     onSave({
       id:          event?.id ?? crypto.randomUUID(),
       title:       title.trim(),
@@ -35,12 +53,14 @@ export function EventDialog({ event, defaultDate, onSave, onClose }: Props) {
     });
   }
 
+  function handleClose() { clearDraft(); onClose(); }
+
   return (
-    <Overlay onClose={onClose}>
+    <Overlay onClose={handleClose}>
       <div className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl fade-in max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-5">
           <h2 className="text-2xl font-bold text-slate-800">{isEditing ? 'Edit Activity' : 'New Activity'}</h2>
-          <button onClick={onClose} className="p-2 rounded-full hover:bg-slate-100 transition-colors">
+          <button onClick={handleClose} className="p-2 rounded-full hover:bg-slate-100 transition-colors">
             <X size={20} className="text-slate-500" />
           </button>
         </div>
@@ -81,16 +101,14 @@ export function EventDialog({ event, defaultDate, onSave, onClose }: Props) {
             </div>
           </div>
 
+          {/* Location with search + GPS */}
           <div>
             <label className="field-label">Location</label>
-            <div className="relative">
-              <MapPin size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input
-                value={location} onChange={e => setLocation(e.target.value)}
-                placeholder="e.g. Rue de Rivoli, Paris"
-                className="input-base pl-9"
-              />
-            </div>
+            <LocationInput
+              value={location}
+              onChange={setLocation}
+              placeholder="Search for a place or use GPS…"
+            />
           </div>
 
           <div>
@@ -112,7 +130,7 @@ export function EventDialog({ event, defaultDate, onSave, onClose }: Props) {
         </div>
 
         <div className="flex gap-3 mt-6">
-          <button onClick={onClose} className="btn-outline flex-1">Cancel</button>
+          <button onClick={handleClose} className="btn-outline flex-1">Cancel</button>
           <button
             onClick={handleSave}
             className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-semibold text-white transition-all active:scale-95"

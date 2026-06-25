@@ -11,8 +11,12 @@ type Tab = 'budget' | 'itinerary';
 
 function AppContent() {
   const { user, authLoading, signOut, justConfirmed, isPasswordReset } = useAuth();
-  const [activeTab, setActiveTab] = useState<Tab>('budget');
+  const [activeTab, setActiveTab] = useState<Tab>(
+    () => (sessionStorage.getItem('activeTab') as Tab) ?? 'budget'
+  );
   const [confirmedDismissed, setConfirmedDismissed] = useState(false);
+
+  function switchTab(t: Tab) { setActiveTab(t); sessionStorage.setItem('activeTab', t); }
   const {
     budget, expenses, events, dataLoading,
     updateBudget, addExpense, updateExpense, deleteExpense,
@@ -47,8 +51,8 @@ function AppContent() {
         className="fixed bottom-0 bg-white border-t border-slate-200 flex z-50 shadow-lg"
         style={{ left: '50%', transform: 'translateX(-50%)', width: '100%', maxWidth: 480 }}
       >
-        <NavTab label="Budget"    icon={<Wallet size={22} />}      active={activeTab === 'budget'}    activeColor="#0077B6" onClick={() => setActiveTab('budget')} />
-        <NavTab label="Itinerary" icon={<CalendarDays size={22} />} active={activeTab === 'itinerary'} activeColor="#2EC4B6" onClick={() => setActiveTab('itinerary')} />
+        <NavTab label="Budget"    icon={<Wallet size={22} />}      active={activeTab === 'budget'}    activeColor="#0077B6" onClick={() => switchTab('budget')} />
+        <NavTab label="Itinerary" icon={<CalendarDays size={22} />} active={activeTab === 'itinerary'} activeColor="#2EC4B6" onClick={() => switchTab('itinerary')} />
         <button
           onClick={signOut}
           className="flex flex-col items-center justify-center py-3 px-5 gap-1 text-slate-400 hover:text-red-400 transition-colors"

@@ -31,20 +31,20 @@ export function ExpenseDialog({ expense, currency, destination, onSave, onClose 
   }
   const draft = getInitial();
 
-  const [name,     setName]     = useState(expense?.name     ?? draft?.name     ?? '');
-  const [amount,   setAmount]   = useState(expense ? expense.amount.toFixed(2) : (draft?.amount ?? ''));
-  const [location, setLocation] = useState(expense?.location ?? draft?.location ?? '');
-  const [category, setCategory] = useState<ExpenseCategory>(expense?.category  ?? draft?.category ?? 'OTHER');
-  const [date,     setDate]     = useState(expense?.date     ?? draft?.date     ?? todayStr());
-  const [notes,    setNotes]    = useState(expense?.notes    ?? draft?.notes    ?? '');
-  const [paid,     setPaid]     = useState(expense?.paid     ?? false);
-  const [nameErr,  setNameErr]  = useState(false);
-  const [amtErr,   setAmtErr]   = useState(false);
-  const [saving,   setSaving]   = useState(false);
+  const [name,       setName]       = useState(expense?.name       ?? draft?.name       ?? '');
+  const [amount,     setAmount]     = useState(expense ? expense.amount.toFixed(2) : (draft?.amount ?? ''));
+  const [location,   setLocation]   = useState(expense?.location   ?? draft?.location   ?? '');
+  const [category,   setCategory]   = useState<ExpenseCategory>(expense?.category ?? draft?.category ?? 'OTHER');
+  const [date,       setDate]       = useState(expense?.date       ?? draft?.date       ?? todayStr());
+  const [notes,      setNotes]      = useState(expense?.notes      ?? draft?.notes      ?? '');
+  const [paid,       setPaid]       = useState<boolean>(expense?.paid ?? draft?.paid ?? false);
+  // receiptUrl holds the already-uploaded (permanent) URL; receiptPreview is what the img tag shows
+  const [receiptUrl,     setReceiptUrl]     = useState(expense?.receiptUrl ?? draft?.receiptUrl ?? '');
+  const [receiptPreview, setReceiptPreview] = useState(expense?.receiptUrl ?? draft?.receiptUrl ?? '');
+  const [receiptUploading, setReceiptUploading] = useState(false);
+  const [nameErr,    setNameErr]    = useState(false);
+  const [amtErr,     setAmtErr]     = useState(false);
 
-  // Receipt state
-  const [receiptFile,    setReceiptFile]    = useState<File | null>(null);
-  const [receiptPreview, setReceiptPreview] = useState(expense?.receiptUrl ?? '');
   const receiptInputRef = useRef<HTMLInputElement>(null);
 
   // AI place finder state
@@ -54,63 +54,66 @@ export function ExpenseDialog({ expense, currency, destination, onSave, onClose 
   const [aiSuggestions, setAiSuggestions] = useState<PlaceSuggestion[]>([]);
   const [aiError,       setAiError]       = useState('');
 
-  // Persist draft while typing (new expenses only)
+  // Persist ALL form fields (including paid + receiptUrl) while typing — new expenses only
   useEffect(() => {
     if (isEditing) return;
-    sessionStorage.setItem(DRAFT_KEY, JSON.stringify({ name, amount, location, category, date, notes }));
-  }, [name, amount, location, category, date, notes, isEditing]);
+    sessionStorage.setItem(DRAFT_KEY, JSON.stringify({
+      name, amount, location, category, date, notes, paid, receiptUrl,
+    }));
+  }, [name, amount, location, category, date, notes, isEditing, paid, receiptUrl]);
 
-  // Reset AI panel when category changes away from AI-supported ones
   useEffect(() => {
     if (!AI_CATEGORIES.includes(category)) { setShowAI(false); setAiSuggestions([]); }
   }, [category]);
 
   function clearDraft() { sessionStorage.removeItem(DRAFT_KEY); }
 
-  function handleReceiptChange(e: React.ChangeEvent<HTMLInputElement>) {
+  // Upload immediately on file select so the receipt survives if the browser
+  // loses state when the camera app closes (common on Android/iOS).
+  async function handleReceiptChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    setReceiptFile(file);
-    const reader = new FileReader();
-    reader.onloadend = () => setReceiptPreview(reader.result as string);
-    reader.readAsDataURL(file);
+
+    // Show local blob preview right away
+    const blobUrl = URL.createObjectURL(file);
+    setReceiptPreview(blobUrl);
+
+    if (!user) return;
+    setReceiptUploading(true);
+    try {
+      const ext = file.type.includes('png') ? 'png' : 'jpg';
+      // Use a temp path under user's folder; renamed on save if needed
+      const path = `${user.id}/pending_${Date.now()}.${ext}`;
+      const compressed = await compressImage(file);
+      const { error } = await supabase.storage
+        .from('receipts')
+        .upload(path, compressed, { contentType: 'image/jpeg', upsert: true });
+      if (!error) {
+        const { data } = supabase.storage.from('receipts').getPublicUrl(path);
+        setReceiptUrl(data.publicUrl);
+        setReceiptPreview(data.publicUrl); // swap to permanent URL
+      }
+    } catch { /* silently continue; receipt preview stays as blob */ }
+    setReceiptUploading(false);
   }
 
   function removeReceipt() {
-    setReceiptFile(null);
+    setReceiptUrl('');
     setReceiptPreview('');
     if (receiptInputRef.current) receiptInputRef.current.value = '';
   }
 
-  async function handleSave() {
+  function handleSave() {
     const parsed = parseFloat(amount);
     const ne = name.trim() === '';
     const ae = isNaN(parsed) || parsed <= 0;
     setNameErr(ne); setAmtErr(ae);
     if (ne || ae) return;
-
-    setSaving(true);
-    const expenseId = expense?.id ?? crypto.randomUUID();
-    let finalReceiptUrl = expense?.receiptUrl ?? '';
-
-    if (receiptFile && user) {
-      try {
-        const ext = receiptFile.type.includes('png') ? 'png' : 'jpg';
-        const path = `${user.id}/${expenseId}.${ext}`;
-        const compressed = await compressImage(receiptFile);
-        const { error } = await supabase.storage
-          .from('receipts')
-          .upload(path, compressed, { contentType: 'image/jpeg', upsert: true });
-        if (!error) {
-          const { data } = supabase.storage.from('receipts').getPublicUrl(path);
-          finalReceiptUrl = data.publicUrl;
-        }
-      } catch { /* silently continue without receipt */ }
-    }
+    if (receiptUploading) return; // wait for upload to finish first
 
     clearDraft();
     onSave({
-      id:         expenseId,
+      id:         expense?.id ?? crypto.randomUUID(),
       name:       name.trim(),
       amount:     parsed,
       location:   location.trim(),
@@ -118,9 +121,8 @@ export function ExpenseDialog({ expense, currency, destination, onSave, onClose 
       date,
       notes:      notes.trim(),
       paid,
-      receiptUrl: finalReceiptUrl,
+      receiptUrl: receiptUrl || expense?.receiptUrl || '',
     });
-    setSaving(false);
   }
 
   function handleClose() { clearDraft(); onClose(); }
@@ -162,7 +164,8 @@ export function ExpenseDialog({ expense, currency, destination, onSave, onClose 
 
   return (
     <div className="fixed inset-0 z-50 bg-white flex flex-col">
-      {/* Sticky header */}
+
+      {/* ── Sticky header ─────────────────────────────────────── */}
       <div
         className="flex items-center gap-3 px-4 py-4 border-b border-slate-100 flex-shrink-0"
         style={{ background: 'linear-gradient(135deg, #0077B6 0%, #00B4D8 100%)' }}
@@ -178,10 +181,10 @@ export function ExpenseDialog({ expense, currency, destination, onSave, onClose 
         </h2>
       </div>
 
-      {/* Scrollable content */}
+      {/* ── Scrollable body ───────────────────────────────────── */}
       <div className="flex-1 overflow-y-auto px-5 py-5 space-y-5">
 
-        {/* Category grid */}
+        {/* Category */}
         <div>
           <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Category</p>
           <div className="grid grid-cols-3 gap-2">
@@ -235,7 +238,7 @@ export function ExpenseDialog({ expense, currency, destination, onSave, onClose 
           {amtErr && <p className="text-xs text-red-500 mt-1">Enter a valid amount</p>}
         </div>
 
-        {/* Location with search + GPS + AI */}
+        {/* Location */}
         <div>
           <div className="flex items-center justify-between mb-1.5">
             <label className="field-label mb-0">Location</label>
@@ -251,17 +254,14 @@ export function ExpenseDialog({ expense, currency, destination, onSave, onClose 
               </button>
             )}
           </div>
-
           <LocationInput value={location} onChange={setLocation} placeholder="Search for a place or use GPS…" />
 
-          {/* AI place finder panel */}
           {showAI && (
             <div className="mt-2 rounded-2xl border border-violet-200 bg-violet-50 overflow-hidden">
               <div className="flex items-center gap-1.5 px-3 py-2 bg-violet-100">
                 <Sparkles size={13} className="text-violet-600" />
                 <span className="text-xs font-semibold text-violet-700">
-                  AI {CATEGORY_META[category].label} Finder
-                  {destination ? ` near ${destination}` : ''}
+                  AI {CATEGORY_META[category].label} Finder{destination ? ` near ${destination}` : ''}
                 </span>
               </div>
               <div className="p-3 space-y-2">
@@ -288,10 +288,7 @@ export function ExpenseDialog({ expense, currency, destination, onSave, onClose 
                 {aiSuggestions.length > 0 && (
                   <div className="space-y-1.5 mt-1">
                     {aiSuggestions.map((s, i) => (
-                      <button
-                        key={i}
-                        type="button"
-                        onClick={() => pickSuggestion(s)}
+                      <button key={i} type="button" onClick={() => pickSuggestion(s)}
                         className="w-full text-left bg-white rounded-xl border border-violet-100 px-3 py-2.5 hover:border-violet-400 hover:bg-violet-50 transition-colors"
                       >
                         <div className="flex items-start gap-2">
@@ -336,7 +333,7 @@ export function ExpenseDialog({ expense, currency, destination, onSave, onClose 
           <button
             type="button"
             onClick={() => setPaid(p => !p)}
-            className={`flex items-center gap-3 w-full px-4 py-3 rounded-xl border-2 transition-all ${
+            className={`flex items-center gap-3 w-full px-4 py-3.5 rounded-xl border-2 transition-all ${
               paid ? 'border-green-400 bg-green-50' : 'border-slate-200 bg-slate-50 hover:border-slate-300'
             }`}
           >
@@ -345,23 +342,28 @@ export function ExpenseDialog({ expense, currency, destination, onSave, onClose 
             }`}>
               {paid && <Check size={14} className="text-white" strokeWidth={3} />}
             </div>
-            <span className={`font-semibold text-sm ${paid ? 'text-green-700' : 'text-slate-500'}`}>
-              {paid ? 'Paid' : 'Not paid yet'}
-            </span>
+            <div className="flex-1 text-left">
+              <span className={`font-semibold text-sm ${paid ? 'text-green-700' : 'text-slate-600'}`}>
+                {paid ? 'Paid' : 'Not paid yet'}
+              </span>
+              <p className="text-xs text-slate-400 mt-0.5">{paid ? 'This expense has been paid' : 'Tap to mark as paid'}</p>
+            </div>
           </button>
         </div>
 
         {/* Receipt photo */}
         <div>
           <label className="field-label">Receipt Photo <span className="text-slate-400 font-normal">(optional)</span></label>
+
+          {/* Hidden file input — no capture= attribute to avoid browser navigation issues on mobile */}
           <input
             ref={receiptInputRef}
             type="file"
             accept="image/*"
-            capture="environment"
             className="hidden"
             onChange={handleReceiptChange}
           />
+
           {receiptPreview ? (
             <div className="relative mt-1">
               <img
@@ -369,43 +371,68 @@ export function ExpenseDialog({ expense, currency, destination, onSave, onClose 
                 alt="Receipt preview"
                 className="w-full max-h-64 object-cover rounded-xl border border-slate-200"
               />
+              {/* Uploading overlay */}
+              {receiptUploading && (
+                <div className="absolute inset-0 bg-black/40 rounded-xl flex flex-col items-center justify-center gap-2">
+                  <Loader size={28} className="text-white animate-spin" />
+                  <p className="text-white text-sm font-semibold">Uploading…</p>
+                </div>
+              )}
+              {/* Remove button */}
               <button
                 type="button"
                 onClick={removeReceipt}
-                className="absolute top-2 right-2 w-8 h-8 bg-red-500 text-white rounded-full flex items-center justify-center shadow-lg"
+                disabled={receiptUploading}
+                className="absolute top-2 right-2 w-8 h-8 bg-red-500 text-white rounded-full flex items-center justify-center shadow-lg disabled:opacity-40"
               >
                 <X size={16} />
               </button>
-              <button
-                type="button"
-                onClick={() => receiptInputRef.current?.click()}
-                className="absolute bottom-2 right-2 flex items-center gap-1.5 bg-black/50 text-white text-xs font-semibold px-3 py-1.5 rounded-full"
-              >
-                <Camera size={12} /> Replace
-              </button>
+              {/* Replace button */}
+              {!receiptUploading && (
+                <button
+                  type="button"
+                  onClick={() => receiptInputRef.current?.click()}
+                  className="absolute bottom-2 right-2 flex items-center gap-1.5 bg-black/55 text-white text-xs font-semibold px-3 py-1.5 rounded-full"
+                >
+                  <Camera size={12} /> Replace
+                </button>
+              )}
             </div>
           ) : (
             <button
               type="button"
               onClick={() => receiptInputRef.current?.click()}
-              className="flex items-center justify-center gap-2 w-full mt-1 border-2 border-dashed border-slate-200 rounded-xl px-4 py-5 text-slate-400 hover:border-ocean hover:text-ocean transition-colors"
+              className="flex items-center justify-center gap-2 w-full mt-1 border-2 border-dashed border-slate-200 rounded-xl px-4 py-6 text-slate-400 hover:border-ocean hover:text-ocean transition-colors active:scale-[0.98]"
             >
-              <Camera size={20} />
-              <span className="font-medium">Take Photo or Upload Receipt</span>
+              <Camera size={22} />
+              <span className="font-medium text-sm">Take Photo or Choose from Gallery</span>
             </button>
           )}
         </div>
 
+        {/* Bottom spacer */}
         <div className="h-4" />
       </div>
 
-      {/* Sticky footer */}
-      <div className="border-t border-slate-100 px-5 py-4 bg-white flex gap-3 flex-shrink-0">
-        <button onClick={handleClose} className="btn-outline flex-1" disabled={saving}>Cancel</button>
-        <button onClick={handleSave} disabled={saving} className="btn-primary flex-1 gap-2">
-          {saving
-            ? <><Loader size={16} className="animate-spin" /> Saving…</>
-            : isEditing ? <><Save size={16} /> Update</> : <><Plus size={16} /> Add Expense</>
+      {/* ── Sticky footer — only Save or Cancel can dismiss this screen ── */}
+      <div className="border-t-2 border-slate-100 px-5 py-4 bg-white flex gap-3 flex-shrink-0">
+        <button
+          onClick={handleClose}
+          disabled={receiptUploading}
+          className="btn-outline flex-1 py-3.5 text-base font-semibold"
+        >
+          Cancel
+        </button>
+        <button
+          onClick={handleSave}
+          disabled={receiptUploading}
+          className="btn-primary flex-1 py-3.5 gap-2 text-base font-semibold"
+        >
+          {receiptUploading
+            ? <><Loader size={17} className="animate-spin" /> Uploading…</>
+            : isEditing
+              ? <><Save size={17} /> Save Changes</>
+              : <><Plus size={17} /> Save Expense</>
           }
         </button>
       </div>

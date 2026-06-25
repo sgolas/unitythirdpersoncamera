@@ -179,7 +179,7 @@ export function BudgetTab({ budget, expenses, onUpdateBudget, onAddExpense, onUp
       {/* FAB */}
       <button
         onClick={() => setShowExpenseDialog(true)}
-        className="fixed bottom-20 right-4 flex items-center gap-2 text-white px-5 py-3 rounded-2xl shadow-lg font-semibold transition-all active:scale-95 z-40"
+        className="fixed bottom-20 left-4 flex items-center gap-2 text-white px-5 py-3 rounded-2xl shadow-lg font-semibold transition-all active:scale-95 z-40 opacity-50 hover:opacity-100 active:opacity-100"
         style={{ background: 'linear-gradient(135deg, #FF6B35, #FF4500)' }}
       >
         <Plus size={20} /> Add Expense

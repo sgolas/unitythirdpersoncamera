@@ -1,17 +1,19 @@
 import { useState } from 'react';
 import { Plus, MapPin, Clock, FileText, ExternalLink, Pencil, Trash2, CalendarDays } from 'lucide-react';
-import { ItineraryEvent } from '../types';
+import { Budget, ItineraryEvent } from '../types';
 import { EventDialog } from './EventDialog';
-import { formatDate, formatTime, buildGCalUrl, gCalDayUrl, getWeekDays, addDays, addMonths, todayStr } from '../utils/formatters';
+import { ClaudeChat } from './ClaudeChat';
+import { formatDate, formatTime, buildGCalUrl, gCalDayUrl, getWeekDays, addMonths, todayStr } from '../utils/formatters';
 
 interface Props {
+  budget: Budget;
   events: ItineraryEvent[];
   onAddEvent:    (e: ItineraryEvent) => void;
   onUpdateEvent: (e: ItineraryEvent) => void;
   onDeleteEvent: (id: string)       => void;
 }
 
-export function ItineraryTab({ events, onAddEvent, onUpdateEvent, onDeleteEvent }: Props) {
+export function ItineraryTab({ budget, events, onAddEvent, onUpdateEvent, onDeleteEvent }: Props) {
   const [selectedDate,  setSelectedDate]  = useState(todayStr());
   const [showDialog,    setShowDialog]    = useState(false);
   const [editingEvent,  setEditingEvent]  = useState<ItineraryEvent | null>(null);
@@ -80,6 +82,11 @@ export function ItineraryTab({ events, onAddEvent, onUpdateEvent, onDeleteEvent 
             </button>
           );
         })}
+      </div>
+
+      {/* Claude AI chat */}
+      <div className="pt-4">
+        <ClaudeChat budget={budget} selectedDate={selectedDate} />
       </div>
 
       {/* Day header */}

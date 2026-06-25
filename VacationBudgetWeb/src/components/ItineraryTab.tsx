@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Plus, MapPin, Clock, FileText, ExternalLink, Pencil, Trash2, CalendarDays, LayoutGrid } from 'lucide-react';
-import { Budget, ItineraryEvent } from '../types';
+import { Budget, Expense, ItineraryEvent } from '../types';
 import { EventDialog } from './EventDialog';
 import { ClaudeChat } from './ClaudeChat';
 import { formatDate, formatTime, buildGCalUrl, gCalDayUrl, addMonths, todayStr } from '../utils/formatters';
@@ -8,6 +8,7 @@ import { useSwipe } from '../hooks/useSwipe';
 
 interface Props {
   budget: Budget;
+  expenses: Expense[];
   events: ItineraryEvent[];
   onAddEvent:    (e: ItineraryEvent) => void;
   onUpdateEvent: (e: ItineraryEvent) => void;
@@ -16,7 +17,7 @@ interface Props {
 
 type CalView = 'week' | 'month';
 
-export function ItineraryTab({ budget, events, onAddEvent, onUpdateEvent, onDeleteEvent }: Props) {
+export function ItineraryTab({ budget, expenses, events, onAddEvent, onUpdateEvent, onDeleteEvent }: Props) {
   const [selectedDate, setSelectedDate] = useState(todayStr());
   const [calView,      setCalView]      = useState<CalView>('week');
   const [showDialog,   setShowDialog]   = useState(false);
@@ -106,6 +107,7 @@ export function ItineraryTab({ budget, events, onAddEvent, onUpdateEvent, onDele
           budget={budget}
           selectedDate={selectedDate}
           events={events}
+          expenses={expenses}
           onAddEvent={onAddEvent}
           onUpdateEvent={onUpdateEvent}
         />

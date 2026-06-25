@@ -13,7 +13,7 @@ const CORS_HEADERS = {
 const TOOLS: Anthropic.Tool[] = [
   {
     name: 'add_event',
-    description: 'Add a new event to the user\'s itinerary calendar. Use this when the user asks you to add, schedule, or plan an activity.',
+    description: 'Add a new event to the user\'s itinerary calendar. Use this when the user asks to add, schedule, or plan an activity.',
     input_schema: {
       type: 'object' as const,
       properties: {
@@ -29,7 +29,7 @@ const TOOLS: Anthropic.Tool[] = [
   },
   {
     name: 'update_event',
-    description: 'Update an existing event in the user\'s itinerary. Use this when the user asks to edit, change, move, or modify an existing activity. You must use the exact event ID from the calendar.',
+    description: 'Update an existing event in the user\'s itinerary. Use this when the user asks to edit, change, or modify an existing activity.',
     input_schema: {
       type: 'object' as const,
       properties: {
@@ -53,28 +53,78 @@ export const handler: Handler = async (event: HandlerEvent) => {
   }
 
   try {
-    const { messages, destination, tripName, events = [], selectedDate } = JSON.parse(event.body ?? '{}');
+    const body = JSON.parse(event.body ?? '{}');
+    const {
+      messages, destination, tripName,
+      events = [], selectedDate,
+      expenses = [], budget: budgetInfo,
+      findPlaces,
+    } = body;
 
+    // ── Find Places mode ──────────────────────────────────────────────
+    if (findPlaces) {
+      const { category, query } = findPlaces;
+      const locationHint = destination ? ` near ${destination}` : '';
+      const prompt = `You are a travel concierge. The user is looking for a ${category} place${locationHint}.
+Their search: "${query}"
+
+Return ONLY a raw JSON array (no markdown, no code fences, no explanation) with 4-5 results:
+[{"name":"Place Name","address":"Full street address, city","description":"One sentence why it's great"}]`;
+
+      const response = await anthropic.messages.create({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 512,
+        messages: [{ role: 'user', content: prompt }],
+      });
+
+      const text = response.content[0].type === 'text' ? response.content[0].text.trim() : '[]';
+      // Strip any accidental markdown fences
+      const clean = text.replace(/^```[a-z]*\n?/i, '').replace(/\n?```$/i, '').trim();
+      return {
+        statusCode: 200,
+        headers: CORS_HEADERS,
+        body: JSON.stringify({ suggestions: JSON.parse(clean) }),
+      };
+    }
+
+    // ── Chat mode ─────────────────────────────────────────────────────
     if (!messages || !Array.isArray(messages)) {
       return { statusCode: 400, headers: CORS_HEADERS, body: JSON.stringify({ error: 'messages array required' }) };
     }
 
+    // Build budget context
+    const totalSpent = expenses.reduce((s: number, e: any) => s + (e.amount ?? 0), 0);
+    const remaining  = (budgetInfo?.totalAmount ?? 0) - totalSpent;
+    const currency   = budgetInfo?.currency ?? 'USD';
+
+    const budgetContext = budgetInfo?.totalAmount > 0
+      ? `\n\nBudget overview: ${currency} ${budgetInfo.totalAmount.toFixed(2)} total | ${currency} ${totalSpent.toFixed(2)} spent | ${currency} ${remaining.toFixed(2)} remaining.`
+      : '';
+
+    const expensesContext = expenses.length > 0
+      ? `\nRecent expenses:\n${expenses.slice(-15).map((e: any) =>
+          `- ${e.name}: ${currency} ${e.amount?.toFixed(2)} (${e.category}${e.location ? `, ${e.location}` : ''})`
+        ).join('\n')}`
+      : '';
+
     const eventsContext = events.length > 0
-      ? `\n\nCurrent calendar events (use these IDs for updates):\n${events.map((e: any) =>
+      ? `\n\nCalendar events (use IDs to update):\n${events.map((e: any) =>
           `- ID:${e.id} | ${e.date} ${e.startTime}-${e.endTime} | "${e.title}"${e.location ? ` @ ${e.location}` : ''}`
         ).join('\n')}`
       : '\n\nThe calendar is currently empty.';
 
     const systemPrompt = [
-      'You are a friendly, knowledgeable travel planning assistant with the ability to add and edit events on the user\'s itinerary calendar.',
+      'You are a friendly, knowledgeable travel planning assistant with full access to the user\'s trip budget and itinerary calendar.',
       destination ? `The user is planning a trip to ${destination}${tripName ? ` called "${tripName}"` : ''}.` : '',
       selectedDate ? `The user is currently viewing ${selectedDate} on their calendar.` : '',
-      'Help them plan activities, find restaurants, discover attractions, and get travel tips.',
-      'When the user asks to add, schedule, or book an activity — use the add_event tool.',
-      'When the user asks to edit, change, reschedule, or modify an existing event — use the update_event tool with the exact event ID.',
-      'You may call multiple tools in one response to add several events at once.',
+      'Help them plan activities, find restaurants, discover attractions, manage their budget, and get travel tips.',
+      'When the user asks to add or schedule an activity — use the add_event tool.',
+      'When the user asks to edit, move, or change an existing event — use the update_event tool with the exact ID.',
+      'You may call multiple tools in one response.',
       'After using a tool, briefly confirm what you did in plain text.',
-      'For general questions, be concise. Use bullet points for lists. Keep responses under 200 words.',
+      'For general questions, be concise and practical. Use bullet points for lists. Keep responses under 250 words.',
+      budgetContext,
+      expensesContext,
       eventsContext,
     ].filter(Boolean).join(' ');
 

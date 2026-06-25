@@ -172,12 +172,12 @@ export function BudgetTab({ budget, expenses, onUpdateBudget, onAddExpense, onUp
         <BudgetDialog budget={budget} onSave={b => { onUpdateBudget(b); setShowBudgetDialog(false); }} onClose={() => setShowBudgetDialog(false)} />
       )}
       {showExpenseDialog && (
-        <ExpenseDialog expense={null} currency={budget.currency}
+        <ExpenseDialog expense={null} currency={budget.currency} destination={budget.destination}
           onSave={e => { onAddExpense(e); setShowExpenseDialog(false); }}
           onClose={() => setShowExpenseDialog(false)} />
       )}
       {editingExpense && (
-        <ExpenseDialog expense={editingExpense} currency={budget.currency}
+        <ExpenseDialog expense={editingExpense} currency={budget.currency} destination={budget.destination}
           onSave={e => { onUpdateExpense(e); setEditingExpense(null); }}
           onClose={() => setEditingExpense(null)} />
       )}

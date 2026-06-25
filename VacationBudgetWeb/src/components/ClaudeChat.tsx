@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { Send, Sparkles, ChevronDown, ChevronUp, Bot, User, Trash2, CheckCircle, XCircle, CalendarPlus, Pencil } from 'lucide-react';
-import type { Budget, ItineraryEvent } from '../types';
+import type { Budget, Expense, ItineraryEvent } from '../types';
 import { formatTime } from '../utils/formatters';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -26,11 +26,12 @@ interface Props {
   budget: Budget;
   selectedDate: string;
   events: ItineraryEvent[];
+  expenses: Expense[];
   onAddEvent: (e: ItineraryEvent) => void;
   onUpdateEvent: (e: ItineraryEvent) => void;
 }
 
-export function ClaudeChat({ budget, selectedDate, events, onAddEvent, onUpdateEvent }: Props) {
+export function ClaudeChat({ budget, selectedDate, events, expenses, onAddEvent, onUpdateEvent }: Props) {
   const { user } = useAuth();
   const storageKey = user ? `chatHistory_${user.id}` : null;
 
@@ -89,7 +90,9 @@ export function ClaudeChat({ budget, selectedDate, events, onAddEvent, onUpdateE
           messages: updated,
           destination: budget.destination || undefined,
           tripName: budget.tripName,
+          budget,
           events,
+          expenses,
           selectedDate,
         }),
       });

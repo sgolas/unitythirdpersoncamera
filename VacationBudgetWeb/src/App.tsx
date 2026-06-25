@@ -40,7 +40,7 @@ function AppContent() {
           />
         ) : (
           <ItineraryTab
-            budget={budget} events={events}
+            budget={budget} expenses={expenses} events={events}
             onAddEvent={addEvent} onUpdateEvent={updateEvent} onDeleteEvent={deleteEvent}
           />
         )}

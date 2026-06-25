@@ -1,8 +1,10 @@
-import { useState, useEffect } from 'react';
-import { ArrowLeft, FileText, Save, Plus, Sparkles, Loader, MapPin } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { ArrowLeft, FileText, Save, Plus, Sparkles, Loader, MapPin, Camera, Check, X } from 'lucide-react';
 import { Expense, ExpenseCategory, CATEGORY_META, Currency, CURRENCY_SYMBOLS } from '../types';
 import { LocationInput } from './LocationInput';
 import { todayStr } from '../utils/formatters';
+import { supabase } from '../lib/supabase';
+import { useAuth } from '../contexts/AuthContext';
 
 interface Props {
   expense: Expense | null;
@@ -19,6 +21,7 @@ const AI_CATEGORIES: ExpenseCategory[] = ['FOOD', 'ACCOMMODATION'];
 interface PlaceSuggestion { name: string; address: string; description: string; }
 
 export function ExpenseDialog({ expense, currency, destination, onSave, onClose }: Props) {
+  const { user } = useAuth();
   const symbol    = CURRENCY_SYMBOLS[currency] ?? '$';
   const isEditing = expense !== null;
 
@@ -34,15 +37,22 @@ export function ExpenseDialog({ expense, currency, destination, onSave, onClose 
   const [category, setCategory] = useState<ExpenseCategory>(expense?.category  ?? draft?.category ?? 'OTHER');
   const [date,     setDate]     = useState(expense?.date     ?? draft?.date     ?? todayStr());
   const [notes,    setNotes]    = useState(expense?.notes    ?? draft?.notes    ?? '');
+  const [paid,     setPaid]     = useState(expense?.paid     ?? false);
   const [nameErr,  setNameErr]  = useState(false);
   const [amtErr,   setAmtErr]   = useState(false);
+  const [saving,   setSaving]   = useState(false);
+
+  // Receipt state
+  const [receiptFile,    setReceiptFile]    = useState<File | null>(null);
+  const [receiptPreview, setReceiptPreview] = useState(expense?.receiptUrl ?? '');
+  const receiptInputRef = useRef<HTMLInputElement>(null);
 
   // AI place finder state
-  const [showAI,       setShowAI]       = useState(false);
-  const [aiQuery,      setAiQuery]      = useState('');
-  const [aiLoading,    setAiLoading]    = useState(false);
+  const [showAI,        setShowAI]        = useState(false);
+  const [aiQuery,       setAiQuery]       = useState('');
+  const [aiLoading,     setAiLoading]     = useState(false);
   const [aiSuggestions, setAiSuggestions] = useState<PlaceSuggestion[]>([]);
-  const [aiError,      setAiError]      = useState('');
+  const [aiError,       setAiError]       = useState('');
 
   // Persist draft while typing (new expenses only)
   useEffect(() => {
@@ -57,22 +67,60 @@ export function ExpenseDialog({ expense, currency, destination, onSave, onClose 
 
   function clearDraft() { sessionStorage.removeItem(DRAFT_KEY); }
 
-  function handleSave() {
+  function handleReceiptChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setReceiptFile(file);
+    const reader = new FileReader();
+    reader.onloadend = () => setReceiptPreview(reader.result as string);
+    reader.readAsDataURL(file);
+  }
+
+  function removeReceipt() {
+    setReceiptFile(null);
+    setReceiptPreview('');
+    if (receiptInputRef.current) receiptInputRef.current.value = '';
+  }
+
+  async function handleSave() {
     const parsed = parseFloat(amount);
     const ne = name.trim() === '';
     const ae = isNaN(parsed) || parsed <= 0;
     setNameErr(ne); setAmtErr(ae);
     if (ne || ae) return;
+
+    setSaving(true);
+    const expenseId = expense?.id ?? crypto.randomUUID();
+    let finalReceiptUrl = expense?.receiptUrl ?? '';
+
+    if (receiptFile && user) {
+      try {
+        const ext = receiptFile.type.includes('png') ? 'png' : 'jpg';
+        const path = `${user.id}/${expenseId}.${ext}`;
+        const compressed = await compressImage(receiptFile);
+        const { error } = await supabase.storage
+          .from('receipts')
+          .upload(path, compressed, { contentType: 'image/jpeg', upsert: true });
+        if (!error) {
+          const { data } = supabase.storage.from('receipts').getPublicUrl(path);
+          finalReceiptUrl = data.publicUrl;
+        }
+      } catch { /* silently continue without receipt */ }
+    }
+
     clearDraft();
     onSave({
-      id:       expense?.id ?? crypto.randomUUID(),
-      name:     name.trim(),
-      amount:   parsed,
-      location: location.trim(),
+      id:         expenseId,
+      name:       name.trim(),
+      amount:     parsed,
+      location:   location.trim(),
       category,
       date,
-      notes:    notes.trim(),
+      notes:      notes.trim(),
+      paid,
+      receiptUrl: finalReceiptUrl,
     });
+    setSaving(false);
   }
 
   function handleClose() { clearDraft(); onClose(); }
@@ -87,10 +135,7 @@ export function ExpenseDialog({ expense, currency, destination, onSave, onClose 
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          findPlaces: {
-            category: CATEGORY_META[category].label,
-            query: aiQuery,
-          },
+          findPlaces: { category: CATEGORY_META[category].label, query: aiQuery },
           destination,
         }),
       });
@@ -119,7 +164,7 @@ export function ExpenseDialog({ expense, currency, destination, onSave, onClose 
     <div className="fixed inset-0 z-50 bg-white flex flex-col">
       {/* Sticky header */}
       <div
-        className="flex items-center gap-3 px-4 py-4 border-b border-slate-100"
+        className="flex items-center gap-3 px-4 py-4 border-b border-slate-100 flex-shrink-0"
         style={{ background: 'linear-gradient(135deg, #0077B6 0%, #00B4D8 100%)' }}
       >
         <button
@@ -172,7 +217,7 @@ export function ExpenseDialog({ expense, currency, destination, onSave, onClose 
           {nameErr && <p className="text-xs text-red-500 mt-1">Name is required</p>}
         </div>
 
-        {/* Amount — prefix-box layout */}
+        {/* Amount */}
         <div>
           <label className="field-label">Amount <span className="text-red-400">*</span></label>
           <div className={`flex items-stretch border rounded-xl overflow-hidden transition-all focus-within:ring-2 focus-within:ring-ocean/30 focus-within:border-ocean ${amtErr ? 'border-red-400' : 'border-slate-200'}`}>
@@ -207,11 +252,7 @@ export function ExpenseDialog({ expense, currency, destination, onSave, onClose 
             )}
           </div>
 
-          <LocationInput
-            value={location}
-            onChange={setLocation}
-            placeholder="Search for a place or use GPS…"
-          />
+          <LocationInput value={location} onChange={setLocation} placeholder="Search for a place or use GPS…" />
 
           {/* AI place finder panel */}
           {showAI && (
@@ -243,9 +284,7 @@ export function ExpenseDialog({ expense, currency, destination, onSave, onClose 
                     {aiLoading ? <Loader size={14} className="animate-spin" /> : 'Find'}
                   </button>
                 </div>
-
                 {aiError && <p className="text-xs text-red-500">{aiError}</p>}
-
                 {aiSuggestions.length > 0 && (
                   <div className="space-y-1.5 mt-1">
                     {aiSuggestions.map((s, i) => (
@@ -291,17 +330,104 @@ export function ExpenseDialog({ expense, currency, destination, onSave, onClose 
           </div>
         </div>
 
-        {/* Bottom spacer so content clears the sticky footer */}
+        {/* Payment status */}
+        <div>
+          <label className="field-label">Payment Status</label>
+          <button
+            type="button"
+            onClick={() => setPaid(p => !p)}
+            className={`flex items-center gap-3 w-full px-4 py-3 rounded-xl border-2 transition-all ${
+              paid ? 'border-green-400 bg-green-50' : 'border-slate-200 bg-slate-50 hover:border-slate-300'
+            }`}
+          >
+            <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all ${
+              paid ? 'border-green-500 bg-green-500' : 'border-slate-300 bg-white'
+            }`}>
+              {paid && <Check size={14} className="text-white" strokeWidth={3} />}
+            </div>
+            <span className={`font-semibold text-sm ${paid ? 'text-green-700' : 'text-slate-500'}`}>
+              {paid ? 'Paid' : 'Not paid yet'}
+            </span>
+          </button>
+        </div>
+
+        {/* Receipt photo */}
+        <div>
+          <label className="field-label">Receipt Photo <span className="text-slate-400 font-normal">(optional)</span></label>
+          <input
+            ref={receiptInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="hidden"
+            onChange={handleReceiptChange}
+          />
+          {receiptPreview ? (
+            <div className="relative mt-1">
+              <img
+                src={receiptPreview}
+                alt="Receipt preview"
+                className="w-full max-h-64 object-cover rounded-xl border border-slate-200"
+              />
+              <button
+                type="button"
+                onClick={removeReceipt}
+                className="absolute top-2 right-2 w-8 h-8 bg-red-500 text-white rounded-full flex items-center justify-center shadow-lg"
+              >
+                <X size={16} />
+              </button>
+              <button
+                type="button"
+                onClick={() => receiptInputRef.current?.click()}
+                className="absolute bottom-2 right-2 flex items-center gap-1.5 bg-black/50 text-white text-xs font-semibold px-3 py-1.5 rounded-full"
+              >
+                <Camera size={12} /> Replace
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => receiptInputRef.current?.click()}
+              className="flex items-center justify-center gap-2 w-full mt-1 border-2 border-dashed border-slate-200 rounded-xl px-4 py-5 text-slate-400 hover:border-ocean hover:text-ocean transition-colors"
+            >
+              <Camera size={20} />
+              <span className="font-medium">Take Photo or Upload Receipt</span>
+            </button>
+          )}
+        </div>
+
         <div className="h-4" />
       </div>
 
       {/* Sticky footer */}
-      <div className="border-t border-slate-100 px-5 py-4 bg-white flex gap-3">
-        <button onClick={handleClose} className="btn-outline flex-1">Cancel</button>
-        <button onClick={handleSave} className="btn-primary flex-1 gap-2">
-          {isEditing ? <><Save size={16} /> Update</> : <><Plus size={16} /> Add Expense</>}
+      <div className="border-t border-slate-100 px-5 py-4 bg-white flex gap-3 flex-shrink-0">
+        <button onClick={handleClose} className="btn-outline flex-1" disabled={saving}>Cancel</button>
+        <button onClick={handleSave} disabled={saving} className="btn-primary flex-1 gap-2">
+          {saving
+            ? <><Loader size={16} className="animate-spin" /> Saving…</>
+            : isEditing ? <><Save size={16} /> Update</> : <><Plus size={16} /> Add Expense</>
+          }
         </button>
       </div>
     </div>
   );
+}
+
+async function compressImage(file: File): Promise<Blob> {
+  return new Promise(resolve => {
+    const img = new Image();
+    const objectUrl = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      const MAX = 1400;
+      const scale = Math.min(1, MAX / Math.max(img.width, img.height));
+      const canvas = document.createElement('canvas');
+      canvas.width  = Math.round(img.width  * scale);
+      canvas.height = Math.round(img.height * scale);
+      canvas.getContext('2d')!.drawImage(img, 0, 0, canvas.width, canvas.height);
+      canvas.toBlob(blob => resolve(blob ?? file), 'image/jpeg', 0.82);
+    };
+    img.onerror = () => { URL.revokeObjectURL(objectUrl); resolve(file); };
+    img.src = objectUrl;
+  });
 }

@@ -30,8 +30,11 @@ export interface Expense {
   amount: number;
   location: string;
   category: ExpenseCategory;
-  date: string;   // YYYY-MM-DD
+  date: string;        // YYYY-MM-DD (when expense occurred)
   notes: string;
+  paid: boolean;
+  createdAt?: string;  // ISO timestamp — when it was logged in the app
+  receiptUrl?: string; // Supabase Storage public URL
 }
 
 export interface ItineraryEvent {

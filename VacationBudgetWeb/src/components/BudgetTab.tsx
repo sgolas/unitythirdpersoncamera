@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
-import { Edit2, Plus, MapPin, Trash2, Pencil, TrendingUp, PiggyBank, Receipt, Filter } from 'lucide-react';
+import { Edit2, Plus, MapPin, Trash2, Pencil, TrendingUp, PiggyBank, Receipt, Mail, Loader, ExternalLink } from 'lucide-react';
 import { Budget, Expense, ExpenseCategory, CATEGORY_META, Currency } from '../types';
 import { BudgetDialog } from './BudgetDialog';
 import { ExpenseDialog } from './ExpenseDialog';
 import { formatCurrency, formatDate } from '../utils/formatters';
+import { useAuth } from '../contexts/AuthContext';
 
 interface Props {
   budget: Budget;
@@ -18,12 +19,15 @@ const ALL = 'ALL' as const;
 type Filter = ExpenseCategory | typeof ALL;
 
 export function BudgetTab({ budget, expenses, onUpdateBudget, onAddExpense, onUpdateExpense, onDeleteExpense }: Props) {
+  const { user } = useAuth();
   const [showBudgetDialog,  setShowBudgetDialog]  = useState(false);
   const [showExpenseDialog, setShowExpenseDialog] = useState(false);
   const [editingExpense,    setEditingExpense]    = useState<Expense | null>(null);
   const [filter,            setFilter]            = useState<Filter>(ALL);
   const [undoExpense,       setUndoExpense]       = useState<Expense | null>(null);
   const [undoVisible,       setUndoVisible]       = useState(false);
+  const [emailingId,        setEmailingId]        = useState<string | null>(null);
+  const [emailToast,        setEmailToast]        = useState('');
 
   const totalSpent = expenses.reduce((s, e) => s + e.amount, 0);
   const remaining  = budget.totalAmount - totalSpent;
@@ -46,6 +50,26 @@ export function BudgetTab({ budget, expenses, onUpdateBudget, onAddExpense, onUp
 
   function handleUndo() {
     if (undoExpense) { onAddExpense(undoExpense); setUndoExpense(null); setUndoVisible(false); }
+  }
+
+  async function emailReceipt(expense: Expense) {
+    if (!user?.email) return;
+    setEmailingId(expense.id);
+    try {
+      const res = await fetch('/.netlify/functions/send-receipt', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userEmail: user.email, expense, currency: budget.currency }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? 'Failed');
+      setEmailToast('Receipt emailed to ' + user.email);
+    } catch (e) {
+      setEmailToast(e instanceof Error ? e.message : 'Failed to send email');
+    } finally {
+      setEmailingId(null);
+      setTimeout(() => setEmailToast(''), 4000);
+    }
   }
 
   return (
@@ -143,8 +167,10 @@ export function BudgetTab({ budget, expenses, onUpdateBudget, onAddExpense, onUp
               key={expense.id}
               expense={expense}
               currency={budget.currency}
+              emailingId={emailingId}
               onEdit={() => setEditingExpense(expense)}
               onDelete={() => handleDelete(expense)}
+              onEmail={() => emailReceipt(expense)}
             />
           ))}
         </div>
@@ -164,6 +190,13 @@ export function BudgetTab({ budget, expenses, onUpdateBudget, onAddExpense, onUp
         <div className="fixed bottom-24 left-1/2 -translate-x-1/2 bg-slate-800 text-white flex items-center gap-3 px-4 py-3 rounded-2xl shadow-xl text-sm z-50 slide-up">
           <span>Expense deleted</span>
           <button onClick={handleUndo} className="text-sky-400 font-bold">Undo</button>
+        </div>
+      )}
+
+      {/* Email toast */}
+      {emailToast && (
+        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 bg-slate-800 text-white px-4 py-3 rounded-2xl shadow-xl text-sm z-50 slide-up max-w-xs text-center">
+          {emailToast}
         </div>
       )}
 
@@ -241,48 +274,99 @@ function FilterChip({ label, active, onClick }: { label: string; active: boolean
   );
 }
 
-function ExpenseCard({ expense, currency, onEdit, onDelete }: {
-  expense: Expense; currency: Currency; onEdit: () => void; onDelete: () => void;
+function ExpenseCard({ expense, currency, emailingId, onEdit, onDelete, onEmail }: {
+  expense: Expense; currency: Currency; emailingId: string | null;
+  onEdit: () => void; onDelete: () => void; onEmail: () => void;
 }) {
   const meta = CATEGORY_META[expense.category];
+  const isEmailing = emailingId === expense.id;
+
+  const createdLabel = expense.createdAt
+    ? new Date(expense.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    : null;
+
   return (
-    <div className="bg-white rounded-2xl shadow-sm p-4 flex items-center gap-3 group">
-      <div
-        className="w-12 h-12 rounded-full flex items-center justify-center text-2xl flex-shrink-0"
-        style={{ backgroundColor: meta.color + '20' }}
-      >
-        {meta.emoji}
-      </div>
-
-      <div className="flex-1 min-w-0">
-        <p className="font-semibold text-slate-800 truncate">{expense.name}</p>
-        <div className="flex items-center gap-1 text-xs text-slate-500">
-          <MapPin size={11} />
-          <span className="truncate">{expense.location || 'No location'}</span>
-        </div>
-        <p className="text-xs text-slate-400 mt-0.5">{formatDate(expense.date)}</p>
-        {expense.notes && <p className="text-xs text-slate-400 truncate mt-0.5 italic">"{expense.notes}"</p>}
-      </div>
-
-      <div className="flex flex-col items-end gap-1.5">
-        <span className="font-bold text-base" style={{ color: '#FF6B35' }}>
-          {formatCurrency(expense.amount, currency)}
-        </span>
-        <span
-          className="text-xs px-2 py-0.5 rounded-full font-medium"
-          style={{ backgroundColor: meta.color + '18', color: meta.color }}
+    <div className="bg-white rounded-2xl shadow-sm overflow-hidden group">
+      <div className="p-4 flex items-start gap-3">
+        <div
+          className="w-12 h-12 rounded-full flex items-center justify-center text-2xl flex-shrink-0"
+          style={{ backgroundColor: meta.color + '20' }}
         >
-          {meta.label.split(' ')[0]}
-        </span>
-        <div className="flex gap-1 opacity-0 group-hover:opacity-100 sm:flex transition-opacity">
-          <button onClick={onEdit} className="p-1 hover:bg-slate-100 rounded-lg transition-colors">
-            <Pencil size={13} className="text-slate-400" />
-          </button>
-          <button onClick={onDelete} className="p-1 hover:bg-red-50 rounded-lg transition-colors">
-            <Trash2 size={13} className="text-red-400" />
-          </button>
+          {meta.emoji}
+        </div>
+
+        <div className="flex-1 min-w-0">
+          <p className="font-semibold text-slate-800 truncate">{expense.name}</p>
+          <div className="flex items-center gap-1 text-xs text-slate-500 mt-0.5">
+            <MapPin size={11} />
+            <span className="truncate">{expense.location || 'No location'}</span>
+          </div>
+          <p className="text-xs text-slate-400 mt-0.5">{formatDate(expense.date)}</p>
+          {createdLabel && (
+            <p className="text-xs text-slate-300 mt-0.5">Added {createdLabel}</p>
+          )}
+          {expense.notes && <p className="text-xs text-slate-400 truncate mt-0.5 italic">"{expense.notes}"</p>}
+        </div>
+
+        <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
+          <span className="font-bold text-base" style={{ color: '#FF6B35' }}>
+            {formatCurrency(expense.amount, currency)}
+          </span>
+          <span
+            className="text-xs px-2 py-0.5 rounded-full font-medium"
+            style={{ backgroundColor: meta.color + '18', color: meta.color }}
+          >
+            {meta.label.split(' ')[0]}
+          </span>
+          <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${
+            expense.paid ? 'bg-green-100 text-green-700' : 'bg-amber-50 text-amber-600'
+          }`}>
+            {expense.paid ? '✓ Paid' : 'Unpaid'}
+          </span>
+          <div className="flex gap-1 mt-1">
+            <button onClick={onEdit} className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors">
+              <Pencil size={13} className="text-slate-400" />
+            </button>
+            <button onClick={onDelete} className="p-1.5 hover:bg-red-50 rounded-lg transition-colors">
+              <Trash2 size={13} className="text-red-400" />
+            </button>
+          </div>
         </div>
       </div>
+
+      {/* Receipt section */}
+      {expense.receiptUrl && (
+        <div className="border-t border-slate-50 px-4 py-3 flex items-center gap-3">
+          <a href={expense.receiptUrl} target="_blank" rel="noopener noreferrer" className="flex-shrink-0">
+            <img
+              src={expense.receiptUrl}
+              alt="Receipt"
+              className="w-14 h-14 object-cover rounded-xl border border-slate-200 hover:opacity-80 transition-opacity"
+            />
+          </a>
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-semibold text-slate-500 mb-1.5">Receipt attached</p>
+            <div className="flex gap-2">
+              <a
+                href={expense.receiptUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1 text-xs text-ocean font-medium px-2.5 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 transition-colors"
+              >
+                <ExternalLink size={11} /> View
+              </a>
+              <button
+                onClick={onEmail}
+                disabled={isEmailing}
+                className="flex items-center gap-1 text-xs text-violet-700 font-medium px-2.5 py-1 rounded-lg bg-violet-50 hover:bg-violet-100 transition-colors disabled:opacity-50"
+              >
+                {isEmailing ? <Loader size={11} className="animate-spin" /> : <Mail size={11} />}
+                {isEmailing ? 'Sending…' : 'Email'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

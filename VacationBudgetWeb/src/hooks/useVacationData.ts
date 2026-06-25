@@ -37,6 +37,9 @@ export function useVacationData() {
       setExpenses(expensesRes.data.map(r => ({
         id: r.id, name: r.name, amount: Number(r.amount),
         location: r.location, category: r.category, date: r.date, notes: r.notes,
+        paid: r.paid ?? false,
+        createdAt: r.created_at ?? undefined,
+        receiptUrl: r.receipt_url ?? '',
       })));
     }
 
@@ -76,9 +79,11 @@ export function useVacationData() {
       user_id: user!.id, name: expense.name, amount: expense.amount,
       location: expense.location, category: expense.category,
       date: expense.date, notes: expense.notes,
+      paid: expense.paid ?? false,
+      receipt_url: expense.receiptUrl ?? '',
     }).select().single();
 
-    if (data) setExpenses(prev => [{ ...expense, id: data.id }, ...prev]);
+    if (data) setExpenses(prev => [{ ...expense, id: data.id, createdAt: data.created_at }, ...prev]);
   }
 
   async function updateExpense(expense: Expense) {
@@ -86,6 +91,8 @@ export function useVacationData() {
     await supabase.from('expenses').update({
       name: expense.name, amount: expense.amount, location: expense.location,
       category: expense.category, date: expense.date, notes: expense.notes,
+      paid: expense.paid ?? false,
+      receipt_url: expense.receiptUrl ?? '',
     }).eq('id', expense.id);
   }
 

@@ -5,6 +5,7 @@ import { BudgetDialog } from './BudgetDialog';
 import { ExpenseDialog } from './ExpenseDialog';
 import { formatCurrency, formatDate } from '../utils/formatters';
 import { useAuth } from '../contexts/AuthContext';
+import { apiUrl } from '../lib/api';
 
 interface Props {
   budget: Budget;
@@ -63,7 +64,7 @@ export function BudgetTab({ budget, expenses, onUpdateBudget, onAddExpense, onUp
     if (!user?.email) return;
     setEmailingId(expense.id);
     try {
-      const res = await fetch('/.netlify/functions/send-receipt', {
+      const res = await fetch(apiUrl('/.netlify/functions/send-receipt'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userEmail: user.email, expense, currency: budget.currency }),

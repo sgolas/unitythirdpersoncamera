@@ -5,6 +5,8 @@ import { LocationInput } from './LocationInput';
 import { todayStr } from '../utils/formatters';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import { apiUrl, isNative } from '../lib/api';
+import { Camera as NativeCamera, CameraResultType, CameraSource } from '@capacitor/camera';
 
 interface Props {
   expense: Expense | null;
@@ -68,33 +70,58 @@ export function ExpenseDialog({ expense, currency, destination, onSave, onClose 
 
   function clearDraft() { sessionStorage.removeItem(DRAFT_KEY); }
 
-  // Upload immediately on file select so the receipt survives if the browser
-  // loses state when the camera app closes (common on Android/iOS).
-  async function handleReceiptChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    // Show local blob preview right away
-    const blobUrl = URL.createObjectURL(file);
-    setReceiptPreview(blobUrl);
-
+  async function uploadReceiptBlob(blob: Blob) {
     if (!user) return;
     setReceiptUploading(true);
     try {
-      const ext = file.type.includes('png') ? 'png' : 'jpg';
-      // Use a temp path under user's folder; renamed on save if needed
-      const path = `${user.id}/pending_${Date.now()}.${ext}`;
-      const compressed = await compressImage(file);
+      const path = `${user.id}/pending_${Date.now()}.jpg`;
       const { error } = await supabase.storage
         .from('receipts')
-        .upload(path, compressed, { contentType: 'image/jpeg', upsert: true });
+        .upload(path, blob, { contentType: 'image/jpeg', upsert: true });
       if (!error) {
         const { data } = supabase.storage.from('receipts').getPublicUrl(path);
         setReceiptUrl(data.publicUrl);
-        setReceiptPreview(data.publicUrl); // swap to permanent URL
+        setReceiptPreview(data.publicUrl);
       }
-    } catch { /* silently continue; receipt preview stays as blob */ }
+    } catch { /* silently continue */ }
     setReceiptUploading(false);
+  }
+
+  // Native Android: use Capacitor Camera plugin (Camera or Gallery picker)
+  async function handleNativeCamera() {
+    try {
+      const photo = await NativeCamera.getPhoto({
+        quality: 82,
+        allowEditing: false,
+        resultType: CameraResultType.DataUrl,
+        source: CameraSource.Prompt,
+        width: 1400,
+        height: 1400,
+      });
+      if (!photo.dataUrl) return;
+      setReceiptPreview(photo.dataUrl);
+      const blob = await dataUrlToBlob(photo.dataUrl);
+      const compressed = await compressBlob(blob);
+      await uploadReceiptBlob(compressed);
+    } catch { /* user cancelled */ }
+  }
+
+  // Web fallback: file input (also works in Capacitor WebView if needed)
+  async function handleReceiptChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const blobUrl = URL.createObjectURL(file);
+    setReceiptPreview(blobUrl);
+    const compressed = await compressImage(file);
+    await uploadReceiptBlob(compressed);
+  }
+
+  function openReceiptPicker() {
+    if (isNative) {
+      handleNativeCamera();
+    } else {
+      receiptInputRef.current?.click();
+    }
   }
 
   function removeReceipt() {
@@ -133,7 +160,7 @@ export function ExpenseDialog({ expense, currency, destination, onSave, onClose 
     setAiError('');
     setAiSuggestions([]);
     try {
-      const res = await fetch('/.netlify/functions/claude', {
+      const res = await fetch(apiUrl('/.netlify/functions/claude'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -391,7 +418,7 @@ export function ExpenseDialog({ expense, currency, destination, onSave, onClose 
               {!receiptUploading && (
                 <button
                   type="button"
-                  onClick={() => receiptInputRef.current?.click()}
+                  onClick={openReceiptPicker}
                   className="absolute bottom-2 right-2 flex items-center gap-1.5 bg-black/55 text-white text-xs font-semibold px-3 py-1.5 rounded-full"
                 >
                   <Camera size={12} /> Replace
@@ -401,7 +428,7 @@ export function ExpenseDialog({ expense, currency, destination, onSave, onClose 
           ) : (
             <button
               type="button"
-              onClick={() => receiptInputRef.current?.click()}
+              onClick={openReceiptPicker}
               className="flex items-center justify-center gap-2 w-full mt-1 border-2 border-dashed border-slate-200 rounded-xl px-4 py-6 text-slate-400 hover:border-ocean hover:text-ocean transition-colors active:scale-[0.98]"
             >
               <Camera size={22} />
@@ -441,20 +468,36 @@ export function ExpenseDialog({ expense, currency, destination, onSave, onClose 
 }
 
 async function compressImage(file: File): Promise<Blob> {
+  const blobUrl = URL.createObjectURL(file);
+  const result = await compressFromUrl(blobUrl);
+  URL.revokeObjectURL(blobUrl);
+  return result ?? file;
+}
+
+async function compressBlob(blob: Blob): Promise<Blob> {
+  const blobUrl = URL.createObjectURL(blob);
+  const result = await compressFromUrl(blobUrl);
+  URL.revokeObjectURL(blobUrl);
+  return result ?? blob;
+}
+
+function compressFromUrl(src: string): Promise<Blob | null> {
   return new Promise(resolve => {
     const img = new Image();
-    const objectUrl = URL.createObjectURL(file);
     img.onload = () => {
-      URL.revokeObjectURL(objectUrl);
       const MAX = 1400;
       const scale = Math.min(1, MAX / Math.max(img.width, img.height));
       const canvas = document.createElement('canvas');
       canvas.width  = Math.round(img.width  * scale);
       canvas.height = Math.round(img.height * scale);
       canvas.getContext('2d')!.drawImage(img, 0, 0, canvas.width, canvas.height);
-      canvas.toBlob(blob => resolve(blob ?? file), 'image/jpeg', 0.82);
+      canvas.toBlob(blob => resolve(blob), 'image/jpeg', 0.82);
     };
-    img.onerror = () => { URL.revokeObjectURL(objectUrl); resolve(file); };
-    img.src = objectUrl;
+    img.onerror = () => resolve(null);
+    img.src = src;
   });
+}
+
+function dataUrlToBlob(dataUrl: string): Promise<Blob> {
+  return fetch(dataUrl).then(r => r.blob());
 }

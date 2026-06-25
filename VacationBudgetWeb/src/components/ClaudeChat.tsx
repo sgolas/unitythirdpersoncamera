@@ -3,6 +3,7 @@ import { Send, Sparkles, ChevronDown, ChevronUp, Bot, User, Trash2, CheckCircle,
 import type { Budget, Expense, ItineraryEvent } from '../types';
 import { formatTime } from '../utils/formatters';
 import { useAuth } from '../contexts/AuthContext';
+import { apiUrl } from '../lib/api';
 
 interface Message { role: 'user' | 'assistant'; content: string; }
 
@@ -84,7 +85,7 @@ export function ClaudeChat({ budget, selectedDate, events, expenses, onAddEvent,
     setLoading(true);
 
     try {
-      const res = await fetch('/.netlify/functions/claude', {
+      const res = await fetch(apiUrl('/.netlify/functions/claude'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

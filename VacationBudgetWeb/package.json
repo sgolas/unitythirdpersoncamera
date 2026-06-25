@@ -6,10 +6,20 @@
     "dev": "netlify dev",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "vite": "vite"
+    "vite": "vite",
+    "gen-icons": "node scripts/gen-icons.cjs",
+    "android:build": "npm run build && npx cap sync android",
+    "android:open": "npx cap open android"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.20.7",
+    "@capacitor/android": "^8.4.1",
+    "@capacitor/app": "^8.1.0",
+    "@capacitor/camera": "^8.2.0",
+    "@capacitor/core": "^8.4.1",
+    "@capacitor/filesystem": "^8.1.2",
+    "@capacitor/splash-screen": "^8.0.1",
+    "@capacitor/status-bar": "^8.0.2",
     "@netlify/functions": "^2.6.0",
     "@supabase/supabase-js": "^2.39.7",
     "lucide-react": "^0.344.0",
@@ -17,6 +27,9 @@
     "react-dom": "^18.2.0"
   },
   "devDependencies": {
+    "@capacitor/assets": "^3.0.5",
+    "@capacitor/cli": "^8.4.1",
+    "@resvg/resvg-js": "^2.6.2",
     "@types/react": "^18.2.61",
     "@types/react-dom": "^18.2.19",
     "@vitejs/plugin-react": "^4.2.1",

@@ -8,6 +8,16 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { useVacationData } from './hooks/useVacationData';
 import type { Expense, ExpenseCategory } from './types';
 import { CATEGORY_META, CURRENCY_SYMBOLS } from './types';
+import { StatusBar, Style } from '@capacitor/status-bar';
+import { SplashScreen } from '@capacitor/splash-screen';
+import { isNative } from './lib/api';
+
+// Init native UI on startup
+if (isNative) {
+  StatusBar.setStyle({ style: Style.Dark }).catch(() => {});
+  StatusBar.setBackgroundColor({ color: '#0077B6' }).catch(() => {});
+  SplashScreen.hide({ fadeOutDuration: 300 }).catch(() => {});
+}
 
 type Tab = 'budget' | 'itinerary';
 

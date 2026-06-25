@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Vacation Budget</string>
+    <string name="title_activity_main">Vacation Budget</string>
+    <string name="package_name">com.sgolas.vacationbudget</string>
+    <string name="custom_url_scheme">com.sgolas.vacationbudget</string>
+</resources>

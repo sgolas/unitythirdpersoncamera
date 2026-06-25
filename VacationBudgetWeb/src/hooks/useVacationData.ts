@@ -75,25 +75,39 @@ export function useVacationData() {
 
   /* ── Expenses ───────────────────────────────────────── */
   async function addExpense(expense: Expense) {
-    const { data } = await supabase.from('expenses').insert({
+    const basePayload = {
       user_id: user!.id, name: expense.name, amount: expense.amount,
       location: expense.location, category: expense.category,
       date: expense.date, notes: expense.notes,
-      paid: expense.paid ?? false,
-      receipt_url: expense.receiptUrl ?? '',
+    };
+
+    // Try with v2 columns first; fall back to base columns if migration hasn't been run
+    let { data, error } = await supabase.from('expenses').insert({
+      ...basePayload, paid: expense.paid ?? false, receipt_url: expense.receiptUrl ?? '',
     }).select().single();
 
-    if (data) setExpenses(prev => [{ ...expense, id: data.id, createdAt: data.created_at }, ...prev]);
+    if (error) {
+      const fallback = await supabase.from('expenses').insert(basePayload).select().single();
+      data = fallback.data;
+    }
+
+    if (data) setExpenses(prev => [{ ...expense, id: data!.id, createdAt: data!.created_at }, ...prev]);
   }
 
   async function updateExpense(expense: Expense) {
     setExpenses(prev => prev.map(e => e.id === expense.id ? expense : e));
-    await supabase.from('expenses').update({
+    const basePayload = {
       name: expense.name, amount: expense.amount, location: expense.location,
       category: expense.category, date: expense.date, notes: expense.notes,
-      paid: expense.paid ?? false,
-      receipt_url: expense.receiptUrl ?? '',
+    };
+
+    const { error } = await supabase.from('expenses').update({
+      ...basePayload, paid: expense.paid ?? false, receipt_url: expense.receiptUrl ?? '',
     }).eq('id', expense.id);
+
+    if (error) {
+      await supabase.from('expenses').update(basePayload).eq('id', expense.id);
+    }
   }
 
   async function deleteExpense(id: string) {

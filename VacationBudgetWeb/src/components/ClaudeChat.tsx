@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Send, Sparkles, ChevronDown, ChevronUp, Bot, User, Trash2, CheckCircle, XCircle, CalendarPlus, Pencil } from 'lucide-react';
 import type { Budget, ItineraryEvent } from '../types';
 import { formatTime } from '../utils/formatters';
+import { useAuth } from '../contexts/AuthContext';
 
 interface Message { role: 'user' | 'assistant'; content: string; }
 
@@ -30,6 +31,9 @@ interface Props {
 }
 
 export function ClaudeChat({ budget, selectedDate, events, onAddEvent, onUpdateEvent }: Props) {
+  const { user } = useAuth();
+  const storageKey = user ? `chatHistory_${user.id}` : null;
+
   const [open,      setOpen]      = useState(false);
   const [messages,  setMessages]  = useState<Message[]>([]);
   const [toolCalls, setToolCalls] = useState<ToolCall[]>([]);
@@ -38,6 +42,25 @@ export function ClaudeChat({ budget, selectedDate, events, onAddEvent, onUpdateE
   const [error,     setError]     = useState('');
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef  = useRef<HTMLInputElement>(null);
+
+  // Load history from localStorage on mount
+  useEffect(() => {
+    if (!storageKey) return;
+    try {
+      const saved = localStorage.getItem(storageKey);
+      if (saved) {
+        const { messages: saved_msgs } = JSON.parse(saved);
+        if (Array.isArray(saved_msgs) && saved_msgs.length > 0) setMessages(saved_msgs);
+      }
+    } catch {}
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [storageKey]);
+
+  // Persist messages to localStorage whenever they change
+  useEffect(() => {
+    if (!storageKey) return;
+    localStorage.setItem(storageKey, JSON.stringify({ messages }));
+  }, [messages, storageKey]);
 
   useEffect(() => {
     if (open) bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -127,6 +150,7 @@ export function ClaudeChat({ budget, selectedDate, events, onAddEvent, onUpdateE
   function clearChat() {
     setMessages([]);
     setToolCalls([]);
+    if (storageKey) localStorage.removeItem(storageKey);
   }
 
   const hasDestination = Boolean(budget.destination);

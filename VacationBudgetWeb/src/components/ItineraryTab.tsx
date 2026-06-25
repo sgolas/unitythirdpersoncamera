@@ -4,6 +4,7 @@ import { Budget, ItineraryEvent } from '../types';
 import { EventDialog } from './EventDialog';
 import { ClaudeChat } from './ClaudeChat';
 import { formatDate, formatTime, buildGCalUrl, gCalDayUrl, addMonths, todayStr } from '../utils/formatters';
+import { useSwipe } from '../hooks/useSwipe';
 
 interface Props {
   budget: Budget;
@@ -32,12 +33,22 @@ export function ItineraryTab({ budget, events, onAddEvent, onUpdateEvent, onDele
     const d = new Date(selectedDate + 'T00:00:00');
     d.setDate(1);
     d.setMonth(d.getMonth() + delta);
-    // keep selected date in new month if possible
     const daysInNew = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
     const day = Math.min(new Date(selectedDate + 'T00:00:00').getDate(), daysInNew);
     d.setDate(day);
     setSelectedDate(d.toISOString().slice(0, 10));
   }
+
+  function changeWeek(delta: number) {
+    const d = new Date(selectedDate + 'T00:00:00');
+    d.setDate(d.getDate() + delta * 7);
+    setSelectedDate(d.toISOString().slice(0, 10));
+  }
+
+  const swipeHandlers = useSwipe(
+    () => calView === 'month' ? changeMonth(1)  : changeWeek(1),
+    () => calView === 'month' ? changeMonth(-1) : changeWeek(-1),
+  );
 
   const dayEvents = events
     .filter(e => e.date === selectedDate)
@@ -63,8 +74,8 @@ export function ItineraryTab({ budget, events, onAddEvent, onUpdateEvent, onDele
         </div>
       </div>
 
-      {/* View toggle + calendar */}
-      <div className="bg-white shadow-sm border-b border-slate-100">
+      {/* View toggle + calendar (swipeable) */}
+      <div className="bg-white shadow-sm border-b border-slate-100" {...swipeHandlers}>
         {/* Toggle row */}
         <div className="flex justify-end px-3 pt-2 pb-1 gap-1">
           <button

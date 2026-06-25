@@ -116,11 +116,7 @@ export function ExpenseDialog({ expense, currency, destination, onSave, onClose 
   const showAIButton = AI_CATEGORIES.includes(category);
 
   return (
-    // Full-screen fixed panel matching the app container
-    <div
-      className="fixed inset-0 z-50 bg-white flex flex-col"
-      style={{ maxWidth: 480, left: '50%', transform: 'translateX(-50%)' }}
-    >
+    <div className="fixed inset-0 z-50 bg-white flex flex-col">
       {/* Sticky header */}
       <div
         className="flex items-center gap-3 px-4 py-4 border-b border-slate-100"

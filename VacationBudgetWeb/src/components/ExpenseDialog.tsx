@@ -163,7 +163,7 @@ export function ExpenseDialog({ expense, currency, destination, onSave, onClose 
   const showAIButton = AI_CATEGORIES.includes(category);
 
   return (
-    <div className="fixed inset-0 z-50 bg-white flex flex-col">
+    <div className="fixed inset-0 z-[200] bg-white flex flex-col">
 
       {/* ── Sticky header ─────────────────────────────────────── */}
       <div

@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Send, Sparkles, ChevronDown, ChevronUp, Bot, User, Trash2, CheckCircle, XCircle, CalendarPlus, Pencil } from 'lucide-react';
+import { Send, Sparkles, ChevronDown, ChevronUp, Bot, User, Trash2, CheckCircle, XCircle, CalendarPlus, Pencil, Mic, MicOff } from 'lucide-react';
 import type { Budget, Expense, ItineraryEvent } from '../types';
 import { formatTime } from '../utils/formatters';
 import { useAuth } from '../contexts/AuthContext';
@@ -41,6 +41,7 @@ export function ClaudeChat({ budget, selectedDate, events, expenses, onAddEvent,
   const [input,     setInput]     = useState('');
   const [loading,   setLoading]   = useState(false);
   const [error,     setError]     = useState('');
+  const [listening, setListening] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef  = useRef<HTMLInputElement>(null);
 
@@ -150,6 +151,25 @@ export function ClaudeChat({ budget, selectedDate, events, expenses, onAddEvent,
     setToolCalls(prev => prev.map(t => t.id === toolId ? { ...t, status: 'dismissed' } : t));
   }
 
+  function startVoice() {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SR) { setError('Voice recognition is not supported in this browser.'); return; }
+    const recognition = new SR();
+    recognition.lang = 'en-US';
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+    recognition.onstart = () => setListening(true);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    recognition.onresult = (e: any) => {
+      const transcript: string = e.results[0][0].transcript;
+      send(transcript);
+    };
+    recognition.onerror = () => { setListening(false); setError('Could not hear you. Try again.'); };
+    recognition.onend = () => setListening(false);
+    recognition.start();
+  }
+
   function clearChat() {
     setMessages([]);
     setToolCalls([]);
@@ -250,10 +270,23 @@ export function ClaudeChat({ budget, selectedDate, events, expenses, onAddEvent,
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(input); } }}
-              placeholder={hasDestination ? `Ask about ${budget.destination} or say "add an event"…` : 'Ask about your trip or say "add an event"…'}
+              placeholder={listening ? 'Listening…' : hasDestination ? `Ask about ${budget.destination} or say "add an event"…` : 'Ask about your trip or say "add an event"…'}
               className="flex-1 border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300 focus:border-violet-400 transition-all"
-              disabled={loading}
+              disabled={loading || listening}
             />
+            <button
+              type="button"
+              onClick={startVoice}
+              disabled={loading || listening}
+              className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all active:scale-95 disabled:opacity-40 ${
+                listening
+                  ? 'bg-red-500 text-white animate-pulse'
+                  : 'bg-slate-100 text-slate-500 hover:bg-violet-50 hover:text-violet-600'
+              }`}
+              title="Speak your message"
+            >
+              {listening ? <MicOff size={16} /> : <Mic size={16} />}
+            </button>
             <button
               onClick={() => send(input)}
               disabled={!input.trim() || loading}

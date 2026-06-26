@@ -1,0 +1,14 @@
+# Netlify configuration for Void Protocol.
+# This is a no-build static site served from the repo root (native ES modules,
+# no bundler), so there's no build command — Netlify just publishes the files.
+
+[build]
+  publish = "."
+  command = ""
+
+# Long-cache the static JS/CSS assets (filenames are stable for this prototype;
+# bump or hash them when you start shipping frequent updates).
+[[headers]]
+  for = "/src/*"
+  [headers.values]
+    Cache-Control = "public, max-age=3600"

@@ -2,6 +2,10 @@
 
 > Strategic puzzle-combat with open-world exploration. Pixel-art *Metroid-meets-cyberpunk*, built mobile-first for the web.
 
+[![Deploy to Netlify](https://www.netlify.com/img/deploy/button.svg)](https://app.netlify.com/start/deploy?repository=https://github.com/sgolas/sylsrepo)
+
+One-click deploy: the button pre-fills Netlify's import for this repo (no build, publish from root — see `netlify.toml`). After it deploys, add your subdomain under **Domain management**; if the domain's DNS is managed by Netlify the record and HTTPS are created automatically.
+
 This repository contains a **playable vertical slice** of *Void Protocol* — a no-build, dependency-free web app you can open and play immediately. It implements the highest-priority systems from the design brief (the core puzzle-combat engine and the world/menus around it) and lays clean foundations for the rest.
 
 ---

@@ -1,5 +1,7 @@
-import { useState } from 'react';
-import { Smartphone, KeyRound, RefreshCw, Globe, Trash2, Check } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Smartphone, KeyRound, RefreshCw, Globe, Trash2, Check, Download } from 'lucide-react';
+import { getOtaStatus, runOTA } from '../../lib/ota';
+import { isNative } from '../../lib/platform';
 import { getDeviceName, setDeviceName } from '../../db/database';
 import { getSyncCode, getSyncPass, setSyncCredentials, getLastSync, isSyncConfigured } from '../../lib/config';
 import { syncNow, wipeLocal } from '../../db/sync';
@@ -14,8 +16,26 @@ export function SettingsTab() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
   const [wiping, setWiping] = useState(false);
+  const [ota, setOta] = useState(getOtaStatus());
+  const [otaBusy, setOtaBusy] = useState(false);
+  const [bundleVer, setBundleVer] = useState('');
 
   const lastSync = getLastSync();
+
+  useEffect(() => {
+    if (!isNative) { setBundleVer('web'); return; }
+    import('@capgo/capacitor-updater').then(async ({ CapacitorUpdater }) => {
+      try { const c = await CapacitorUpdater.current(); setBundleVer(c?.bundle?.version ?? 'builtin'); } catch { setBundleVer('?'); }
+    });
+  }, []);
+
+  async function checkUpdates() {
+    setOtaBusy(true);
+    // If an update applies, the app reloads and this never returns — that's fine.
+    const s = await runOTA();
+    setOta(s);
+    setOtaBusy(false);
+  }
 
   function saveAll() {
     setDeviceName(device);
@@ -88,6 +108,18 @@ export function SettingsTab() {
               {lastSync ? `Last synced ${fmtStamp(lastSync)}` : 'Tap Sync to publish your data to the portal.'}
             </p>
           )}
+        </div>
+
+        {/* App updates (OTA) */}
+        <div className="bg-white rounded-2xl p-4 shadow-sm">
+          <p className="flex items-center gap-2 font-semibold text-slate-800 mb-2"><Download size={16} /> App updates</p>
+          <p className="text-sm text-slate-500">Running version: <b className="text-slate-700">{bundleVer || '…'}</b></p>
+          <p className="text-sm text-slate-500 mt-1 break-words">{ota}</p>
+          <button onClick={checkUpdates} disabled={otaBusy}
+            className="w-full mt-3 py-2.5 rounded-2xl font-semibold text-white bg-ink active:scale-[0.98] disabled:opacity-40 transition">
+            {otaBusy ? 'Checking…' : 'Check for updates now'}
+          </button>
+          <p className="text-xs text-slate-400 mt-2">Updates also download automatically each time you open the app.</p>
         </div>
 
         {/* Danger zone */}

@@ -93,11 +93,6 @@ export function DashboardTab({ onNavigate }: { onNavigate: (v: any) => void }) {
         </button>
       </div>
 
-      {/* OTA live-test banner — arrived over-the-air, no reinstall */}
-      <div className="mx-4 mt-3 rounded-2xl bg-emerald-100 border border-emerald-300 text-emerald-800 text-sm font-bold text-center py-2.5 animate-fadeUp">
-        🎉 Auto-update works! This banner arrived over-the-air.
-      </div>
-
       {/* Section grid */}
       <div className="px-4 pt-4">
         <div className="grid grid-cols-2 gap-3">

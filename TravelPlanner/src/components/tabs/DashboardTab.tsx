@@ -13,6 +13,7 @@ import { daysUntil, fmtDate, fmtStamp, tripLength } from '../../utils/format';
 import { getLastSync } from '../../lib/config';
 import { computeStops } from '../tripMap';
 import { Monogram } from '../ui';
+import { WeatherWidget } from '../WeatherWidget';
 
 const HERO_KEY = 'trip.heroOpen';
 
@@ -39,6 +40,7 @@ export function DashboardTab({ onNavigate }: { onNavigate: (v: any) => void }) {
 
   const stops = computeStops(transport, stays, itinerary);
   const cities = new Set(stops.map(s => s.label.toLowerCase())).size;
+  const weatherLoc = stops[0]?.label || trip.destinations.split(/[·,]/)[0].trim();
 
   const budgetPct = trip.totalBudget > 0 ? Math.min(100, Math.round((spent / trip.totalBudget) * 100)) : 0;
 
@@ -122,6 +124,9 @@ export function DashboardTab({ onNavigate }: { onNavigate: (v: any) => void }) {
           <Stat value={travelers.length} label="People" />
           <Stat value={itinerary.length} label="Events" />
         </div>
+
+        {/* Weather */}
+        <WeatherWidget location={weatherLoc} />
 
         {/* Budget + Passport */}
         <div className="grid grid-cols-2 gap-3">

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Lock, RefreshCw, Plane, BedDouble, FileText, Wallet, ListChecks, CalendarRange, MapPin, Clock } from 'lucide-react';
+import { Lock, RefreshCw, Plane, BedDouble, FileText, Wallet, ListChecks, CalendarRange, MapPin, Clock, Compass, Map as MapIcon, Images } from 'lucide-react';
 import { pullOnly } from '../db/sync';
+import { computeStops, StringMap } from '../components/tripMap';
 import {
   useTrip, useTravelers, useItinerary, useTransport, useAccommodation,
   useDocuments, useExpenses, useChecklist, useBudget, usePhotos,
@@ -95,6 +96,7 @@ function PortalView() {
   const photos = usePhotos();
   const [refreshing, setRefreshing] = useState(false);
   const [waited, setWaited] = useState(false);
+  const [view, setView] = useState<'overview' | 'map' | 'photos'>('overview');
 
   useEffect(() => { const t = setTimeout(() => setWaited(true), 1500); return () => clearTimeout(t); }, []);
 
@@ -164,6 +166,24 @@ function PortalView() {
         <span className="inline-block mt-4 text-[11px] uppercase tracking-wide bg-white/10 px-2 py-0.5 rounded">View only</span>
       </div>
 
+      {/* Tabs */}
+      <div className="sticky top-0 z-10 bg-slate-50/95 backdrop-blur border-b border-slate-200 flex justify-center gap-1 px-4 py-2">
+        {([
+          { key: 'overview', label: 'Overview', icon: <Compass size={15} /> },
+          { key: 'map',      label: 'Map',      icon: <MapIcon size={15} /> },
+          { key: 'photos',   label: 'Photos',   icon: <Images size={15} /> },
+        ] as const).map(t => (
+          <button key={t.key} onClick={() => setView(t.key)}
+            className={`px-4 py-2 rounded-xl text-sm font-semibold flex items-center gap-1.5 transition ${view === t.key ? 'bg-ink text-white' : 'text-slate-500 hover:bg-slate-100'}`}>
+            {t.icon} {t.label}
+          </button>
+        ))}
+      </div>
+
+      {view === 'map' && <PortalMap transport={transport} stays={stays} itinerary={itinerary} />}
+      {view === 'photos' && <PortalPhotos photos={photos} />}
+
+      {view === 'overview' && (
       <div className="p-4">
         {/* Money summary */}
         <div className="grid grid-cols-2 gap-3 mb-6">
@@ -258,20 +278,6 @@ function PortalView() {
           </Section>
         )}
 
-        {/* Photos */}
-        {photos.length > 0 && (
-          <Section title="Photos" icon={<span>📸</span>} count={photos.length}>
-            <div className="grid grid-cols-3 gap-1.5">
-              {photos.slice(0, 18).map(p => (
-                <a key={p.id} href={p.url} target="_blank" rel="noopener noreferrer"
-                  className="aspect-square rounded-lg overflow-hidden bg-slate-100 block">
-                  <img src={p.url} alt={p.caption} className="w-full h-full object-cover" loading="lazy" />
-                </a>
-              ))}
-            </div>
-          </Section>
-        )}
-
         {/* Checklist */}
         {checklist.length > 0 && (
           <Section title="Checklist" icon={<ListChecks size={16} />} count={checklist.length}>
@@ -288,9 +294,80 @@ function PortalView() {
         {budget.length === 0 && itinerary.length === 0 && transport.length === 0 && stays.length === 0 && expenses.length === 0 && (
           <p className="text-center text-slate-400 py-10">Nothing here yet — add details in the app, then Sync.</p>
         )}
-
-        <p className="text-center text-xs text-slate-300 mt-6">Trip Planner · read-only portal · sgolas.com</p>
       </div>
+      )}
+
+      <p className="text-center text-xs text-slate-300 py-6">Trip Planner · read-only portal · sgolas.com</p>
+    </div>
+  );
+}
+
+/* ── Portal: Map view ───────────────────────────────────────── */
+function PortalMap({ transport, stays, itinerary }: {
+  transport: any[]; stays: any[]; itinerary: any[];
+}) {
+  const stops = computeStops(transport, stays, itinerary);
+  if (stops.length === 0)
+    return <p className="text-center text-slate-400 py-16">No places pinned yet — add stays, transport or itinerary in the app.</p>;
+  return (
+    <div className="max-w-md mx-auto">
+      <StringMap stops={stops} />
+      <p className="text-center text-xs text-slate-400 -mt-2 pb-6">pins come from stays, transport &amp; itinerary</p>
+    </div>
+  );
+}
+
+/* ── Portal: Photo album view (folders + grid) ──────────────── */
+function PortalPhotos({ photos }: { photos: any[] }) {
+  const [folder, setFolder] = useState<string | null>(null);
+  if (photos.length === 0)
+    return <p className="text-center text-slate-400 py-16">No photos uploaded yet.</p>;
+
+  const folders = Array.from(new Set(photos.map(p => p.folder))).sort().reverse();
+  const shown = folder ? photos.filter(p => p.folder === folder) : photos;
+
+  return (
+    <div className="p-4">
+      {folder ? (
+        <button onClick={() => setFolder(null)} className="text-sm font-semibold text-pink-600 mb-3">‹ All folders</button>
+      ) : (
+        <p className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-2">{folders.length} folder{folders.length === 1 ? '' : 's'}</p>
+      )}
+
+      {!folder ? (
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          {folders.map(f => {
+            const inF = photos.filter(p => p.folder === f);
+            return (
+              <button key={f} onClick={() => setFolder(f)}
+                className="rounded-2xl overflow-hidden bg-white shadow-sm text-left active:scale-[0.98] transition">
+                <div className="aspect-square bg-slate-100">
+                  {inF[0] && <img src={inF[0].url} alt="" className="w-full h-full object-cover" loading="lazy" />}
+                </div>
+                <div className="p-2.5">
+                  <p className="font-semibold text-slate-800 text-sm truncate">📁 {f}</p>
+                  <p className="text-xs text-slate-400">{inF.length} photo{inF.length === 1 ? '' : 's'}</p>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="grid grid-cols-3 gap-1.5">
+          {shown.map(p => (
+            <a key={p.id} href={p.url} target="_blank" rel="noopener noreferrer"
+              className="relative aspect-square rounded-lg overflow-hidden bg-slate-100 block group">
+              <img src={p.url} alt={p.caption} className="w-full h-full object-cover" loading="lazy" />
+              {(p.place || p.caption) && (
+                <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent p-1.5 pt-4">
+                  {p.place && <p className="text-white text-[9px] font-medium flex items-center gap-0.5 leading-tight"><MapPin size={8} />{p.place}</p>}
+                  {p.caption && <p className="text-white/80 text-[8px] leading-tight truncate">{p.caption}</p>}
+                </div>
+              )}
+            </a>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

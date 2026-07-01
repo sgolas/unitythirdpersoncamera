@@ -6,6 +6,7 @@ import type { Expense, ExpenseCategory } from '../../types';
 import { money } from '../../types';
 import { fmtDate, todayStr } from '../../utils/format';
 import { TabHeader, Sheet, Field, TextInput, TextArea, Select, FormFooter, Fab, EmptyState, ConfirmDelete } from '../ui';
+import { PlaceInput } from '../PlaceInput';
 
 const CATS: { key: ExpenseCategory; label: string; emoji: string; color: string }[] = [
   { key: 'food',       label: 'Food',       emoji: '🍽️', color: '#fb7185' },
@@ -134,7 +135,7 @@ function ExpenseSheet({ expense, travelers, currency, onClose }: {
           {travelers.map(t => <option key={t.id} value={t.id}>{t.emoji} {t.name}</option>)}
         </Select>
       </Field>
-      <Field label="Place"><TextInput value={place} onChange={e => setPlace(e.target.value)} placeholder="Optional" /></Field>
+      <Field label="Place"><PlaceInput value={place} onChange={setPlace} placeholder="Search a place…" /></Field>
       <Field label="Notes"><TextArea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Optional" /></Field>
     </Sheet>
   );

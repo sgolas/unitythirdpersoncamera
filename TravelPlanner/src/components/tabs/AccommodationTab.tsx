@@ -6,6 +6,7 @@ import type { Accommodation } from '../../types';
 import { money } from '../../types';
 import { fmtDate, todayStr, tripLength } from '../../utils/format';
 import { TabHeader, Sheet, Field, TextInput, TextArea, FormFooter, Fab, EmptyState, ConfirmDelete } from '../ui';
+import { PlaceInput } from '../PlaceInput';
 
 export function AccommodationTab() {
   const stays = useAccommodation();
@@ -104,8 +105,8 @@ function StaySheet({ stay, currency, onClose }: { stay: Accommodation | null; cu
     <Sheet title={stay ? 'Edit stay' : 'Add stay'} onClose={onClose}
       footer={<FormFooter onCancel={onClose} onSubmit={save} disabled={!name.trim()} submitLabel={stay ? 'Save' : 'Add stay'} />}>
       <Field label="Name"><TextInput autoFocus value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Hotel Lumière" /></Field>
-      <Field label="City"><TextInput value={city} onChange={e => setCity(e.target.value)} placeholder="e.g. Paris" /></Field>
-      <Field label="Address"><TextInput value={address} onChange={e => setAddress(e.target.value)} placeholder="Optional" /></Field>
+      <Field label="City"><PlaceInput value={city} onChange={setCity} placeholder="Search a city…" /></Field>
+      <Field label="Address"><PlaceInput value={address} onChange={setAddress} placeholder="Search an address…" /></Field>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Check in"><TextInput type="date" value={checkIn} onChange={e => setCheckIn(e.target.value)} /></Field>
         <Field label="Check out"><TextInput type="date" value={checkOut} onChange={e => setCheckOut(e.target.value)} /></Field>

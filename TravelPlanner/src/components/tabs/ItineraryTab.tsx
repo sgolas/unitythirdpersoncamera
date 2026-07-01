@@ -6,6 +6,7 @@ import type { ItineraryEvent } from '../../types';
 import { money } from '../../types';
 import { fmtDate, fmtTime, fmtDateLong, dateRange, todayStr } from '../../utils/format';
 import { TabHeader, Sheet, Field, TextInput, TextArea, Select, FormFooter, Fab, EmptyState, ConfirmDelete } from '../ui';
+import { PlaceInput } from '../PlaceInput';
 
 const CATS = [
   { key: 'sightseeing', label: 'Sightseeing', emoji: '📸', color: '#a78bfa' },
@@ -154,7 +155,7 @@ function EventSheet({ event, defaultDate, currency, onClose }: { event: Itinerar
         </Select>
       </Field>
       <div className="grid grid-cols-2 gap-3">
-        <Field label="Place"><TextInput value={place} onChange={e => setPlace(e.target.value)} placeholder="Optional" /></Field>
+        <Field label="Place"><PlaceInput value={place} onChange={setPlace} placeholder="Search a place…" /></Field>
         <Field label={`Cost (${currency})`}><TextInput type="number" inputMode="decimal" value={cost} onChange={e => setCost(e.target.value)} placeholder="0.00" /></Field>
       </div>
       <Field label="Notes"><TextArea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Optional" /></Field>

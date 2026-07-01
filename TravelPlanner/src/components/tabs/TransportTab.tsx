@@ -6,6 +6,7 @@ import type { Transport, TransportMode } from '../../types';
 import { money } from '../../types';
 import { fmtDate, fmtTime, todayStr } from '../../utils/format';
 import { TabHeader, Sheet, Field, TextInput, TextArea, Select, FormFooter, Fab, EmptyState, ConfirmDelete } from '../ui';
+import { PlaceInput } from '../PlaceInput';
 
 const MODES: { key: TransportMode; label: string; emoji: string }[] = [
   { key: 'flight',   label: 'Flight',   emoji: '✈️' },
@@ -124,8 +125,8 @@ function TransportSheet({ leg, currency, onClose }: { leg: Transport | null; cur
         <Field label="Provider"><TextInput value={provider} onChange={e => setProvider(e.target.value)} placeholder="e.g. Delta" /></Field>
       </div>
       <div className="grid grid-cols-2 gap-3">
-        <Field label="From"><TextInput value={fromPlace} onChange={e => setFrom(e.target.value)} placeholder="City / airport" /></Field>
-        <Field label="To"><TextInput value={toPlace} onChange={e => setTo(e.target.value)} placeholder="City / airport" /></Field>
+        <Field label="From"><PlaceInput value={fromPlace} onChange={setFrom} placeholder="City / airport" /></Field>
+        <Field label="To"><PlaceInput value={toPlace} onChange={setTo} placeholder="City / airport" /></Field>
       </div>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Depart date"><TextInput type="date" value={departDate} onChange={e => setDepartDate(e.target.value)} /></Field>

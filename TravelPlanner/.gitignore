@@ -1,0 +1,9 @@
+node_modules
+dist
+.env
+.env.local
+.netlify
+android/local.properties
+android/app/*.jks
+android/keystore.properties
+*.log

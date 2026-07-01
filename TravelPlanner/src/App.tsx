@@ -81,7 +81,7 @@ export default function App() {
   const canGoBack = stack.length > 0;
 
   return (
-    <div className="min-h-screen bg-bg text-content mx-auto max-w-md relative">
+    <div className={`min-h-screen bg-bg text-content mx-auto max-w-md relative ${canGoBack ? 'with-back' : ''}`}>
       <main style={{ paddingBottom: 'calc(74px + env(safe-area-inset-bottom, 0px))' }}>
         {view === 'dashboard'     && <DashboardTab onNavigate={go} />}
         {view === 'overview'      && <TripOverviewTab />}

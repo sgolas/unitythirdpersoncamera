@@ -173,8 +173,12 @@ input, textarea, select { font-size: 16px; font-family: inherit; }
   display: flex; align-items: center; justify-content: center; border: 2px solid #fff;
 }
 
-/* ── SG monogram watermark ──────────────────────────────────── */
+/* ── Stitch monogram watermark (LV-style, plastered & faded) ─── */
 .bg-monogram {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120' viewBox='0 0 120 120'%3E%3Cg fill='%23ffffff' fill-opacity='0.06'%3E%3Ctext x='30' y='42' font-family='Georgia,serif' font-size='24' font-weight='700' text-anchor='middle'%3ESG%3C/text%3E%3Ctext x='90' y='102' font-family='Georgia,serif' font-size='24' font-weight='700' text-anchor='middle'%3ESG%3C/text%3E%3Cpath d='M90 26 l5 9 -5 9 -5 -9 z'/%3E%3Cpath d='M30 86 l5 9 -5 9 -5 -9 z'/%3E%3Ccircle cx='60' cy='60' r='3'/%3E%3Ccircle cx='0' cy='0' r='3'/%3E%3Ccircle cx='120' cy='120' r='3'/%3E%3C/g%3E%3C/svg%3E");
-  background-size: 120px 120px;
+  background-image: url('/stitch-mono.png');
+  background-size: 82px auto;
+  background-repeat: repeat;
 }
+
+/* Nudge header content clear of the floating back button when present */
+.with-back .pad-header-top { padding-left: 3.75rem; }

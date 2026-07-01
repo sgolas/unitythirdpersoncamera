@@ -3,6 +3,7 @@ import { Trash2, MapPin, Clock } from 'lucide-react';
 import { useItinerary, useTrip } from '../../hooks/useTrip';
 import { put, remove } from '../../db/database';
 import type { ItineraryEvent } from '../../types';
+import { money } from '../../types';
 import { fmtDate, fmtTime, fmtDateLong, dateRange, todayStr } from '../../utils/format';
 import { TabHeader, Sheet, Field, TextInput, TextArea, Select, FormFooter, Fab, EmptyState, ConfirmDelete } from '../ui';
 
@@ -30,8 +31,10 @@ export function ItineraryTab() {
   const [editing, setEditing] = useState<ItineraryEvent | null>(null);
   const [pendingDelete, setPendingDelete] = useState<ItineraryEvent | null>(null);
 
+  const cur = trip?.tripCurrency ?? 'EUR';
   const days = trip ? dateRange(trip.startDate, trip.endDate) : [];
   const dayEvents = events.filter(e => e.date === selectedDate);
+  const dayCost = dayEvents.reduce((s, e) => s + (e.cost || 0), 0);
 
   return (
     <div className="animate-fadeUp">
@@ -58,8 +61,13 @@ export function ItineraryTab() {
         </div>
       )}
 
-      <div className="px-5 pt-4 pb-1">
+      <div className="px-5 pt-4 pb-1 flex items-center justify-between">
         <h2 className="font-bold text-slate-800">{fmtDateLong(selectedDate)}</h2>
+        {dayCost > 0 && (
+          <span className="text-sm font-semibold text-amber bg-amber-50 px-2.5 py-1 rounded-full">
+            {money(dayCost, cur)}
+          </span>
+        )}
       </div>
 
       {dayEvents.length === 0 ? (
@@ -85,6 +93,7 @@ export function ItineraryTab() {
                       <span className="flex items-center gap-1"><Clock size={11} />{fmtTime(ev.startTime)}{ev.endTime ? ` – ${fmtTime(ev.endTime)}` : ''}</span>
                     )}
                     {ev.place && <span className="flex items-center gap-1"><MapPin size={11} />{ev.place}</span>}
+                    {ev.cost > 0 && <span className="font-semibold text-amber">{money(ev.cost, cur)}</span>}
                   </div>
                   {ev.notes && <p className="text-xs text-slate-400 mt-1.5">{ev.notes}</p>}
                 </div>
@@ -97,7 +106,7 @@ export function ItineraryTab() {
       <Fab onClick={() => setAdding(true)} label="Add event" />
 
       {(adding || editing) && (
-        <EventSheet event={editing} defaultDate={selectedDate} onClose={() => { setAdding(false); setEditing(null); }} />
+        <EventSheet event={editing} defaultDate={selectedDate} currency={cur} onClose={() => { setAdding(false); setEditing(null); }} />
       )}
       {pendingDelete && (
         <ConfirmDelete label={`"${pendingDelete.title}"`}
@@ -108,13 +117,14 @@ export function ItineraryTab() {
   );
 }
 
-function EventSheet({ event, defaultDate, onClose }: { event: ItineraryEvent | null; defaultDate: string; onClose: () => void }) {
+function EventSheet({ event, defaultDate, currency, onClose }: { event: ItineraryEvent | null; defaultDate: string; currency: string; onClose: () => void }) {
   const [title, setTitle] = useState(event?.title ?? '');
   const [date, setDate] = useState(event?.date ?? defaultDate);
   const [startTime, setStartTime] = useState(event?.startTime ?? '');
   const [endTime, setEndTime] = useState(event?.endTime ?? '');
   const [place, setPlace] = useState(event?.place ?? '');
   const [category, setCategory] = useState<Cat>((event?.category as Cat) ?? 'sightseeing');
+  const [cost, setCost] = useState(event ? String(event.cost || '') : '');
   const [notes, setNotes] = useState(event?.notes ?? '');
 
   async function save() {
@@ -122,7 +132,8 @@ function EventSheet({ event, defaultDate, onClose }: { event: ItineraryEvent | n
     const isNew = !event;
     await put<ItineraryEvent>({
       kind: 'itinerary', id: event?.id ?? crypto.randomUUID(),
-      title: title.trim(), date, startTime, endTime, place: place.trim(), category, notes: notes.trim(),
+      title: title.trim(), date, startTime, endTime, place: place.trim(), category,
+      cost: parseFloat(cost) || 0, notes: notes.trim(),
       updatedAt: '', updatedBy: '',
     }, `${isNew ? 'Added' : 'Updated'} event: ${title.trim()} on ${fmtDate(date)}`, isNew ? 'create' : 'update');
     onClose();
@@ -142,7 +153,10 @@ function EventSheet({ event, defaultDate, onClose }: { event: ItineraryEvent | n
           {CATS.map(c => <option key={c.key} value={c.key}>{c.emoji} {c.label}</option>)}
         </Select>
       </Field>
-      <Field label="Place"><TextInput value={place} onChange={e => setPlace(e.target.value)} placeholder="Optional" /></Field>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Place"><TextInput value={place} onChange={e => setPlace(e.target.value)} placeholder="Optional" /></Field>
+        <Field label={`Cost (${currency})`}><TextInput type="number" inputMode="decimal" value={cost} onChange={e => setCost(e.target.value)} placeholder="0.00" /></Field>
+      </div>
       <Field label="Notes"><TextArea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Optional" /></Field>
     </Sheet>
   );

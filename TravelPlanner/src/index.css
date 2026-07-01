@@ -33,6 +33,42 @@ input, textarea, select { font-size: 16px; } /* prevents iOS zoom */
 /* Convenience: a header's top padding = status bar + extra */
 .pad-header-top { padding-top: calc(env(safe-area-inset-top) + 2rem); }
 
+/* ── Cartoonish Leaflet map ────────────────────────────────────
+   A real map with a playful "toy" treatment: saturated tiles, thick
+   rounded frame, and big emoji pins. */
+.cmap {
+  height: 62vh;
+  min-height: 380px;
+  border-radius: 26px;
+  overflow: hidden;
+  border: 4px solid #fff;
+  box-shadow: 0 6px 24px rgba(15, 23, 42, 0.18);
+}
+.cmap-canvas { width: 100%; height: 100%; }
+/* Cartoon filter on the map tiles only */
+.leaflet-tile-pane { filter: saturate(1.5) contrast(1.04) brightness(1.02); }
+.leaflet-container { background: #dff3f2; font-family: inherit; }
+.leaflet-popup-content { font-weight: 600; color: #0f172a; }
+
+.cmap-icon { background: transparent; border: none; }
+.cmap-pin {
+  width: 46px; height: 46px; border-radius: 50% 50% 50% 8px;
+  transform: rotate(-45deg);
+  background: var(--c);
+  border: 3px solid #fff;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.35);
+  display: flex; align-items: center; justify-content: center;
+  position: relative;
+}
+.cmap-pin span { transform: rotate(45deg); font-size: 19px; line-height: 1; }
+.cmap-pin b {
+  position: absolute; top: -8px; right: -8px; transform: rotate(45deg);
+  background: #0f172a; color: #fff; font-size: 10px; font-weight: 800;
+  width: 18px; height: 18px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  border: 2px solid #fff;
+}
+
 /* ── Louis-Vuitton-style transparent SG monogram ───────────────
    Subtle repeating watermark for dark header areas. */
 .bg-monogram {

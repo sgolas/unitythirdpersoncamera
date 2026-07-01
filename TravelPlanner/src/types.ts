@@ -115,6 +115,7 @@ export interface ItineraryEvent extends SyncMeta {
   endTime: ISOTime | '';
   place: string;
   category: 'sightseeing' | 'food' | 'travel' | 'rest' | 'event' | 'other';
+  cost: number;          // estimated / actual cost for this activity
   notes: string;
 }
 

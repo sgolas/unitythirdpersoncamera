@@ -16,8 +16,22 @@ async function initNativeChrome() {
   } catch { /* plugin unavailable in web preview */ }
 }
 
+/**
+ * When a form field is focused (keyboard opens), make sure it scrolls into
+ * view so it isn't hidden behind the keyboard — works on web and native.
+ */
+function initFocusScroll() {
+  window.addEventListener('focusin', e => {
+    const el = e.target as HTMLElement;
+    if (el && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) {
+      setTimeout(() => el.scrollIntoView({ block: 'center', behavior: 'smooth' }), 300);
+    }
+  });
+}
+
 async function boot() {
   await initNativeChrome();
+  initFocusScroll();
 
   // The editor (native app) seeds a starter trip; the read-only portal never
   // seeds — it only shows data pulled from the family's synced trip.

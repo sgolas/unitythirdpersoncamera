@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Lock, RefreshCw, Plane, BedDouble, FileText, Wallet, ListChecks, CalendarRange, MapPin, Clock, Compass, Map as MapIcon, Images } from 'lucide-react';
 import { pullOnly } from '../db/sync';
 import { computeStops, StringMap } from '../components/tripMap';
+import { TripLeafletMap } from '../components/TripLeafletMap';
 import {
   useTrip, useTravelers, useItinerary, useTransport, useAccommodation,
   useDocuments, useExpenses, useChecklist, useBudget, usePhotos,
@@ -306,12 +307,13 @@ function PortalView() {
 function PortalMap({ transport, stays, itinerary }: {
   transport: any[]; stays: any[]; itinerary: any[];
 }) {
+  const [fallback, setFallback] = useState(false);
   const stops = computeStops(transport, stays, itinerary);
   if (stops.length === 0)
     return <p className="text-center text-slate-400 py-16">No places pinned yet — add stays, transport or itinerary in the app.</p>;
   return (
     <div className="max-w-md mx-auto">
-      <StringMap stops={stops} />
+      {fallback ? <StringMap stops={stops} /> : <TripLeafletMap stops={stops} onFallback={() => setFallback(true)} />}
       <p className="text-center text-xs text-slate-400 -mt-2 pb-6">pins come from stays, transport &amp; itinerary</p>
     </div>
   );

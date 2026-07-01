@@ -13,6 +13,12 @@ const config: CapacitorConfig = {
       backgroundColor: '#0f172a',
       showSpinner: false,
     },
+    Keyboard: {
+      // Resize the whole web view when the keyboard opens so form fields
+      // above the keyboard stay visible and scrollable.
+      resize: 'native' as any,
+      resizeOnFullScreen: true,
+    },
   },
 };
 

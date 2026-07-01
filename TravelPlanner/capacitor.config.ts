@@ -19,6 +19,14 @@ const config: CapacitorConfig = {
       resize: 'native' as any,
       resizeOnFullScreen: true,
     },
+    CapacitorUpdater: {
+      // Self-managed OTA: the app checks our own manifest and downloads new
+      // web bundles itself (see src/lib/ota.ts). Capgo's built-in auto-update
+      // server is disabled. resetWhenUpdate returns to the built-in bundle
+      // when a fresh APK is installed.
+      autoUpdate: false,
+      resetWhenUpdate: true,
+    },
   },
 };
 

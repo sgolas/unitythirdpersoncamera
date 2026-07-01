@@ -7,7 +7,8 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "android:build": "npm run build && npx cap sync android",
-    "android:open": "npx cap open android"
+    "android:open": "npx cap open android",
+    "publish-ota": "npm run build && node scripts/publish-ota.mjs"
   },
   "dependencies": {
     "@capacitor/android": "^8.4.1",
@@ -17,6 +18,7 @@
     "@capacitor/preferences": "^8.0.1",
     "@capacitor/splash-screen": "^8.0.1",
     "@capacitor/status-bar": "^8.0.2",
+    "@capgo/capacitor-updater": "^8.50.1",
     "@supabase/supabase-js": "^2.39.7",
     "dexie": "^4.0.8",
     "dexie-react-hooks": "^1.1.7",

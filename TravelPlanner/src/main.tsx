@@ -5,6 +5,7 @@ import { PortalApp } from './portal/PortalApp';
 import './index.css';
 import { isPortal, isNative } from './lib/platform';
 import { seedIfEmpty } from './db/seed';
+import { initOTA } from './lib/ota';
 
 async function initNativeChrome() {
   if (!isNative) return;
@@ -44,6 +45,9 @@ async function boot() {
       {isPortal ? <PortalApp /> : <App />}
     </React.StrictMode>,
   );
+
+  // Check for an OTA update in the background after the app has rendered.
+  initOTA();
 }
 
 boot();

@@ -5,7 +5,7 @@ import { put } from '../../db/database';
 import type { TripMeta } from '../../types';
 import { money, CURRENCY_SYMBOLS } from '../../types';
 import { fmtDateLong, tripLength, daysUntil } from '../../utils/format';
-import { TabHeader, Sheet, Field, TextInput, TextArea, Select, PrimaryButton } from '../ui';
+import { TabHeader, Sheet, Field, TextInput, TextArea, Select, FormFooter } from '../ui';
 
 export function TripOverviewTab() {
   const trip = useTrip();
@@ -111,7 +111,7 @@ function TripSheet({ trip, onClose }: { trip: TripMeta; onClose: () => void }) {
   }
 
   return (
-    <Sheet title="Edit trip" onClose={onClose} footer={<PrimaryButton onClick={save} disabled={!name.trim()}>Save</PrimaryButton>}>
+    <Sheet title="Edit trip" onClose={onClose} footer={<FormFooter onCancel={onClose} onSubmit={save} disabled={!name.trim()} submitLabel="Save" />}>
       <Field label="Trip name"><TextInput value={name} onChange={e => setName(e.target.value)} /></Field>
       <Field label="Destinations"><TextInput value={destinations} onChange={e => setDestinations(e.target.value)} placeholder="France · Italy · Spain" /></Field>
       <div className="grid grid-cols-2 gap-3">

@@ -27,3 +27,4 @@ import { isNative } from './platform';
 //   deployed URL. Update this to the live Cloudflare domain after first deploy.
 const NATIVE_SYNC_BASE = 'https://trip-planner-sgolas.pages.dev';
 export const SYNC_ENDPOINT = isNative ? `${NATIVE_SYNC_BASE}/api/sync` : '/api/sync';
+export const PHOTO_ENDPOINT = isNative ? `${NATIVE_SYNC_BASE}/api/photo` : '/api/photo';

@@ -4,7 +4,7 @@ import { useItinerary, useTrip } from '../../hooks/useTrip';
 import { put, remove } from '../../db/database';
 import type { ItineraryEvent } from '../../types';
 import { fmtDate, fmtTime, fmtDateLong, dateRange, todayStr } from '../../utils/format';
-import { TabHeader, Sheet, Field, TextInput, TextArea, Select, PrimaryButton, Fab, EmptyState, ConfirmDelete } from '../ui';
+import { TabHeader, Sheet, Field, TextInput, TextArea, Select, FormFooter, Fab, EmptyState, ConfirmDelete } from '../ui';
 
 const CATS = [
   { key: 'sightseeing', label: 'Sightseeing', emoji: '📸', color: '#a78bfa' },
@@ -130,7 +130,7 @@ function EventSheet({ event, defaultDate, onClose }: { event: ItineraryEvent | n
 
   return (
     <Sheet title={event ? 'Edit event' : 'Add event'} onClose={onClose}
-      footer={<PrimaryButton onClick={save} disabled={!title.trim()}>{event ? 'Save' : 'Add event'}</PrimaryButton>}>
+      footer={<FormFooter onCancel={onClose} onSubmit={save} disabled={!title.trim()} submitLabel={event ? 'Save' : 'Add event'} />}>
       <Field label="Title"><TextInput autoFocus value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. Louvre Museum" /></Field>
       <Field label="Date"><TextInput type="date" value={date} onChange={e => setDate(e.target.value)} /></Field>
       <div className="grid grid-cols-2 gap-3">

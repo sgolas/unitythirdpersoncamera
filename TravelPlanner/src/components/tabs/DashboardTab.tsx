@@ -1,14 +1,22 @@
+import { useState } from 'react';
 import {
   Compass, ListChecks, Plane, BedDouble, Wallet, CalendarRange,
-  PiggyBank, FileText, Sparkles, History,
+  PiggyBank, FileText, Sparkles, History, ChevronUp, ChevronDown,
 } from 'lucide-react';
 import { useTrip, useChecklist, useExpenses, useTransport, useAccommodation, useItinerary, useTravelers } from '../../hooks/useTrip';
 import { money } from '../../types';
 import { daysUntil, fmtDate, tripLength } from '../../utils/format';
 import { getLastSync } from '../../lib/config';
 import { fmtStamp } from '../../utils/format';
+import { Monogram } from '../ui';
+
+const HERO_KEY = 'trip.heroOpen';
 
 export function DashboardTab({ onNavigate }: { onNavigate: (v: any) => void }) {
+  const [heroOpen, setHeroOpen] = useState(() => localStorage.getItem(HERO_KEY) !== '0');
+  function toggleHero() {
+    setHeroOpen(o => { localStorage.setItem(HERO_KEY, o ? '0' : '1'); return !o; });
+  }
   const trip = useTrip();
   const checklist = useChecklist();
   const expenses = useExpenses();
@@ -43,31 +51,50 @@ export function DashboardTab({ onNavigate }: { onNavigate: (v: any) => void }) {
 
   return (
     <div className="animate-fadeUp">
-      {/* Hero */}
-      <div className="px-5 pt-14 pb-8 text-white relative overflow-hidden"
+      {/* Hero (collapsible) */}
+      <div className="text-white relative overflow-hidden bg-monogram"
         style={{ background: 'linear-gradient(150deg, #0f172a 0%, #1e293b 55%, #334155 100%)' }}>
-        <div className="absolute -right-8 -top-6 text-[120px] opacity-10 select-none">🌍</div>
-        <p className="text-white/60 text-sm font-medium">{trip.destinations}</p>
-        <h1 className="text-3xl font-bold mt-1">{trip.name}</h1>
-        <p className="text-white/70 text-sm mt-1">
-          {fmtDate(trip.startDate)} – {fmtDate(trip.endDate)} · {tripLength(trip.startDate, trip.endDate)} days
-        </p>
+        <Monogram />
+        <div className="absolute -right-8 -top-2 text-[120px] opacity-10 select-none pointer-events-none">🌍</div>
 
-        <div className="mt-5 inline-flex items-center gap-2 bg-white/10 backdrop-blur px-4 py-2 rounded-2xl">
-          <span className="text-2xl font-bold">{countdownLabel}</span>
-        </div>
+        {heroOpen ? (
+          <div className="px-5 pad-header-top pb-6 relative">
+            <p className="text-white/60 text-sm font-medium">{trip.destinations}</p>
+            <h1 className="text-3xl font-bold mt-1">{trip.name}</h1>
+            <p className="text-white/70 text-sm mt-1">
+              {fmtDate(trip.startDate)} – {fmtDate(trip.endDate)} · {tripLength(trip.startDate, trip.endDate)} days
+            </p>
 
-        <div className="flex gap-2 mt-4">
-          {travelers.map(t => (
-            <div key={t.id} className="flex items-center gap-1.5 bg-white/10 px-2.5 py-1 rounded-full text-sm">
-              <span>{t.emoji}</span><span className="text-white/90">{t.name}</span>
+            <div className="mt-5 inline-flex items-center gap-2 bg-white/10 backdrop-blur px-4 py-2 rounded-2xl">
+              <span className="text-2xl font-bold">{countdownLabel}</span>
             </div>
-          ))}
-        </div>
+
+            <div className="flex gap-2 mt-4 flex-wrap">
+              {travelers.map(t => (
+                <div key={t.id} className="flex items-center gap-1.5 bg-white/10 px-2.5 py-1 rounded-full text-sm">
+                  <span>{t.emoji}</span><span className="text-white/90">{t.name}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div className="px-5 pad-header-top pb-3 relative flex items-center justify-between">
+            <div>
+              <h1 className="text-lg font-bold leading-tight">{trip.name}</h1>
+              <p className="text-white/60 text-xs">{countdownLabel}</p>
+            </div>
+          </div>
+        )}
+
+        {/* hide/show toggle */}
+        <button onClick={toggleHero}
+          className="w-full flex items-center justify-center gap-1 py-1.5 bg-black/15 active:bg-black/25 text-white/80 text-xs font-semibold">
+          {heroOpen ? <><ChevronUp size={14} /> Hide</> : <><ChevronDown size={14} /> Show trip banner</>}
+        </button>
       </div>
 
       {/* Section grid */}
-      <div className="px-4 -mt-4">
+      <div className="px-4 pt-4">
         <div className="grid grid-cols-2 gap-3">
           {cards.map(c => (
             <button key={c.key} onClick={() => onNavigate(c.key)}

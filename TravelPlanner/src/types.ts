@@ -138,6 +138,18 @@ export interface TripMeta extends SyncMeta {
   notes: string;
 }
 
+/* ── Photos (uploaded online, time + location stamped) ──────── */
+export interface TripPhoto extends SyncMeta {
+  kind: 'photo';
+  url: string;            // Supabase Storage public URL
+  caption: string;
+  place: string;          // optional location label
+  lat: number | null;     // optional GPS
+  lng: number | null;
+  takenAt: ISOStamp;      // capture/upload time
+  folder: string;         // grouping folder (defaults to the date)
+}
+
 /* ── Change Log ─────────────────────────────────────────────── */
 export type ChangeAction = 'create' | 'update' | 'delete' | 'sync';
 
@@ -157,7 +169,7 @@ export interface ChangeLogEntry {
 /* ── Union of all synced records ────────────────────────────── */
 export type AnyRecord =
   | Traveler | TravelDocument | ChecklistItem | Transport
-  | Accommodation | Expense | ItineraryEvent | BudgetLine | TripMeta;
+  | Accommodation | Expense | ItineraryEvent | BudgetLine | TripMeta | TripPhoto;
 
 export type EntityKind = AnyRecord['kind'];
 

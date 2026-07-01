@@ -23,3 +23,19 @@ body {
 .animate-fadeUp { animation: fadeUp 0.25s ease both; }
 
 input, textarea, select { font-size: 16px; } /* prevents iOS zoom */
+
+/* ── Safe areas (Android 15+ / iOS notch are edge-to-edge) ──────
+   Content must be padded away from the status bar (top) and the
+   navigation bar / home indicator (bottom). */
+.safe-top    { padding-top: env(safe-area-inset-top); }
+.safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
+
+/* Convenience: a header's top padding = status bar + extra */
+.pad-header-top { padding-top: calc(env(safe-area-inset-top) + 2rem); }
+
+/* ── Louis-Vuitton-style transparent SG monogram ───────────────
+   Subtle repeating watermark for dark header areas. */
+.bg-monogram {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120' viewBox='0 0 120 120'%3E%3Cg fill='%23ffffff' fill-opacity='0.06'%3E%3Ctext x='30' y='42' font-family='Georgia,serif' font-size='24' font-weight='700' text-anchor='middle'%3ESG%3C/text%3E%3Ctext x='90' y='102' font-family='Georgia,serif' font-size='24' font-weight='700' text-anchor='middle'%3ESG%3C/text%3E%3Cpath d='M90 26 l5 9 -5 9 -5 -9 z'/%3E%3Cpath d='M30 86 l5 9 -5 9 -5 -9 z'/%3E%3Ccircle cx='60' cy='60' r='3'/%3E%3Ccircle cx='0' cy='0' r='3'/%3E%3Ccircle cx='120' cy='120' r='3'/%3E%3C/g%3E%3C/svg%3E");
+  background-size: 120px 120px;
+}

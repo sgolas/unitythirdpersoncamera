@@ -5,7 +5,7 @@ import { put, remove } from '../../db/database';
 import type { Expense, ExpenseCategory } from '../../types';
 import { money } from '../../types';
 import { fmtDate, todayStr } from '../../utils/format';
-import { TabHeader, Sheet, Field, TextInput, TextArea, Select, PrimaryButton, Fab, EmptyState, ConfirmDelete } from '../ui';
+import { TabHeader, Sheet, Field, TextInput, TextArea, Select, FormFooter, Fab, EmptyState, ConfirmDelete } from '../ui';
 
 const CATS: { key: ExpenseCategory; label: string; emoji: string; color: string }[] = [
   { key: 'food',       label: 'Food',       emoji: '🍽️', color: '#fb7185' },
@@ -117,7 +117,7 @@ function ExpenseSheet({ expense, travelers, currency, onClose }: {
 
   return (
     <Sheet title={expense ? 'Edit expense' : 'Add expense'} onClose={onClose}
-      footer={<PrimaryButton onClick={save} disabled={!title.trim() || !amount}>{expense ? 'Save' : 'Add expense'}</PrimaryButton>}>
+      footer={<FormFooter onCancel={onClose} onSubmit={save} disabled={!title.trim() || !amount} submitLabel={expense ? 'Save' : 'Add expense'} />}>
       <Field label="What was it?"><TextInput autoFocus value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. Dinner in Rome" /></Field>
       <div className="grid grid-cols-2 gap-3">
         <Field label={`Amount (${currency})`}><TextInput type="number" inputMode="decimal" value={amount} onChange={e => setAmount(e.target.value)} placeholder="0.00" /></Field>

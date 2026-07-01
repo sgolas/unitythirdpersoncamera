@@ -4,7 +4,7 @@ import { useDocuments, useTravelers, travelerName } from '../../hooks/useTrip';
 import { put, remove } from '../../db/database';
 import type { TravelDocument, DocType } from '../../types';
 import { fmtDate, daysUntil } from '../../utils/format';
-import { TabHeader, Sheet, Field, TextInput, TextArea, Select, PrimaryButton, Fab, EmptyState, ConfirmDelete } from '../ui';
+import { TabHeader, Sheet, Field, TextInput, TextArea, Select, FormFooter, Fab, EmptyState, ConfirmDelete } from '../ui';
 
 const TYPES: { key: DocType; label: string; emoji: string }[] = [
   { key: 'passport',    label: 'Passport',    emoji: '🛂' },
@@ -133,7 +133,7 @@ function DocSheet({ doc, travelers, onClose }: { doc: TravelDocument | null; tra
 
   return (
     <Sheet title={doc ? 'Edit document' : 'Add document'} onClose={onClose}
-      footer={<PrimaryButton onClick={save} disabled={!title.trim()}>{doc ? 'Save' : 'Add document'}</PrimaryButton>}>
+      footer={<FormFooter onCancel={onClose} onSubmit={save} disabled={!title.trim()} submitLabel={doc ? 'Save' : 'Add document'} />}>
       <button onClick={() => fileRef.current?.click()}
         className="w-full mb-4 rounded-2xl border-2 border-dashed border-slate-200 overflow-hidden active:bg-slate-50">
         {photoData

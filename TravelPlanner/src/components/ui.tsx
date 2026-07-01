@@ -2,13 +2,19 @@
 import { useEffect } from 'react';
 import { X } from 'lucide-react';
 
+/* ── LV-style monogram overlay for dark headers ─────────────── */
+export function Monogram() {
+  return <div className="absolute inset-0 bg-monogram pointer-events-none" aria-hidden />;
+}
+
 /* ── Page header ────────────────────────────────────────────── */
 export function TabHeader({ title, subtitle, gradient, icon }: {
   title: string; subtitle?: string; gradient: string; icon: React.ReactNode;
 }) {
   return (
-    <div className="px-5 pt-12 pb-6 text-white" style={{ background: gradient }}>
-      <div className="flex items-center gap-3">
+    <div className="px-5 pad-header-top pb-6 text-white relative overflow-hidden" style={{ background: gradient }}>
+      <Monogram />
+      <div className="flex items-center gap-3 relative">
         <div className="w-11 h-11 rounded-2xl bg-white/20 flex items-center justify-center text-2xl">{icon}</div>
         <div>
           <h1 className="text-2xl font-bold leading-tight">{title}</h1>
@@ -86,6 +92,24 @@ export function GhostButton({ children, ...p }: React.ButtonHTMLAttributes<HTMLB
       className="w-full py-3 rounded-2xl font-semibold text-slate-600 bg-slate-100 active:bg-slate-200 transition">
       {children}
     </button>
+  );
+}
+
+/* ── Standard form footer: Cancel + Submit side by side ─────── */
+export function FormFooter({ onCancel, onSubmit, submitLabel = 'Save', disabled }: {
+  onCancel: () => void; onSubmit: () => void; submitLabel?: string; disabled?: boolean;
+}) {
+  return (
+    <div className="flex gap-3">
+      <button onClick={onCancel}
+        className="flex-1 py-3 rounded-2xl font-semibold text-slate-600 bg-slate-100 active:bg-slate-200 transition">
+        Cancel
+      </button>
+      <button onClick={onSubmit} disabled={disabled}
+        className="flex-1 py-3 rounded-2xl font-bold text-white bg-ink active:scale-[0.98] disabled:opacity-40 transition">
+        {submitLabel}
+      </button>
+    </div>
   );
 }
 

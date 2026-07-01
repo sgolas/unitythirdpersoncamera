@@ -7,7 +7,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db, activeRows } from '../db/database';
 import type {
   Traveler, TravelDocument, ChecklistItem, Transport, Accommodation,
-  Expense, ItineraryEvent, BudgetLine, TripMeta, ChangeLogEntry,
+  Expense, ItineraryEvent, BudgetLine, TripMeta, TripPhoto, ChangeLogEntry,
 } from '../types';
 
 export const useTrip = () =>
@@ -40,6 +40,10 @@ export const useItinerary = () =>
 
 export const useBudget = () =>
   activeRows<BudgetLine>(useLiveQuery(() => db.budget.toArray(), []));
+
+export const usePhotos = () =>
+  activeRows<TripPhoto>(useLiveQuery(() => db.photos.toArray(), []))
+    .sort((a, b) => b.takenAt.localeCompare(a.takenAt));
 
 export const useChangelog = () =>
   (useLiveQuery(() => db.changelog.orderBy('at').reverse().limit(200).toArray(), []) ?? []) as ChangeLogEntry[];

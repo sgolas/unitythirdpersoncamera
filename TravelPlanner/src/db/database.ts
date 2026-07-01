@@ -9,7 +9,7 @@
 import Dexie, { type Table } from 'dexie';
 import type {
   Traveler, TravelDocument, ChecklistItem, Transport, Accommodation,
-  Expense, ItineraryEvent, BudgetLine, TripMeta, ChangeLogEntry,
+  Expense, ItineraryEvent, BudgetLine, TripMeta, TripPhoto, ChangeLogEntry,
   AnyRecord, EntityKind, ChangeAction,
 } from '../types';
 
@@ -23,6 +23,7 @@ class TripDB extends Dexie {
   itinerary!:      Table<ItineraryEvent, string>;
   budget!:         Table<BudgetLine, string>;
   trip!:           Table<TripMeta, string>;
+  photos!:         Table<TripPhoto, string>;
   changelog!:      Table<ChangeLogEntry, string>;
 
   constructor() {
@@ -38,6 +39,10 @@ class TripDB extends Dexie {
       budget:        'id, category, updatedAt',
       trip:          'id, updatedAt',
       changelog:     'id, at, entity',
+    });
+    // v2 adds the photos table.
+    this.version(2).stores({
+      photos:        'id, folder, takenAt, updatedAt',
     });
   }
 }
@@ -55,6 +60,7 @@ const TABLES: Record<EntityKind, Table<any, string>> = {
   itinerary:     db.itinerary,
   budget:        db.budget,
   trip:          db.trip,
+  photo:         db.photos,
 };
 
 export function tableFor(kind: EntityKind): Table<any, string> {

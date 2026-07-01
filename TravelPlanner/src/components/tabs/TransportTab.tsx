@@ -5,7 +5,7 @@ import { put, remove } from '../../db/database';
 import type { Transport, TransportMode } from '../../types';
 import { money } from '../../types';
 import { fmtDate, fmtTime, todayStr } from '../../utils/format';
-import { TabHeader, Sheet, Field, TextInput, TextArea, Select, PrimaryButton, Fab, EmptyState, ConfirmDelete } from '../ui';
+import { TabHeader, Sheet, Field, TextInput, TextArea, Select, FormFooter, Fab, EmptyState, ConfirmDelete } from '../ui';
 
 const MODES: { key: TransportMode; label: string; emoji: string }[] = [
   { key: 'flight',   label: 'Flight',   emoji: '✈️' },
@@ -114,7 +114,7 @@ function TransportSheet({ leg, currency, onClose }: { leg: Transport | null; cur
 
   return (
     <Sheet title={leg ? 'Edit transport' : 'Add transport'} onClose={onClose}
-      footer={<PrimaryButton onClick={save} disabled={!fromPlace.trim() || !toPlace.trim()}>{leg ? 'Save' : 'Add'}</PrimaryButton>}>
+      footer={<FormFooter onCancel={onClose} onSubmit={save} disabled={!fromPlace.trim() || !toPlace.trim()} submitLabel={leg ? 'Save' : 'Add'} />}>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Mode">
           <Select value={mode} onChange={e => setMode(e.target.value as TransportMode)}>

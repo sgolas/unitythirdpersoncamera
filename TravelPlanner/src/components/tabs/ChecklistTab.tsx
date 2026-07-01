@@ -3,7 +3,7 @@ import { Trash2 } from 'lucide-react';
 import { useChecklist, useTravelers, travelerName } from '../../hooks/useTrip';
 import { put, remove } from '../../db/database';
 import type { ChecklistItem, ChecklistCategory } from '../../types';
-import { TabHeader, Sheet, Field, TextInput, Select, PrimaryButton, Fab, EmptyState, ConfirmDelete } from '../ui';
+import { TabHeader, Sheet, Field, TextInput, Select, FormFooter, Fab, EmptyState, ConfirmDelete } from '../ui';
 
 const CATS: { key: ChecklistCategory; label: string; emoji: string }[] = [
   { key: 'packing',        label: 'Packing',        emoji: '🧳' },
@@ -107,7 +107,7 @@ function AddSheet({ travelers, onClose }: { travelers: any[]; onClose: () => voi
 
   return (
     <Sheet title="Add checklist item" onClose={onClose}
-      footer={<PrimaryButton onClick={save} disabled={!text.trim()}>Add item</PrimaryButton>}>
+      footer={<FormFooter onCancel={onClose} onSubmit={save} disabled={!text.trim()} submitLabel="Add item" />}>
       <Field label="Item"><TextInput autoFocus value={text} onChange={e => setText(e.target.value)} placeholder="e.g. Passport, Chargers, Sunscreen" /></Field>
       <Field label="Category">
         <Select value={category} onChange={e => setCategory(e.target.value as ChecklistCategory)}>

@@ -5,7 +5,7 @@ import { put, remove } from '../../db/database';
 import type { Accommodation } from '../../types';
 import { money } from '../../types';
 import { fmtDate, todayStr, tripLength } from '../../utils/format';
-import { TabHeader, Sheet, Field, TextInput, TextArea, PrimaryButton, Fab, EmptyState, ConfirmDelete } from '../ui';
+import { TabHeader, Sheet, Field, TextInput, TextArea, FormFooter, Fab, EmptyState, ConfirmDelete } from '../ui';
 
 export function AccommodationTab() {
   const stays = useAccommodation();
@@ -102,7 +102,7 @@ function StaySheet({ stay, currency, onClose }: { stay: Accommodation | null; cu
 
   return (
     <Sheet title={stay ? 'Edit stay' : 'Add stay'} onClose={onClose}
-      footer={<PrimaryButton onClick={save} disabled={!name.trim()}>{stay ? 'Save' : 'Add stay'}</PrimaryButton>}>
+      footer={<FormFooter onCancel={onClose} onSubmit={save} disabled={!name.trim()} submitLabel={stay ? 'Save' : 'Add stay'} />}>
       <Field label="Name"><TextInput autoFocus value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Hotel Lumière" /></Field>
       <Field label="City"><TextInput value={city} onChange={e => setCity(e.target.value)} placeholder="e.g. Paris" /></Field>
       <Field label="Address"><TextInput value={address} onChange={e => setAddress(e.target.value)} placeholder="Optional" /></Field>

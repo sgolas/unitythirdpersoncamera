@@ -3,7 +3,7 @@ import { Lock, RefreshCw, Plane, BedDouble, FileText, Wallet, ListChecks, Calend
 import { pullOnly } from '../db/sync';
 import {
   useTrip, useTravelers, useItinerary, useTransport, useAccommodation,
-  useDocuments, useExpenses, useChecklist, useBudget,
+  useDocuments, useExpenses, useChecklist, useBudget, usePhotos,
 } from '../hooks/useTrip';
 import { money } from '../types';
 import { fmtDate, fmtDateLong, fmtTime, tripLength, daysUntil, dateRange } from '../utils/format';
@@ -92,6 +92,7 @@ function PortalView() {
   const expenses = useExpenses();
   const checklist = useChecklist();
   const budget = useBudget();
+  const photos = usePhotos();
   const [refreshing, setRefreshing] = useState(false);
 
   async function refresh() {
@@ -221,6 +222,20 @@ function PortalView() {
                   <span className="text-slate-700">{e.title} <span className="text-xs text-slate-400">· {fmtDate(e.date)}</span></span>
                   <span className="font-semibold text-slate-800">{money(e.amount, e.currency)}</span>
                 </div>
+              ))}
+            </div>
+          </Section>
+        )}
+
+        {/* Photos */}
+        {photos.length > 0 && (
+          <Section title="Photos" icon={<span>📸</span>} count={photos.length}>
+            <div className="grid grid-cols-3 gap-1.5">
+              {photos.slice(0, 18).map(p => (
+                <a key={p.id} href={p.url} target="_blank" rel="noopener noreferrer"
+                  className="aspect-square rounded-lg overflow-hidden bg-slate-100 block">
+                  <img src={p.url} alt={p.caption} className="w-full h-full object-cover" loading="lazy" />
+                </a>
               ))}
             </div>
           </Section>

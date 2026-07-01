@@ -3,7 +3,7 @@ import { useBudget, useExpenses, useTrip } from '../../hooks/useTrip';
 import { put } from '../../db/database';
 import type { BudgetLine, ExpenseCategory, TripMeta } from '../../types';
 import { money } from '../../types';
-import { TabHeader, Sheet, Field, TextInput, PrimaryButton } from '../ui';
+import { TabHeader, Sheet, Field, TextInput, FormFooter } from '../ui';
 
 const CATS: { key: ExpenseCategory; label: string; emoji: string; color: string }[] = [
   { key: 'food',       label: 'Food',       emoji: '🍽️', color: '#fb7185' },
@@ -109,7 +109,7 @@ function TotalSheet({ trip, onClose }: { trip: TripMeta; onClose: () => void }) 
     onClose();
   }
   return (
-    <Sheet title="Total budget" onClose={onClose} footer={<PrimaryButton onClick={save}>Save</PrimaryButton>}>
+    <Sheet title="Total budget" onClose={onClose} footer={<FormFooter onCancel={onClose} onSubmit={save} submitLabel="Save" />}>
       <Field label={`Total budget (${trip.tripCurrency})`}>
         <TextInput autoFocus type="number" inputMode="decimal" value={val} onChange={e => setVal(e.target.value)} placeholder="0.00" />
       </Field>
@@ -131,7 +131,7 @@ function LineSheet({ category, currency, existing, onClose }: {
     onClose();
   }
   return (
-    <Sheet title={`${meta.emoji} ${meta.label} budget`} onClose={onClose} footer={<PrimaryButton onClick={save}>Save</PrimaryButton>}>
+    <Sheet title={`${meta.emoji} ${meta.label} budget`} onClose={onClose} footer={<FormFooter onCancel={onClose} onSubmit={save} submitLabel="Save" />}>
       <Field label={`Planned amount (${currency})`}>
         <TextInput autoFocus type="number" inputMode="decimal" value={val} onChange={e => setVal(e.target.value)} placeholder="0.00" />
       </Field>

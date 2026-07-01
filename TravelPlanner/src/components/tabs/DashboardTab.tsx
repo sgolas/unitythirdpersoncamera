@@ -1,12 +1,11 @@
 import { useState } from 'react';
 import {
-  ListChecks, Plane, BedDouble, Wallet, CalendarRange, PiggyBank, FileText,
-  Sparkles, History, Compass, ChevronUp, ChevronDown, ShieldCheck,
-  ShieldAlert, CalendarClock,
+  ListChecks, Plane, BedDouble, Wallet, CalendarRange, PiggyBank,
+  Sparkles, History, Compass, ChevronUp, ChevronDown, CalendarClock,
 } from 'lucide-react';
 import {
   useTrip, useChecklist, useExpenses, useTransport, useAccommodation,
-  useItinerary, useTravelers, useDocuments,
+  useItinerary, useTravelers,
 } from '../../hooks/useTrip';
 import { money, moneyHome, moneyAway } from '../../types';
 import type { Transport, Accommodation } from '../../types';
@@ -31,7 +30,6 @@ export function DashboardTab({ onNavigate }: { onNavigate: (v: any) => void }) {
   const stays = useAccommodation();
   const itinerary = useItinerary();
   const travelers = useTravelers();
-  const docs = useDocuments();
 
   if (!trip) return null;
 
@@ -50,16 +48,6 @@ export function DashboardTab({ onNavigate }: { onNavigate: (v: any) => void }) {
   const nextStay = stays.find(s => s.checkOut >= today) ?? stays[0];
 
   const budgetPct = trip.totalBudget > 0 ? Math.min(100, Math.round((spent / trip.totalBudget) * 100)) : 0;
-
-  // Passport status from documents
-  const passports = docs.filter(d => d.docType === 'passport');
-  const passStatus = (() => {
-    if (passports.length === 0) return { label: 'Add passports', tone: 'amber', icon: ShieldAlert };
-    const soonest = Math.min(...passports.map(p => p.expiryDate ? daysUntil(p.expiryDate) : Infinity));
-    if (soonest < 0) return { label: 'Expired', tone: 'red', icon: ShieldAlert };
-    if (soonest < 180) return { label: 'Renew soon', tone: 'amber', icon: ShieldAlert };
-    return { label: 'Valid', tone: 'green', icon: ShieldCheck };
-  })();
 
   const countdownLabel =
     days > 0 ? `${days}` : days === 0 ? '0' : daysUntil(trip.endDate) >= 0 ? '•' : '✓';
@@ -137,35 +125,17 @@ export function DashboardTab({ onNavigate }: { onNavigate: (v: any) => void }) {
           <StayBody stay={nextStay} />
         </CollapsibleWidget>
 
-        {/* Budget + Passport */}
-        <div className="grid grid-cols-2 gap-3">
-          <button onClick={() => onNavigate('budget')} className="bg-surface rounded-3xl p-4 shadow-soft border border-line text-left press">
-            <div className="flex items-center justify-between">
-              <span className="flex items-center gap-1.5 text-muted text-xs font-semibold uppercase tracking-wide"><PiggyBank size={13} /> Budget</span>
+        {/* Budget */}
+        <button onClick={() => onNavigate('budget')} className="w-full bg-surface rounded-3xl p-4 shadow-soft border border-line text-left press">
+          <span className="flex items-center gap-1.5 text-muted text-xs font-semibold uppercase tracking-wide"><PiggyBank size={13} /> Budget</span>
+          <div className="flex items-center gap-3 mt-2">
+            <Ring pct={budgetPct} />
+            <div className="min-w-0">
+              <p className="font-bold text-content leading-tight truncate">{moneyHome(spent, cur)}</p>
+              <p className="text-xs text-muted truncate">{moneyAway(spent, cur)}{trip.totalBudget ? ` · of ${moneyHome(trip.totalBudget, cur)}` : ''}</p>
             </div>
-            <div className="flex items-center gap-3 mt-2">
-              <Ring pct={budgetPct} />
-              <div className="min-w-0">
-                <p className="font-bold text-content leading-tight truncate">{moneyHome(spent, cur)}</p>
-                <p className="text-xs text-muted truncate">{moneyAway(spent, cur)}{trip.totalBudget ? ` · of ${moneyHome(trip.totalBudget, cur)}` : ''}</p>
-              </div>
-            </div>
-          </button>
-
-          <button onClick={() => onNavigate('documents')} className="bg-surface rounded-3xl p-4 shadow-soft border border-line text-left press">
-            <span className="flex items-center gap-1.5 text-muted text-xs font-semibold uppercase tracking-wide"><FileText size={13} /> Passport</span>
-            <div className="flex items-center gap-2 mt-3">
-              <span className={`w-10 h-10 rounded-2xl flex items-center justify-center text-white ${
-                passStatus.tone === 'green' ? 'bg-emerald-500' : passStatus.tone === 'amber' ? 'bg-amber-500' : 'bg-rose-500'}`}>
-                <passStatus.icon size={20} />
-              </span>
-              <div className="min-w-0">
-                <p className="font-bold text-content leading-tight">{passStatus.label}</p>
-                <p className="text-xs text-muted">{passports.length} on file</p>
-              </div>
-            </div>
-          </button>
-        </div>
+          </div>
+        </button>
 
         {/* Section grid */}
         <div>

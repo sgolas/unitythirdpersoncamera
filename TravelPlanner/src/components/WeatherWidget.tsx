@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { ChevronUp, ChevronDown } from 'lucide-react';
 
 /**
  * Live weather for the trip's destination — Open-Meteo (free, no API key).
@@ -51,9 +52,13 @@ async function fetchWeather(location: string): Promise<WX | null> {
   } catch { return null; }
 }
 
+const WX_KEY = 'w:weather';
+
 export function WeatherWidget({ location }: { location: string }) {
   const [wx, setWx] = useState<WX | null>(null);
   const [state, setState] = useState<'loading' | 'done' | 'fail'>('loading');
+  const [open, setOpen] = useState(() => localStorage.getItem(WX_KEY) !== '0');
+  const toggle = () => setOpen(o => { localStorage.setItem(WX_KEY, o ? '0' : '1'); return !o; });
 
   useEffect(() => {
     let alive = true;
@@ -72,31 +77,44 @@ export function WeatherWidget({ location }: { location: string }) {
 
   const now = wmo(wx.code);
   return (
-    <div className="rounded-3xl p-4 shadow-soft border border-line overflow-hidden relative bg-surface animate-fadeIn">
+    <div className="rounded-3xl shadow-soft border border-line overflow-hidden relative bg-surface animate-fadeIn">
       <div className="absolute -right-8 -top-8 w-32 h-32 rounded-full opacity-20 blur-2xl" style={{ background: now.tint }} />
-      <div className="flex items-center justify-between relative">
-        <div className="flex items-center gap-3">
-          <span className="text-4xl animate-float">{now.emoji}</span>
-          <div>
-            <p className="text-3xl font-extrabold text-content leading-none">{wx.temp}°</p>
-            <p className="text-xs text-muted font-medium">{now.label} · {wx.city}</p>
-          </div>
-        </div>
-        <div className="flex gap-2">
-          {wx.days.map((d, i) => {
-            const w = wmo(d.code);
-            const dow = i === 0 ? 'Today' : new Date(d.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short' });
-            return (
-              <div key={d.date} className="text-center px-1.5">
-                <p className="text-[10px] text-muted font-semibold">{dow}</p>
-                <p className="text-lg leading-tight">{w.emoji}</p>
-                <p className="text-[11px] font-bold text-content leading-none">{d.max}°</p>
-                <p className="text-[10px] text-muted leading-tight">{d.min}°</p>
+      {open ? (
+        <>
+          <button onClick={toggle} aria-label="Collapse weather"
+            className="absolute top-2.5 right-3 z-10 text-muted press p-1"><ChevronUp size={16} /></button>
+          <div className="flex items-center justify-between relative p-4">
+            <div className="flex items-center gap-3">
+              <span className="text-4xl animate-float">{now.emoji}</span>
+              <div>
+                <p className="text-3xl font-extrabold text-content leading-none">{wx.temp}°</p>
+                <p className="text-xs text-muted font-medium">{now.label} · {wx.city}</p>
               </div>
-            );
-          })}
-        </div>
-      </div>
+            </div>
+            <div className="flex gap-2 mr-4">
+              {wx.days.map((d, i) => {
+                const w = wmo(d.code);
+                const dow = i === 0 ? 'Today' : new Date(d.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short' });
+                return (
+                  <div key={d.date} className="text-center px-1.5">
+                    <p className="text-[10px] text-muted font-semibold">{dow}</p>
+                    <p className="text-lg leading-tight">{w.emoji}</p>
+                    <p className="text-[11px] font-bold text-content leading-none">{d.max}°</p>
+                    <p className="text-[10px] text-muted leading-tight">{d.min}°</p>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </>
+      ) : (
+        <button onClick={toggle} className="w-full flex items-center gap-2.5 px-4 py-2.5 relative text-left press">
+          <span className="text-2xl">{now.emoji}</span>
+          <span className="text-lg font-extrabold text-content leading-none">{wx.temp}°</span>
+          <span className="text-xs text-muted font-medium truncate">{now.label} · {wx.city} · H{wx.days[0].max}° L{wx.days[0].min}°</span>
+          <ChevronDown size={16} className="text-muted ml-auto flex-shrink-0" />
+        </button>
+      )}
     </div>
   );
 }

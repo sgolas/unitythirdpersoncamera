@@ -182,3 +182,18 @@ input, textarea, select { font-size: 16px; font-family: inherit; }
 
 /* Nudge header content clear of the floating back button when present */
 .with-back .pad-header-top { padding-left: 3.75rem; }
+
+/* ── Responsive: frame the phone column nicely on tablet/desktop ─ */
+@media (min-width: 700px) {
+  body {
+    background:
+      radial-gradient(900px 500px at 50% -8%, color-mix(in srgb, var(--accent) 12%, var(--bg)), var(--bg)),
+      var(--bg);
+    background-attachment: fixed;
+  }
+  .app-frame {
+    box-shadow: 0 20px 60px rgba(0,0,0,0.22);
+    border-left: 1px solid var(--border);
+    border-right: 1px solid var(--border);
+  }
+}

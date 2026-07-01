@@ -21,6 +21,8 @@ const HERO_KEY = 'trip.heroOpen';
 export function DashboardTab({ onNavigate }: { onNavigate: (v: any) => void }) {
   const [heroOpen, setHeroOpen] = useState(() => localStorage.getItem(HERO_KEY) !== '0');
   function toggleHero() { setHeroOpen(o => { localStorage.setItem(HERO_KEY, o ? '0' : '1'); return !o; }); }
+  const [gridOpen, setGridOpen] = useState(() => localStorage.getItem('w:grid') !== '0');
+  function toggleGrid() { setGridOpen(o => { localStorage.setItem('w:grid', o ? '0' : '1'); return !o; }); }
 
   const trip = useTrip();
   const checklist = useChecklist();
@@ -126,8 +128,14 @@ export function DashboardTab({ onNavigate }: { onNavigate: (v: any) => void }) {
         <WeatherWidget location={weatherLoc} />
 
         {/* Next flight & stay */}
-        <UpcomingFlight flight={nextFlight} onOpen={() => onNavigate('transport')} />
-        <UpcomingStay stay={nextStay} onOpen={() => onNavigate('accommodation')} />
+        <CollapsibleWidget id="flight" title="Next flight" icon={<Plane size={13} />}
+          onOpen={() => onNavigate('transport')} summary={<FlightSummary flight={nextFlight} />}>
+          <FlightBody flight={nextFlight} />
+        </CollapsibleWidget>
+        <CollapsibleWidget id="stay" title="Next stay" icon={<BedDouble size={13} />}
+          onOpen={() => onNavigate('accommodation')} summary={<StaySummary stay={nextStay} />}>
+          <StayBody stay={nextStay} />
+        </CollapsibleWidget>
 
         {/* Budget + Passport */}
         <div className="grid grid-cols-2 gap-3">
@@ -161,18 +169,24 @@ export function DashboardTab({ onNavigate }: { onNavigate: (v: any) => void }) {
 
         {/* Section grid */}
         <div>
-          <p className="text-xs font-bold text-muted uppercase tracking-wider px-1 mb-2">Plan your trip</p>
-          <div className="grid grid-cols-2 gap-3 stagger">
-            {cards.map(c => (
-              <button key={c.key} onClick={() => onNavigate(c.key)}
-                className="bg-surface rounded-3xl p-4 shadow-soft border border-line text-left press">
-                <span className="w-11 h-11 rounded-2xl flex items-center justify-center text-white mb-3 shadow-lg"
-                  style={{ background: `linear-gradient(135deg, ${c.color}, ${c.color}cc)` }}>{c.icon}</span>
-                <p className="font-bold text-content">{c.label}</p>
-                <p className="text-muted text-sm">{c.stat}</p>
-              </button>
-            ))}
-          </div>
+          <button onClick={toggleGrid}
+            className="w-full flex items-center justify-between px-1 mb-2 press">
+            <span className="text-xs font-bold text-muted uppercase tracking-wider">Plan your trip</span>
+            {gridOpen ? <ChevronUp size={16} className="text-muted" /> : <ChevronDown size={16} className="text-muted" />}
+          </button>
+          {gridOpen && (
+            <div className="grid grid-cols-2 gap-3 stagger">
+              {cards.map(c => (
+                <button key={c.key} onClick={() => onNavigate(c.key)}
+                  className="bg-surface rounded-3xl p-4 shadow-soft border border-line text-left press">
+                  <span className="w-11 h-11 rounded-2xl flex items-center justify-center text-white mb-3 shadow-lg"
+                    style={{ background: `linear-gradient(135deg, ${c.color}, ${c.color}cc)` }}>{c.icon}</span>
+                  <p className="font-bold text-content">{c.label}</p>
+                  <p className="text-muted text-sm">{c.stat}</p>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Quick links */}
@@ -190,52 +204,80 @@ export function DashboardTab({ onNavigate }: { onNavigate: (v: any) => void }) {
   );
 }
 
-function UpcomingFlight({ flight, onOpen }: { flight?: Transport; onOpen: () => void }) {
+/** A card with a title bar + collapse chevron. Open shows children (tap to
+ *  navigate); collapsed shows a one-line summary. State persists per id. */
+function CollapsibleWidget({ id, title, icon, summary, onOpen, children }: {
+  id: string; title: string; icon: React.ReactNode; summary: React.ReactNode;
+  onOpen?: () => void; children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(() => localStorage.getItem('w:' + id) !== '0');
+  const toggle = () => setOpen(o => { localStorage.setItem('w:' + id, o ? '0' : '1'); return !o; });
   return (
-    <button onClick={onOpen} className="w-full bg-surface rounded-3xl p-4 shadow-soft border border-line text-left press">
-      <div className="flex items-center justify-between mb-1.5">
-        <span className="flex items-center gap-1.5 text-muted text-xs font-semibold uppercase tracking-wide"><Plane size={13} /> Next flight</span>
-        {flight?.provider && <span className="text-xs text-muted truncate max-w-[45%]">{flight.provider}</span>}
+    <div className="bg-surface rounded-3xl shadow-soft border border-line overflow-hidden">
+      <div className="flex items-center justify-between px-4 pt-3 pb-1">
+        <span className="flex items-center gap-1.5 text-muted text-xs font-semibold uppercase tracking-wide">{icon} {title}</span>
+        <button onClick={toggle} aria-label={open ? 'Collapse' : 'Expand'} className="text-muted press p-1 -m-1">
+          {open ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+        </button>
       </div>
-      {flight ? (
-        <div className="flex items-center gap-2">
-          <div className="flex-1 min-w-0">
-            <p className="font-bold text-content truncate">{flight.fromPlace || '—'}</p>
-            <p className="text-xs text-muted">{fmtDate(flight.departDate)}{flight.departTime ? ` · ${fmtTime(flight.departTime)}` : ''}</p>
-          </div>
-          <div className="flex flex-col items-center flex-shrink-0">
-            <Plane size={15} className="text-accent -rotate-45" />
-            <div className="w-8 border-t border-dashed border-line mt-0.5" />
-          </div>
-          <div className="flex-1 min-w-0 text-right">
-            <p className="font-bold text-content truncate">{flight.toPlace || '—'}</p>
-            <p className="text-xs text-muted truncate">{flight.confirmation ? `🎫 ${flight.confirmation}` : ''}</p>
-          </div>
-        </div>
-      ) : (
-        <p className="text-sm text-muted">No flights yet — tap to add ✈️</p>
-      )}
-    </button>
+      {open
+        ? <div onClick={onOpen} className={`px-4 pb-4 ${onOpen ? 'press cursor-pointer' : ''}`}>{children}</div>
+        : <button onClick={onOpen} className="w-full text-left px-4 pb-3 press">{summary}</button>}
+    </div>
   );
 }
 
-function UpcomingStay({ stay, onOpen }: { stay?: Accommodation; onOpen: () => void }) {
-  const nights = stay ? tripLength(stay.checkIn, stay.checkOut) : 0;
+function FlightBody({ flight }: { flight?: Transport }) {
+  if (!flight) return <p className="text-sm text-muted">No flights yet — tap to add ✈️</p>;
   return (
-    <button onClick={onOpen} className="w-full bg-surface rounded-3xl p-4 shadow-soft border border-line text-left press">
-      <span className="flex items-center gap-1.5 text-muted text-xs font-semibold uppercase tracking-wide mb-1.5"><BedDouble size={13} /> Next stay</span>
-      {stay ? (
-        <div className="flex items-center justify-between gap-2">
-          <div className="min-w-0">
-            <p className="font-bold text-content truncate">{stay.name}{stay.city ? ` · ${stay.city}` : ''}</p>
-            <p className="text-xs text-muted">{fmtDate(stay.checkIn)} → {fmtDate(stay.checkOut)}</p>
-          </div>
-          <span className="text-xs font-bold text-grape bg-grape/10 px-2.5 py-1 rounded-full flex-shrink-0">{nights}n</span>
-        </div>
-      ) : (
-        <p className="text-sm text-muted">No stays yet — tap to add 🏨</p>
-      )}
-    </button>
+    <div className="flex items-center gap-2">
+      <div className="flex-1 min-w-0">
+        <p className="font-bold text-content truncate">{flight.fromPlace || '—'}</p>
+        <p className="text-xs text-muted">{fmtDate(flight.departDate)}{flight.departTime ? ` · ${fmtTime(flight.departTime)}` : ''}</p>
+      </div>
+      <div className="flex flex-col items-center flex-shrink-0">
+        <Plane size={15} className="text-accent -rotate-45" />
+        <div className="w-8 border-t border-dashed border-line mt-0.5" />
+      </div>
+      <div className="flex-1 min-w-0 text-right">
+        <p className="font-bold text-content truncate">{flight.toPlace || '—'}</p>
+        <p className="text-xs text-muted truncate">{flight.confirmation ? `🎫 ${flight.confirmation}` : ''}</p>
+      </div>
+    </div>
+  );
+}
+
+function FlightSummary({ flight }: { flight?: Transport }) {
+  if (!flight) return <p className="text-sm text-muted">No flights yet — tap to add ✈️</p>;
+  return (
+    <p className="text-sm font-semibold text-content truncate">
+      {flight.fromPlace || '—'} → {flight.toPlace || '—'}
+      <span className="text-muted font-normal"> · {fmtDate(flight.departDate)}</span>
+    </p>
+  );
+}
+
+function StayBody({ stay }: { stay?: Accommodation }) {
+  if (!stay) return <p className="text-sm text-muted">No stays yet — tap to add 🏨</p>;
+  const nights = tripLength(stay.checkIn, stay.checkOut);
+  return (
+    <div className="flex items-center justify-between gap-2">
+      <div className="min-w-0">
+        <p className="font-bold text-content truncate">{stay.name}{stay.city ? ` · ${stay.city}` : ''}</p>
+        <p className="text-xs text-muted">{fmtDate(stay.checkIn)} → {fmtDate(stay.checkOut)}</p>
+      </div>
+      <span className="text-xs font-bold text-grape bg-grape/10 px-2.5 py-1 rounded-full flex-shrink-0">{nights}n</span>
+    </div>
+  );
+}
+
+function StaySummary({ stay }: { stay?: Accommodation }) {
+  if (!stay) return <p className="text-sm text-muted">No stays yet — tap to add 🏨</p>;
+  const nights = tripLength(stay.checkIn, stay.checkOut);
+  return (
+    <p className="text-sm font-semibold text-content truncate">
+      {stay.name}<span className="text-muted font-normal"> · {fmtDate(stay.checkIn)} · {nights}n</span>
+    </p>
   );
 }
 

@@ -19,5 +19,11 @@ export function setSyncCredentials(code: string, pass: string) {
 export function getLastSync(): string | null { return localStorage.getItem(LAST_KEY); }
 export function setLastSync(iso: string) { localStorage.setItem(LAST_KEY, iso); }
 
-// Sync relay endpoint (Netlify function). Same origin in production.
-export const SYNC_ENDPOINT = '/.netlify/functions/sync';
+import { isNative } from './platform';
+
+// Where the sync relay lives (Cloudflare Pages Function at /api/sync).
+// - Web portal is served from the same origin, so a relative path works.
+// - The native Android app has no server origin, so it needs the absolute
+//   deployed URL. Update this to the live Cloudflare domain after first deploy.
+const NATIVE_SYNC_BASE = 'https://trip-planner-sgolas.pages.dev';
+export const SYNC_ENDPOINT = isNative ? `${NATIVE_SYNC_BASE}/api/sync` : '/api/sync';

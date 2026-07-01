@@ -49,7 +49,7 @@ export default function App() {
   function go(v: View) { setView(v); setMoreOpen(false); window.scrollTo(0, 0); }
 
   return (
-    <div className="min-h-screen bg-slate-50 mx-auto max-w-md relative">
+    <div className="min-h-screen bg-bg text-content mx-auto max-w-md relative">
       <main style={{ paddingBottom: 'calc(74px + env(safe-area-inset-bottom, 0px))' }}>
         {view === 'dashboard'     && <DashboardTab onNavigate={go} />}
         {view === 'overview'      && <TripOverviewTab />}
@@ -94,8 +94,8 @@ export default function App() {
         </div>
       )}
 
-      {/* Bottom nav (padded above the Android/iOS system bar) */}
-      <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md bg-white border-t border-slate-200 flex z-50 shadow-lg safe-bottom">
+      {/* Bottom nav — glassmorphism, padded above the system bar */}
+      <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md glass border-t border-line flex z-50 shadow-glass safe-bottom">
         <NavTab label="Home"    active={view === 'dashboard'} onClick={() => go('dashboard')} icon={<LayoutDashboard size={22} />} />
         <NavTab label="Plan"    active={view === 'itinerary'} onClick={() => go('itinerary')} icon={<CalendarRange size={22} />} />
         <NavTab label="Money"   active={view === 'expenses'}  onClick={() => go('expenses')}  icon={<Wallet size={22} />} />
@@ -111,10 +111,11 @@ function NavTab({ label, icon, active, onClick }: {
 }) {
   return (
     <button onClick={onClick}
-      className="flex-1 flex flex-col items-center justify-center py-2.5 gap-0.5 transition-colors"
-      style={{ color: active ? '#0f172a' : '#94a3b8' }}>
-      {icon}
+      className="flex-1 flex flex-col items-center justify-center py-2.5 gap-0.5 transition-colors press relative"
+      style={{ color: active ? 'var(--accent)' : 'var(--muted)' }}>
+      <span className={active ? 'animate-pop' : ''}>{icon}</span>
       <span className="text-[11px] font-semibold">{label}</span>
+      {active && <span className="absolute -top-px h-0.5 w-8 rounded-full accent-gradient" />}
     </button>
   );
 }

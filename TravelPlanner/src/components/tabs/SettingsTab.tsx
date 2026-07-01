@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Smartphone, KeyRound, RefreshCw, Globe, Trash2, Check, Download } from 'lucide-react';
+import { Smartphone, KeyRound, RefreshCw, Globe, Trash2, Check, Download, Palette, Sun, Moon, Monitor } from 'lucide-react';
 import { getOtaStatus, runOTA } from '../../lib/ota';
 import { isNative } from '../../lib/platform';
+import { getMode, setMode, getAccent, setAccent, ACCENTS, type ThemeMode, type Accent } from '../../lib/theme';
 import { getDeviceName, setDeviceName } from '../../db/database';
 import { getSyncCode, getSyncPass, setSyncCredentials, getLastSync, isSyncConfigured } from '../../lib/config';
 import { syncNow, wipeLocal } from '../../db/sync';
@@ -16,6 +17,8 @@ export function SettingsTab() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
   const [wiping, setWiping] = useState(false);
+  const [mode, setModeS] = useState<ThemeMode>(getMode());
+  const [accent, setAccentS] = useState<Accent>(getAccent());
   const [ota, setOta] = useState(getOtaStatus());
   const [otaBusy, setOtaBusy] = useState(false);
   const [bundleVer, setBundleVer] = useState('');
@@ -59,6 +62,28 @@ export function SettingsTab() {
         gradient="linear-gradient(135deg,#1e293b,#334155)" icon="⚙️" />
 
       <div className="px-4 py-4 space-y-5">
+        {/* Appearance — theme + accent */}
+        <div className="bg-white rounded-2xl p-4 shadow-sm">
+          <p className="flex items-center gap-2 font-semibold text-slate-800 mb-3"><Palette size={16} /> Appearance</p>
+          <div className="grid grid-cols-3 gap-2">
+            {([['light', Sun, 'Light'], ['dark', Moon, 'Dark'], ['system', Monitor, 'Auto']] as const).map(([m, Icon, label]) => (
+              <button key={m} onClick={() => { setMode(m); setModeS(m); }}
+                className={`flex flex-col items-center gap-1 py-2.5 rounded-xl border-2 transition press ${mode === m ? 'border-accent text-accent' : 'border-line text-muted'}`}>
+                <Icon size={18} /> <span className="text-xs font-semibold">{label}</span>
+              </button>
+            ))}
+          </div>
+          <p className="text-xs font-bold text-slate-400 uppercase tracking-wide mt-4 mb-2">Accent colour</p>
+          <div className="flex gap-2.5">
+            {ACCENTS.map(a => (
+              <button key={a.key} onClick={() => { setAccent(a.key); setAccentS(a.key); }}
+                aria-label={a.label}
+                className={`w-9 h-9 rounded-full press transition ${accent === a.key ? 'ring-2 ring-slate-400 scale-110' : ''}`}
+                style={{ backgroundImage: `linear-gradient(135deg, ${a.from}, ${a.to})` }} />
+            ))}
+          </div>
+        </div>
+
         {/* How it works */}
         <div className="bg-sky-50 border border-sky/20 rounded-2xl p-4 text-sm text-sky-900">
           <p className="font-semibold mb-1">🔒 How sync works</p>

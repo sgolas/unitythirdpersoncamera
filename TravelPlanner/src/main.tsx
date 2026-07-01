@@ -6,6 +6,10 @@ import './index.css';
 import { isPortal, isNative } from './lib/platform';
 import { seedIfEmpty } from './db/seed';
 import { initOTA } from './lib/ota';
+import { initTheme } from './lib/theme';
+
+// Apply the saved theme immediately to avoid a flash of the wrong mode.
+initTheme();
 
 async function initNativeChrome() {
   if (!isNative) return;

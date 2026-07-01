@@ -1,83 +1,179 @@
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-:root { color-scheme: light; }
+/* ─────────────────────────────────────────────────────────────
+   THEME TOKENS — light & dark, with dynamic accent themes
+   ───────────────────────────────────────────────────────────── */
+:root {
+  color-scheme: light;
+  --bg: #eef1f7;
+  --surface: #ffffff;
+  --surface-2: #f6f8fc;
+  --text: #0f172a;
+  --muted: #64748b;
+  --border: #e6eaf1;
+  /* accent set by [data-accent]; default ocean */
+  --accent: #0ea5e9;
+  --accent-2: #22d3ee;
+  --glass: rgba(255, 255, 255, 0.65);
+  --glass-border: rgba(255, 255, 255, 0.5);
+  --hero-1: #0f172a;
+  --hero-2: #1e293b;
+  --hero-3: #334155;
+}
 
+.dark {
+  color-scheme: dark;
+  --bg: #080d1a;
+  --surface: #111a2e;
+  --surface-2: #0c1424;
+  --text: #e8eef8;
+  --muted: #94a3b8;
+  --border: #22304c;
+  --glass: rgba(17, 26, 46, 0.55);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --hero-1: #0a0f1f;
+  --hero-2: #0f1b33;
+  --hero-3: #16233f;
+}
+
+/* Dynamic accent themes */
+[data-accent="ocean"]  { --accent: #0ea5e9; --accent-2: #22d3ee; }
+[data-accent="sunset"] { --accent: #fb7185; --accent-2: #f59e0b; }
+[data-accent="grape"]  { --accent: #a78bfa; --accent-2: #ec4899; }
+[data-accent="forest"] { --accent: #34d399; --accent-2: #10b981; }
+[data-accent="royal"]  { --accent: #6366f1; --accent-2: #8b5cf6; }
+
+/* ─────────────────────────────────────────────────────────────
+   BASE
+   ───────────────────────────────────────────────────────────── */
 html, body, #root { height: 100%; }
 body {
   margin: 0;
-  background: #f1f5f9;
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   -webkit-tap-highlight-color: transparent;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
   overscroll-behavior-y: none;
+  transition: background-color 0.35s ease, color 0.35s ease;
+}
+input, textarea, select { font-size: 16px; font-family: inherit; }
+
+/* ─────────────────────────────────────────────────────────────
+   GLASSMORPHISM
+   ───────────────────────────────────────────────────────────── */
+.glass {
+  background: var(--glass);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  border: 1px solid var(--glass-border);
+}
+.glass-strong {
+  background: var(--surface);
+  backdrop-filter: blur(24px) saturate(170%);
+  -webkit-backdrop-filter: blur(24px) saturate(170%);
+}
+.accent-gradient { background-image: linear-gradient(135deg, var(--accent), var(--accent-2)); }
+.accent-text {
+  background-image: linear-gradient(135deg, var(--accent), var(--accent-2));
+  -webkit-background-clip: text; background-clip: text; color: transparent;
 }
 
-/* Hide scrollbars on horizontal strips but keep scrollability */
+/* ─────────────────────────────────────────────────────────────
+   ANIMATIONS (GPU-accelerated, respect reduced motion)
+   ───────────────────────────────────────────────────────────── */
+@keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes popIn { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: scale(1); } }
+@keyframes floaty { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
+@keyframes shimmer { 100% { background-position: 200% 0; } }
+.animate-fadeUp { animation: fadeUp 0.35s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.animate-fadeIn { animation: fadeIn 0.3s ease both; }
+.animate-pop { animation: popIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+.animate-float { animation: floaty 4s ease-in-out infinite; }
+.stagger > * { animation: fadeUp 0.4s cubic-bezier(0.22,1,0.36,1) both; }
+.stagger > *:nth-child(1){animation-delay:.02s}.stagger > *:nth-child(2){animation-delay:.06s}
+.stagger > *:nth-child(3){animation-delay:.10s}.stagger > *:nth-child(4){animation-delay:.14s}
+.stagger > *:nth-child(5){animation-delay:.18s}.stagger > *:nth-child(6){animation-delay:.22s}
+.stagger > *:nth-child(7){animation-delay:.26s}.stagger > *:nth-child(8){animation-delay:.30s}
+.press { transition: transform 0.12s cubic-bezier(0.4,0,0.2,1); }
+.press:active { transform: scale(0.97); }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
+}
+
+/* Skeleton shimmer for optimistic/instant loading */
+.skeleton {
+  background: linear-gradient(90deg, var(--surface-2) 25%, var(--border) 37%, var(--surface-2) 63%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s infinite;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   DARK-MODE COVERAGE for the neutral Tailwind utilities the tabs
+   already use, so the whole app themes without touching every file.
+   ───────────────────────────────────────────────────────────── */
+.dark .bg-white { background-color: var(--surface) !important; }
+.dark .bg-slate-50 { background-color: var(--surface-2) !important; }
+.dark .bg-slate-100 { background-color: #172236 !important; }
+.dark .bg-slate-200 { background-color: #223150 !important; }
+.dark .text-slate-900,
+.dark .text-slate-800,
+.dark .text-slate-700 { color: var(--text) !important; }
+.dark .text-slate-600,
+.dark .text-slate-500 { color: #aeb9cc !important; }
+.dark .text-slate-400,
+.dark .text-slate-300 { color: var(--muted) !important; }
+.dark .border-slate-200,
+.dark .border-slate-100,
+.dark .border-slate-50 { border-color: var(--border) !important; }
+.dark .bg-slate-50\/95 { background-color: rgba(12,20,36,0.9) !important; }
+.dark .divide-slate-100 > * { border-color: var(--border) !important; }
+
+/* ── Utilities carried over ─────────────────────────────────── */
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
-@keyframes fadeUp {
-  from { opacity: 0; transform: translateY(6px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-.animate-fadeUp { animation: fadeUp 0.25s ease both; }
-
-input, textarea, select { font-size: 16px; } /* prevents iOS zoom */
-
-/* Visible slim scrollbar for scrollable form sheets */
-.sheet-scroll { scrollbar-width: thin; scrollbar-color: #cbd5e1 transparent; }
+.sheet-scroll { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
 .sheet-scroll::-webkit-scrollbar { width: 7px; }
-.sheet-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
-.sheet-scroll::-webkit-scrollbar-thumb:active { background: #94a3b8; }
+.sheet-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+.sheet-scroll::-webkit-scrollbar-thumb:active { background: var(--muted); }
 .sheet-scroll::-webkit-scrollbar-track { background: transparent; }
 
-/* ── Safe areas (Android 15+ / iOS notch are edge-to-edge) ──────
-   Content must be padded away from the status bar (top) and the
-   navigation bar / home indicator (bottom). */
-.safe-top    { padding-top: env(safe-area-inset-top); }
-.safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
-
-/* Convenience: a header's top padding = status bar + extra */
+.safe-top    { padding-top: env(safe-area-inset-top, 0px); }
+.safe-bottom { padding-bottom: env(safe-area-inset-bottom, 0px); }
 .pad-header-top { padding-top: calc(env(safe-area-inset-top, 0px) + 2rem); }
 
-/* ── Cartoonish Leaflet map ────────────────────────────────────
-   A real map with a playful "toy" treatment: saturated tiles, thick
-   rounded frame, and big emoji pins. */
+/* ── Cartoonish Leaflet map ─────────────────────────────────── */
 .cmap {
-  height: 62vh;
-  min-height: 380px;
-  border-radius: 26px;
-  overflow: hidden;
-  border: 4px solid #fff;
-  box-shadow: 0 6px 24px rgba(15, 23, 42, 0.18);
+  height: 62vh; min-height: 380px; border-radius: 26px; overflow: hidden;
+  border: 4px solid var(--surface); box-shadow: 0 6px 24px rgba(15, 23, 42, 0.18);
 }
 .cmap-canvas { width: 100%; height: 100%; }
-/* Cartoon filter on the map tiles only */
 .leaflet-tile-pane { filter: saturate(1.5) contrast(1.04) brightness(1.02); }
+.dark .leaflet-tile-pane { filter: saturate(1.2) contrast(1.02) brightness(0.85) hue-rotate(180deg) invert(0.92); }
 .leaflet-container { background: #dff3f2; font-family: inherit; }
 .leaflet-popup-content { font-weight: 600; color: #0f172a; }
-
 .cmap-icon { background: transparent; border: none; }
 .cmap-pin {
-  width: 46px; height: 46px; border-radius: 50% 50% 50% 8px;
-  transform: rotate(-45deg);
-  background: var(--c);
-  border: 3px solid #fff;
-  box-shadow: 0 4px 8px rgba(0,0,0,0.35);
-  display: flex; align-items: center; justify-content: center;
-  position: relative;
+  width: 46px; height: 46px; border-radius: 50% 50% 50% 8px; transform: rotate(-45deg);
+  background: var(--c); border: 3px solid #fff; box-shadow: 0 4px 8px rgba(0,0,0,0.35);
+  display: flex; align-items: center; justify-content: center; position: relative;
 }
 .cmap-pin span { transform: rotate(45deg); font-size: 19px; line-height: 1; }
 .cmap-pin b {
   position: absolute; top: -8px; right: -8px; transform: rotate(45deg);
   background: #0f172a; color: #fff; font-size: 10px; font-weight: 800;
   width: 18px; height: 18px; border-radius: 50%;
-  display: flex; align-items: center; justify-content: center;
-  border: 2px solid #fff;
+  display: flex; align-items: center; justify-content: center; border: 2px solid #fff;
 }
 
-/* ── Louis-Vuitton-style transparent SG monogram ───────────────
-   Subtle repeating watermark for dark header areas. */
+/* ── SG monogram watermark ──────────────────────────────────── */
 .bg-monogram {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120' viewBox='0 0 120 120'%3E%3Cg fill='%23ffffff' fill-opacity='0.06'%3E%3Ctext x='30' y='42' font-family='Georgia,serif' font-size='24' font-weight='700' text-anchor='middle'%3ESG%3C/text%3E%3Ctext x='90' y='102' font-family='Georgia,serif' font-size='24' font-weight='700' text-anchor='middle'%3ESG%3C/text%3E%3Cpath d='M90 26 l5 9 -5 9 -5 -9 z'/%3E%3Cpath d='M30 86 l5 9 -5 9 -5 -9 z'/%3E%3Ccircle cx='60' cy='60' r='3'/%3E%3Ccircle cx='0' cy='0' r='3'/%3E%3Ccircle cx='120' cy='120' r='3'/%3E%3C/g%3E%3C/svg%3E");
   background-size: 120px 120px;

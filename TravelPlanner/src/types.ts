@@ -199,3 +199,15 @@ export function money(amount: number, currency: string): string {
   const homeStr = money1(convert(amount, currency, home), home);
   return `${awayStr} · ${homeStr}`;
 }
+
+/** Just the home-currency (CAD) value, e.g. "CA$148.91". */
+export function moneyHome(amount: number, currency: string): string {
+  const home = getHomeCurrency();
+  return money1(convert(amount, currency, home), home);
+}
+
+/** Just the away-currency (EUR/PLN) value, e.g. "€100.00". */
+export function moneyAway(amount: number, currency: string): string {
+  const away = getAwayCurrency();
+  return money1(convert(amount, currency, away), away);
+}

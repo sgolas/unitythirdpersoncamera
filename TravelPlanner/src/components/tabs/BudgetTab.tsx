@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useBudget, useExpenses, useTrip } from '../../hooks/useTrip';
 import { put } from '../../db/database';
 import type { BudgetLine, ExpenseCategory, TripMeta } from '../../types';
-import { money } from '../../types';
+import { money, moneyHome, moneyAway } from '../../types';
 import { TabHeader, Sheet, Field, TextInput, FormFooter } from '../ui';
 
 const CATS: { key: ExpenseCategory; label: string; emoji: string; color: string }[] = [
@@ -44,17 +44,32 @@ export function BudgetTab() {
             <span className="text-white/60 text-sm">Total budget</span>
             <span className="text-white/60 text-sm underline">edit</span>
           </div>
-          <p className="text-3xl font-bold mt-1">{totalBudget ? money(totalBudget, cur) : 'Tap to set'}</p>
+          {totalBudget ? (
+            <div className="mt-1">
+              <p className="text-3xl font-bold leading-tight">{moneyHome(totalBudget, cur)}</p>
+              <p className="text-white/50 text-sm">{moneyAway(totalBudget, cur)}</p>
+            </div>
+          ) : (
+            <p className="text-3xl font-bold mt-1">Tap to set</p>
+          )}
           {totalBudget > 0 && (
             <>
               <div className="h-2.5 bg-white/15 rounded-full mt-4 overflow-hidden">
                 <div className="h-full rounded-full transition-all"
                   style={{ width: `${pct}%`, background: remaining < 0 ? '#fb7185' : '#34d399' }} />
               </div>
-              <div className="flex justify-between mt-2 text-sm">
-                <span className="text-white/70">Spent {money(totalSpent, cur)}</span>
-                <span className={remaining < 0 ? 'text-sunset font-semibold' : 'text-mint font-semibold'}>
-                  {remaining < 0 ? `${money(-remaining, cur)} over` : `${money(remaining, cur)} left`}
+              <div className="flex justify-between mt-2 text-sm leading-tight">
+                <span>
+                  <span className="block text-white/80">Spent {moneyHome(totalSpent, cur)}</span>
+                  <span className="block text-white/40 text-xs">{moneyAway(totalSpent, cur)}</span>
+                </span>
+                <span className="text-right">
+                  <span className={`block ${remaining < 0 ? 'text-sunset font-semibold' : 'text-mint font-semibold'}`}>
+                    {remaining < 0 ? `${moneyHome(-remaining, cur)} over` : `${moneyHome(remaining, cur)} left`}
+                  </span>
+                  <span className="block text-white/40 text-xs">
+                    {remaining < 0 ? `${moneyAway(-remaining, cur)} over` : `${moneyAway(remaining, cur)} left`}
+                  </span>
                 </span>
               </div>
             </>
@@ -72,10 +87,15 @@ export function BudgetTab() {
           const over = planned > 0 && spent > planned;
           return (
             <div key={c.key} className="bg-white rounded-2xl p-4 shadow-sm" onClick={() => setEditLine(c.key)}>
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-2">
                 <span className="font-semibold text-slate-800">{c.emoji} {c.label}</span>
-                <span className="text-sm text-slate-500">
-                  {money(spent, cur)}{planned > 0 && <span className="text-slate-400"> / {money(planned, cur)}</span>}
+                <span className="text-right leading-tight">
+                  <span className="block text-sm font-semibold text-slate-700">
+                    {moneyHome(spent, cur)}{planned > 0 && <span className="text-slate-400 font-normal"> / {moneyHome(planned, cur)}</span>}
+                  </span>
+                  <span className="block text-xs text-slate-400">
+                    {moneyAway(spent, cur)}{planned > 0 && ` / ${moneyAway(planned, cur)}`}
+                  </span>
                 </span>
               </div>
               {planned > 0 && (

@@ -8,7 +8,7 @@ import {
   useTrip, useChecklist, useExpenses, useTransport, useAccommodation,
   useItinerary, useTravelers, useDocuments,
 } from '../../hooks/useTrip';
-import { money } from '../../types';
+import { money, moneyHome, moneyAway } from '../../types';
 import type { Transport, Accommodation } from '../../types';
 import { daysUntil, fmtDate, fmtStamp, fmtTime, todayStr, tripLength } from '../../utils/format';
 import { getLastSync } from '../../lib/config';
@@ -146,8 +146,8 @@ export function DashboardTab({ onNavigate }: { onNavigate: (v: any) => void }) {
             <div className="flex items-center gap-3 mt-2">
               <Ring pct={budgetPct} />
               <div className="min-w-0">
-                <p className="font-bold text-content leading-tight truncate">{money(spent, cur)}</p>
-                <p className="text-xs text-muted truncate">{trip.totalBudget ? `of ${money(trip.totalBudget, cur)}` : 'no budget set'}</p>
+                <p className="font-bold text-content leading-tight truncate">{moneyHome(spent, cur)}</p>
+                <p className="text-xs text-muted truncate">{moneyAway(spent, cur)}{trip.totalBudget ? ` · of ${moneyHome(trip.totalBudget, cur)}` : ''}</p>
               </div>
             </div>
           </button>

@@ -3,6 +3,7 @@ import { useBudget, useExpenses, useTrip } from '../../hooks/useTrip';
 import { put } from '../../db/database';
 import type { BudgetLine, ExpenseCategory, TripMeta } from '../../types';
 import { money, moneyHome, moneyAway } from '../../types';
+import { convert, getHomeCurrency } from '../../lib/currency';
 import { TabHeader, Sheet, Field, TextInput, FormFooter } from '../ui';
 
 const CATS: { key: ExpenseCategory; label: string; emoji: string; color: string }[] = [
@@ -122,17 +123,23 @@ export function BudgetTab() {
 }
 
 function TotalSheet({ trip, onClose }: { trip: TripMeta; onClose: () => void }) {
-  const [val, setVal] = useState(String(trip.totalBudget || ''));
+  const home = getHomeCurrency();               // CAD
+  const away = trip.tripCurrency;               // stored/compared currency (EUR/PLN)
+  // Enter in CAD: pre-fill with the CAD equivalent of the stored amount.
+  const [val, setVal] = useState(trip.totalBudget ? convert(trip.totalBudget, away, home).toFixed(2) : '');
   async function save() {
-    await put<TripMeta>({ ...trip, totalBudget: parseFloat(val) || 0 },
-      `Set total budget to ${money(parseFloat(val) || 0, trip.tripCurrency)}`);
+    const cad = parseFloat(val) || 0;
+    const stored = convert(cad, home, away);    // convert back to trip currency for storage
+    await put<TripMeta>({ ...trip, totalBudget: stored }, `Set total budget to ${money(stored, away)}`);
     onClose();
   }
+  const preview = home !== away && parseFloat(val) ? `≈ ${moneyAway(parseFloat(val), home)}` : '';
   return (
     <Sheet title="Total budget" onClose={onClose} footer={<FormFooter onCancel={onClose} onSubmit={save} submitLabel="Save" />}>
-      <Field label={`Total budget (${trip.tripCurrency})`}>
+      <Field label={`Total budget (${home})`}>
         <TextInput autoFocus type="number" inputMode="decimal" value={val} onChange={e => setVal(e.target.value)} placeholder="0.00" />
       </Field>
+      {preview && <p className="text-xs text-slate-400 -mt-2">{preview}</p>}
     </Sheet>
   );
 }
@@ -141,20 +148,26 @@ function LineSheet({ category, currency, existing, onClose }: {
   category: ExpenseCategory; currency: string; existing: BudgetLine | null; onClose: () => void;
 }) {
   const meta = CATS.find(c => c.key === category)!;
-  const [val, setVal] = useState(String(existing?.planned || ''));
+  const home = getHomeCurrency();               // CAD
+  const away = currency;                         // stored/compared currency
+  const [val, setVal] = useState(existing?.planned ? convert(existing.planned, away, home).toFixed(2) : '');
   async function save() {
     const isNew = !existing;
+    const cad = parseFloat(val) || 0;
+    const stored = convert(cad, home, away);
     await put<BudgetLine>({
-      kind: 'budget', id: existing?.id ?? crypto.randomUUID(), category, planned: parseFloat(val) || 0,
+      kind: 'budget', id: existing?.id ?? crypto.randomUUID(), category, planned: stored,
       updatedAt: '', updatedBy: '',
-    }, `${isNew ? 'Set' : 'Updated'} ${meta.label} budget to ${money(parseFloat(val) || 0, currency)}`, isNew ? 'create' : 'update');
+    }, `${isNew ? 'Set' : 'Updated'} ${meta.label} budget to ${money(stored, away)}`, isNew ? 'create' : 'update');
     onClose();
   }
+  const preview = home !== away && parseFloat(val) ? `≈ ${moneyAway(parseFloat(val), home)}` : '';
   return (
     <Sheet title={`${meta.emoji} ${meta.label} budget`} onClose={onClose} footer={<FormFooter onCancel={onClose} onSubmit={save} submitLabel="Save" />}>
-      <Field label={`Planned amount (${currency})`}>
+      <Field label={`Planned amount (${home})`}>
         <TextInput autoFocus type="number" inputMode="decimal" value={val} onChange={e => setVal(e.target.value)} placeholder="0.00" />
       </Field>
+      {preview && <p className="text-xs text-slate-400 -mt-2">{preview}</p>}
     </Sheet>
   );
 }

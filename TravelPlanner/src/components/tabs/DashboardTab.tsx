@@ -9,7 +9,8 @@ import {
   useItinerary, useTravelers, useDocuments,
 } from '../../hooks/useTrip';
 import { money } from '../../types';
-import { daysUntil, fmtDate, fmtStamp } from '../../utils/format';
+import type { Transport, Accommodation } from '../../types';
+import { daysUntil, fmtDate, fmtStamp, fmtTime, todayStr, tripLength } from '../../utils/format';
 import { getLastSync } from '../../lib/config';
 import { computeStops } from '../tripMap';
 import { Monogram } from '../ui';
@@ -40,6 +41,11 @@ export function DashboardTab({ onNavigate }: { onNavigate: (v: any) => void }) {
 
   const stops = computeStops(transport, stays, itinerary);
   const weatherLoc = stops[0]?.label || trip.destinations.split(/[·,]/)[0].trim();
+
+  const today = todayStr();
+  const flights = transport.filter(t => t.mode === 'flight');
+  const nextFlight = flights.find(f => f.departDate >= today) ?? flights[0];
+  const nextStay = stays.find(s => s.checkOut >= today) ?? stays[0];
 
   const budgetPct = trip.totalBudget > 0 ? Math.min(100, Math.round((spent / trip.totalBudget) * 100)) : 0;
 
@@ -119,6 +125,10 @@ export function DashboardTab({ onNavigate }: { onNavigate: (v: any) => void }) {
         {/* Weather */}
         <WeatherWidget location={weatherLoc} />
 
+        {/* Next flight & stay */}
+        <UpcomingFlight flight={nextFlight} onOpen={() => onNavigate('transport')} />
+        <UpcomingStay stay={nextStay} onOpen={() => onNavigate('accommodation')} />
+
         {/* Budget + Passport */}
         <div className="grid grid-cols-2 gap-3">
           <button onClick={() => onNavigate('budget')} className="bg-surface rounded-3xl p-4 shadow-soft border border-line text-left press">
@@ -177,6 +187,55 @@ export function DashboardTab({ onNavigate }: { onNavigate: (v: any) => void }) {
         </button>
       </div>
     </div>
+  );
+}
+
+function UpcomingFlight({ flight, onOpen }: { flight?: Transport; onOpen: () => void }) {
+  return (
+    <button onClick={onOpen} className="w-full bg-surface rounded-3xl p-4 shadow-soft border border-line text-left press">
+      <div className="flex items-center justify-between mb-1.5">
+        <span className="flex items-center gap-1.5 text-muted text-xs font-semibold uppercase tracking-wide"><Plane size={13} /> Next flight</span>
+        {flight?.provider && <span className="text-xs text-muted truncate max-w-[45%]">{flight.provider}</span>}
+      </div>
+      {flight ? (
+        <div className="flex items-center gap-2">
+          <div className="flex-1 min-w-0">
+            <p className="font-bold text-content truncate">{flight.fromPlace || '—'}</p>
+            <p className="text-xs text-muted">{fmtDate(flight.departDate)}{flight.departTime ? ` · ${fmtTime(flight.departTime)}` : ''}</p>
+          </div>
+          <div className="flex flex-col items-center flex-shrink-0">
+            <Plane size={15} className="text-accent -rotate-45" />
+            <div className="w-8 border-t border-dashed border-line mt-0.5" />
+          </div>
+          <div className="flex-1 min-w-0 text-right">
+            <p className="font-bold text-content truncate">{flight.toPlace || '—'}</p>
+            <p className="text-xs text-muted truncate">{flight.confirmation ? `🎫 ${flight.confirmation}` : ''}</p>
+          </div>
+        </div>
+      ) : (
+        <p className="text-sm text-muted">No flights yet — tap to add ✈️</p>
+      )}
+    </button>
+  );
+}
+
+function UpcomingStay({ stay, onOpen }: { stay?: Accommodation; onOpen: () => void }) {
+  const nights = stay ? tripLength(stay.checkIn, stay.checkOut) : 0;
+  return (
+    <button onClick={onOpen} className="w-full bg-surface rounded-3xl p-4 shadow-soft border border-line text-left press">
+      <span className="flex items-center gap-1.5 text-muted text-xs font-semibold uppercase tracking-wide mb-1.5"><BedDouble size={13} /> Next stay</span>
+      {stay ? (
+        <div className="flex items-center justify-between gap-2">
+          <div className="min-w-0">
+            <p className="font-bold text-content truncate">{stay.name}{stay.city ? ` · ${stay.city}` : ''}</p>
+            <p className="text-xs text-muted">{fmtDate(stay.checkIn)} → {fmtDate(stay.checkOut)}</p>
+          </div>
+          <span className="text-xs font-bold text-grape bg-grape/10 px-2.5 py-1 rounded-full flex-shrink-0">{nights}n</span>
+        </div>
+      ) : (
+        <p className="text-sm text-muted">No stays yet — tap to add 🏨</p>
+      )}
+    </button>
   );
 }
 

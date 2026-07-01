@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Smartphone, KeyRound, RefreshCw, Globe, Trash2, Check, Download, Palette, Sun, Moon, Monitor, Coins } from 'lucide-react';
+import { Smartphone, KeyRound, RefreshCw, Globe, Trash2, Check, Download, Palette, Sun, Moon, Monitor, Coins, AlertTriangle } from 'lucide-react';
 import { getOtaStatus, runOTA } from '../../lib/ota';
 import { isNative } from '../../lib/platform';
 import { getMode, setMode, getAccent, setAccent, ACCENTS, type ThemeMode, type Accent } from '../../lib/theme';
@@ -13,7 +13,7 @@ import { getDeviceName, setDeviceName, put } from '../../db/database';
 import { getSyncCode, getSyncPass, setSyncCredentials, getLastSync, isSyncConfigured } from '../../lib/config';
 import { syncNow, wipeLocal } from '../../db/sync';
 import { fmtStamp } from '../../utils/format';
-import { TabHeader, Field, TextInput, PrimaryButton, GhostButton, ConfirmDelete } from '../ui';
+import { TabHeader, Field, TextInput, PrimaryButton, GhostButton } from '../ui';
 
 export function SettingsTab() {
   const [device, setDevice] = useState(getDeviceName());
@@ -197,10 +197,10 @@ export function SettingsTab() {
 
         {/* Danger zone */}
         <div className="bg-white rounded-2xl p-4 shadow-sm">
-          <p className="flex items-center gap-2 font-semibold text-slate-800 mb-2"><Trash2 size={16} /> Reset this device</p>
-          <p className="text-sm text-slate-500 mb-3">Clears local data on this phone only. If sync is set up, you can pull it all back with Sync.</p>
+          <p className="flex items-center gap-2 font-semibold text-slate-800 mb-2"><Trash2 size={16} /> Clear data</p>
+          <p className="text-sm text-slate-500 mb-3">Wipes all trip data on this device. If sync is set up, you can pull it all back with Sync.</p>
           <button onClick={() => setWiping(true)} className="w-full py-2.5 rounded-2xl font-semibold text-sunset bg-rose-50 active:bg-rose-100">
-            Clear local data
+            Clear data
           </button>
         </div>
 
@@ -208,10 +208,43 @@ export function SettingsTab() {
       </div>
 
       {wiping && (
-        <ConfirmDelete label="All local data on this device"
+        <WipeConfirm synced={isSyncConfigured()}
           onCancel={() => setWiping(false)}
           onConfirm={async () => { await wipeLocal(); setWiping(false); location.reload(); }} />
       )}
+    </div>
+  );
+}
+
+/** Hard-stop confirmation: user must type "I understand" to wipe the device. */
+function WipeConfirm({ synced, onCancel, onConfirm }: {
+  synced: boolean; onCancel: () => void; onConfirm: () => void;
+}) {
+  const [text, setText] = useState('');
+  const ok = text.trim().toLowerCase() === 'i understand';
+  return (
+    <div className="fixed inset-0 z-[200] bg-black/60 flex items-center justify-center p-6" onClick={onCancel}>
+      <div className="bg-white rounded-3xl p-6 w-full max-w-sm animate-pop" onClick={e => e.stopPropagation()}>
+        <div className="w-14 h-14 rounded-2xl bg-rose-100 flex items-center justify-center mx-auto mb-3">
+          <AlertTriangle className="text-rose-600" size={28} />
+        </div>
+        <h2 className="text-lg font-bold text-slate-900 text-center">You are about to wipe all data off this device</h2>
+        <p className="text-sm text-slate-600 text-center mt-2">
+          This clears every trip record stored on this device. This cannot be undone
+          {synced ? ' — but if sync is set up, you can pull it back with Sync.' : '.'}
+        </p>
+        <p className="text-xs font-semibold text-slate-500 mt-4 mb-1">Type <b className="text-slate-700">I understand</b> to confirm</p>
+        <input autoFocus value={text} onChange={e => setText(e.target.value)} placeholder="I understand"
+          autoCapitalize="none" autoCorrect="off" spellCheck={false}
+          className="w-full rounded-xl border-2 border-slate-200 px-3 py-2.5 text-slate-900 outline-none focus:border-rose-400" />
+        <div className="flex gap-2 mt-4">
+          <button onClick={onCancel} className="flex-1 py-2.5 rounded-2xl font-semibold text-slate-600 bg-slate-100 active:bg-slate-200">Cancel</button>
+          <button onClick={onConfirm} disabled={!ok}
+            className="flex-1 py-2.5 rounded-2xl font-semibold text-white bg-rose-600 active:bg-rose-700 disabled:opacity-40 disabled:cursor-not-allowed transition">
+            Wipe data
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

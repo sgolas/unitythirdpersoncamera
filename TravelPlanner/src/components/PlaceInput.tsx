@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import { MapPin } from 'lucide-react';
 
 /**
@@ -25,6 +25,7 @@ export function PlaceInput({ value, onChange, placeholder }: {
   const [sugs, setSugs] = useState<Sug[]>([]);
   const [open, setOpen] = useState(false);
   const skip = useRef(false); // don't re-search right after a pick
+  const listRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (skip.current) { skip.current = false; return; }
@@ -53,6 +54,13 @@ export function PlaceInput({ value, onChange, placeholder }: {
     setSugs([]);
   }
 
+  // When suggestions open, make sure the whole list is scrolled into view.
+  useLayoutEffect(() => {
+    if (open && listRef.current) {
+      listRef.current.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+  }, [open, sugs.length]);
+
   return (
     <div className="relative">
       <input
@@ -61,16 +69,17 @@ export function PlaceInput({ value, onChange, placeholder }: {
         placeholder={placeholder}
         onChange={e => onChange(e.target.value)}
         onFocus={() => sugs.length > 0 && setOpen(true)}
-        onBlur={() => setTimeout(() => setOpen(false), 150)}
+        onBlur={() => setTimeout(() => setOpen(false), 200)}
         autoComplete="off"
       />
       {open && sugs.length > 0 && (
-        <div className="mt-1 rounded-xl border border-slate-200 bg-white shadow-lg overflow-hidden">
+        <div ref={listRef}
+          className="mt-1.5 rounded-2xl border-2 border-sky/40 bg-white shadow-xl overflow-y-auto max-h-72">
           {sugs.map((s, i) => (
             <button key={i} type="button" onMouseDown={e => e.preventDefault()} onClick={() => pick(s)}
-              className="w-full text-left px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 active:bg-slate-100 flex items-center gap-2 border-b border-slate-50 last:border-0">
-              <MapPin size={13} className="text-slate-400 flex-shrink-0" />
-              <span className="truncate">{s.label}</span>
+              className="w-full text-left px-4 py-3.5 text-[15px] leading-snug text-slate-700 hover:bg-sky/10 active:bg-sky/20 flex items-center gap-3 border-b border-slate-100 last:border-0">
+              <MapPin size={18} className="text-sky flex-shrink-0" />
+              <span className="break-words">{s.label}</span>
             </button>
           ))}
         </div>

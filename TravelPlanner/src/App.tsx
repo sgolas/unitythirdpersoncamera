@@ -1,11 +1,12 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   LayoutDashboard, CalendarRange, Wallet, FileText, LayoutGrid,
   ListChecks, Plane, BedDouble, PiggyBank, Compass, Sparkles, History, Settings2,
-  Map as MapIcon, Images,
+  Map as MapIcon, Images, ChevronLeft,
 } from 'lucide-react';
 import { SyncButton } from './components/SyncButton';
 import { StitchIcon } from './components/StitchIcon';
+import { isNative } from './lib/platform';
 
 import { DashboardTab } from './components/tabs/DashboardTab';
 import { TripOverviewTab } from './components/tabs/TripOverviewTab';
@@ -44,9 +45,40 @@ const MORE_ITEMS: MenuItem[] = [
 
 export default function App() {
   const [view, setView] = useState<View>('dashboard');
+  const [stack, setStack] = useState<View[]>([]);
   const [moreOpen, setMoreOpen] = useState(false);
 
-  function go(v: View) { setView(v); setMoreOpen(false); window.scrollTo(0, 0); }
+  function go(v: View) {
+    setMoreOpen(false);
+    if (v !== view) setStack(s => [...s, view]);
+    setView(v);
+    window.scrollTo(0, 0);
+  }
+
+  function back() {
+    setStack(s => {
+      if (s.length === 0) return s;
+      setView(s[s.length - 1]);
+      window.scrollTo(0, 0);
+      return s.slice(0, -1);
+    });
+  }
+
+  // Android hardware back button → go back, or close the More menu, or exit.
+  useEffect(() => {
+    if (!isNative) return;
+    let sub: any;
+    import('@capacitor/app').then(({ App: CapApp }) => {
+      sub = CapApp.addListener('backButton', () => {
+        if (moreOpen) setMoreOpen(false);
+        else if (stack.length > 0) back();
+        else CapApp.exitApp();
+      });
+    });
+    return () => { sub?.then?.((h: any) => h.remove()); };
+  }, [stack, moreOpen]);
+
+  const canGoBack = stack.length > 0;
 
   return (
     <div className="min-h-screen bg-bg text-content mx-auto max-w-md relative">
@@ -66,6 +98,15 @@ export default function App() {
         {view === 'map'           && <MapTab />}
         {view === 'photos'        && <PhotosTab />}
       </main>
+
+      {/* Back button (top-left) — shown whenever there's history */}
+      {canGoBack && (
+        <button onClick={back} aria-label="Back"
+          className="fixed left-3 z-50 w-10 h-10 rounded-full flex items-center justify-center text-white shadow-lg press animate-fadeIn"
+          style={{ top: 'calc(env(safe-area-inset-top, 0px) + 8px)', background: 'rgba(15,23,42,0.4)', backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)' }}>
+          <ChevronLeft size={24} />
+        </button>
+      )}
 
       {/* Global sync button (floating, top-right, below status bar) */}
       <div className="fixed right-3 z-50 flex items-start gap-1.5" style={{ top: 'calc(env(safe-area-inset-top, 0px) + 8px)' }}>

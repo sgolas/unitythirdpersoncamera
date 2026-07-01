@@ -123,6 +123,7 @@ export async function pullOnly(tripCode: string, password: string): Promise<Sync
     return { ok: false, pushed: 0, pulled: 0, message: 'No connection.' };
   }
   if (res.status === 401) return { ok: false, pushed: 0, pulled: 0, message: 'Wrong trip code or password.' };
+  if (res.status === 404) return { ok: false, pushed: 0, pulled: 0, message: 'No trip found with that code yet. Open the app, use the same trip code in Sync & Setup, and tap Sync first.' };
   if (!res.ok) return { ok: false, pushed: 0, pulled: 0, message: 'Portal server error.' };
 
   const data = await res.json() as { records: RelayRecord[] };

@@ -59,6 +59,8 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
       .from('trip_access').select('password_hash').eq('trip_code', tripCode).maybeSingle();
 
     if (!access) {
+      // The read-only portal must never create a trip — only the app claims a code.
+      if (readOnly) return json({ error: 'no-trip' }, 404);
       await supabase.from('trip_access').insert({ trip_code: tripCode, password_hash: pwHash });
     } else if (access.password_hash !== pwHash) {
       return json({ error: 'Wrong trip code or password' }, 401);

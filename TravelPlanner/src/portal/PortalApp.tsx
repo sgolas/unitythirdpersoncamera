@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Lock, RefreshCw, Plane, BedDouble, FileText, Wallet, ListChecks, CalendarRange, MapPin, Clock } from 'lucide-react';
 import { pullOnly } from '../db/sync';
 import {
@@ -94,6 +94,9 @@ function PortalView() {
   const budget = useBudget();
   const photos = usePhotos();
   const [refreshing, setRefreshing] = useState(false);
+  const [waited, setWaited] = useState(false);
+
+  useEffect(() => { const t = setTimeout(() => setWaited(true), 1500); return () => clearTimeout(t); }, []);
 
   async function refresh() {
     setRefreshing(true);
@@ -101,7 +104,35 @@ function PortalView() {
     setRefreshing(false);
   }
 
-  if (!trip) return <div className="min-h-screen flex items-center justify-center text-slate-400">Loading…</div>;
+  function backToLogin() {
+    sessionStorage.removeItem(SS_CODE);
+    sessionStorage.removeItem(SS_PASS);
+    location.reload();
+  }
+
+  if (!trip) {
+    if (!waited) return <div className="min-h-screen flex items-center justify-center text-slate-400">Loading…</div>;
+    // Code is valid but nothing has been synced from the app yet.
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center p-8 text-center gap-4"
+        style={{ background: 'linear-gradient(150deg,#0f172a,#1e293b,#334155)' }}>
+        <span className="text-5xl">📭</span>
+        <h1 className="text-white text-xl font-bold">No trip data yet</h1>
+        <p className="text-white/70 text-sm max-w-xs">
+          This trip code exists, but nothing has been synced yet. Open the <b>Trip Planner app</b>,
+          set the <b>same</b> trip code &amp; password in <b>Sync &amp; Setup</b>, then tap <b>Sync</b>.
+        </p>
+        <div className="flex gap-3 mt-2">
+          <button onClick={refresh} className="px-5 py-2.5 rounded-2xl font-semibold bg-white/15 text-white active:bg-white/25">
+            Check again
+          </button>
+          <button onClick={backToLogin} className="px-5 py-2.5 rounded-2xl font-semibold bg-white text-ink">
+            Use another code
+          </button>
+        </div>
+      </div>
+    );
+  }
   const cur = trip.tripCurrency;
   const spent = expenses.reduce((s, e) => s + e.amount, 0);
   const days = daysUntil(trip.startDate);

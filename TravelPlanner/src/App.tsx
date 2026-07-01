@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useReducer } from 'react';
+import { initCurrency } from './lib/currency';
 import {
   LayoutDashboard, CalendarRange, Wallet, FileText, LayoutGrid,
   ListChecks, Plane, BedDouble, PiggyBank, Compass, Sparkles, History, Settings2,
@@ -47,6 +48,16 @@ export default function App() {
   const [view, setView] = useState<View>('dashboard');
   const [stack, setStack] = useState<View[]>([]);
   const [moreOpen, setMoreOpen] = useState(false);
+  const [, bump] = useReducer(x => x + 1, 0);
+
+  // Load live exchange rates, and re-render money whenever they or the
+  // currency preference change.
+  useEffect(() => {
+    initCurrency();
+    const on = () => bump();
+    window.addEventListener('cur-change', on);
+    return () => window.removeEventListener('cur-change', on);
+  }, []);
 
   function go(v: View) {
     setMoreOpen(false);

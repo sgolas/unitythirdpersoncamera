@@ -1,9 +1,15 @@
 import { useState, useEffect } from 'react';
-import { Smartphone, KeyRound, RefreshCw, Globe, Trash2, Check, Download, Palette, Sun, Moon, Monitor } from 'lucide-react';
+import { Smartphone, KeyRound, RefreshCw, Globe, Trash2, Check, Download, Palette, Sun, Moon, Monitor, Coins } from 'lucide-react';
 import { getOtaStatus, runOTA } from '../../lib/ota';
 import { isNative } from '../../lib/platform';
 import { getMode, setMode, getAccent, setAccent, ACCENTS, type ThemeMode, type Accent } from '../../lib/theme';
-import { getDeviceName, setDeviceName } from '../../db/database';
+import {
+  HOME_OPTIONS, AWAY_OPTIONS, getHomeCurrency, getAwayCurrency, setHomeCurrency, setAwayCurrency,
+} from '../../lib/currency';
+import { useTrip } from '../../hooks/useTrip';
+import { money } from '../../types';
+import type { TripMeta } from '../../types';
+import { getDeviceName, setDeviceName, put } from '../../db/database';
 import { getSyncCode, getSyncPass, setSyncCredentials, getLastSync, isSyncConfigured } from '../../lib/config';
 import { syncNow, wipeLocal } from '../../db/sync';
 import { fmtStamp } from '../../utils/format';
@@ -19,6 +25,18 @@ export function SettingsTab() {
   const [wiping, setWiping] = useState(false);
   const [mode, setModeS] = useState<ThemeMode>(getMode());
   const [accent, setAccentS] = useState<Accent>(getAccent());
+  const [home, setHomeS] = useState(getHomeCurrency());
+  const [away, setAwayS] = useState(getAwayCurrency());
+  const trip = useTrip();
+
+  function pickHome(code: string) { setHomeCurrency(code); setHomeS(code); syncTripCurrency(code, away); }
+  function pickAway(code: string) { setAwayCurrency(code); setAwayS(code); syncTripCurrency(home, code); }
+  function syncTripCurrency(h: string, a: string) {
+    // Keep the stored trip record in step so entered amounts read as "away".
+    if (trip && (trip.tripCurrency !== a || trip.homeCurrency !== h)) {
+      put<TripMeta>({ ...trip, tripCurrency: a, homeCurrency: h }, `Set currencies to ${a} / ${h}`);
+    }
+  }
   const [ota, setOta] = useState(getOtaStatus());
   const [otaBusy, setOtaBusy] = useState(false);
   const [bundleVer, setBundleVer] = useState('');
@@ -82,6 +100,36 @@ export function SettingsTab() {
                 style={{ backgroundImage: `linear-gradient(135deg, ${a.from}, ${a.to})` }} />
             ))}
           </div>
+        </div>
+
+        {/* Currencies — home + away, both always shown together */}
+        <div className="bg-white rounded-2xl p-4 shadow-sm">
+          <p className="flex items-center gap-2 font-semibold text-slate-800 mb-1"><Coins size={16} /> Currencies</p>
+          <p className="text-xs text-slate-400 mb-3">Every amount shows in both your home and away currency.</p>
+
+          <p className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-2">Home currency</p>
+          <div className="grid grid-cols-2 gap-2 mb-4">
+            {HOME_OPTIONS.map(o => (
+              <button key={o.code} onClick={() => pickHome(o.code)}
+                className={`flex items-center justify-center gap-1.5 py-2.5 rounded-xl border-2 transition press ${home === o.code ? 'border-accent text-accent' : 'border-line text-muted'}`}>
+                <span className="text-sm font-semibold">{o.label} · {o.sym}</span>
+              </button>
+            ))}
+          </div>
+
+          <p className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-2">Away currency (where you're spending)</p>
+          <div className="grid grid-cols-2 gap-2">
+            {AWAY_OPTIONS.map(o => (
+              <button key={o.code} onClick={() => pickAway(o.code)}
+                className={`flex items-center justify-center gap-1.5 py-2.5 rounded-xl border-2 transition press ${away === o.code ? 'border-accent text-accent' : 'border-line text-muted'}`}>
+                <span className="text-sm font-semibold">{o.label} · {o.sym}</span>
+              </button>
+            ))}
+          </div>
+
+          <p className="text-xs text-slate-500 mt-3 bg-slate-50 rounded-xl px-3 py-2">
+            Preview: <b className="text-slate-700">{money(100, away)}</b>
+          </p>
         </div>
 
         {/* How it works */}

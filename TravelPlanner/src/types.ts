@@ -175,11 +175,27 @@ export type AnyRecord =
 export type EntityKind = AnyRecord['kind'];
 
 /* ── Display metadata ───────────────────────────────────────── */
+import { convert, getHomeCurrency, getAwayCurrency } from './lib/currency';
+
 export const CURRENCY_SYMBOLS: Record<string, string> = {
-  USD: '$', EUR: '€', GBP: '£', CHF: 'CHF ', JPY: '¥', CAD: 'CA$', AUD: 'A$',
+  USD: '$', EUR: '€', GBP: '£', CHF: 'CHF ', JPY: '¥', CAD: 'CA$', AUD: 'A$', PLN: 'zł',
 };
 
-export function money(amount: number, currency: string): string {
-  const sym = CURRENCY_SYMBOLS[currency] ?? '';
+/** Format a single amount in one currency (e.g. "€24.00", "zł98.00"). */
+export function money1(amount: number, currency: string): string {
+  const sym = CURRENCY_SYMBOLS[currency] ?? currency + ' ';
   return `${sym}${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+/**
+ * Dual-currency money string — always shows the away currency and its
+ * home-currency (CAD) equivalent, e.g. "€24.00 · CA$35.60". `currency` is the
+ * currency the stored amount is in (normally the away currency).
+ */
+export function money(amount: number, currency: string): string {
+  const away = getAwayCurrency();
+  const home = getHomeCurrency();
+  const awayStr = money1(convert(amount, currency, away), away);
+  const homeStr = money1(convert(amount, currency, home), home);
+  return `${awayStr} · ${homeStr}`;
 }

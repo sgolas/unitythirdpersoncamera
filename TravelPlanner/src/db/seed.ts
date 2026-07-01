@@ -19,7 +19,7 @@ export async function seedIfEmpty() {
     destinations: 'Europe',
     startDate: '2026-08-06',
     endDate: '2026-09-06',
-    homeCurrency: 'USD',
+    homeCurrency: 'CAD',
     tripCurrency: 'EUR',
     totalBudget: 0,
     notes: 'One month in Europe with the family.',

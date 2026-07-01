@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useReducer } from 'react';
+import { initCurrency } from '../lib/currency';
 import { Lock, RefreshCw, Plane, BedDouble, FileText, Wallet, ListChecks, CalendarRange, MapPin, Clock, Compass, Map as MapIcon, Images } from 'lucide-react';
 import { pullOnly } from '../db/sync';
 import { computeStops, StringMap } from '../components/tripMap';
@@ -98,8 +99,15 @@ function PortalView() {
   const [refreshing, setRefreshing] = useState(false);
   const [waited, setWaited] = useState(false);
   const [view, setView] = useState<'overview' | 'map' | 'photos'>('overview');
+  const [, bump] = useReducer(x => x + 1, 0);
 
   useEffect(() => { const t = setTimeout(() => setWaited(true), 1500); return () => clearTimeout(t); }, []);
+  useEffect(() => {
+    initCurrency();
+    const on = () => bump();
+    window.addEventListener('cur-change', on);
+    return () => window.removeEventListener('cur-change', on);
+  }, []);
 
   async function refresh() {
     setRefreshing(true);

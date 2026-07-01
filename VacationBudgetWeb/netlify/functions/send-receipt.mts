@@ -112,7 +112,7 @@ export const handler: Handler = async (event: HandlerEvent) => {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        from: 'Vacation Budget <noreply@send.sgolas.com>',
+        from: 'Vacation Budget <noreply@sgolas.com>',
         to: [userEmail],
         subject: `Receipt: ${expense.name} — ${amount}`,
         html,

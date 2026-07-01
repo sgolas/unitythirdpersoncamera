@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import {
   ListChecks, Plane, BedDouble, Wallet, CalendarRange, PiggyBank, FileText,
-  Sparkles, History, Compass, ChevronUp, ChevronDown, MapPin, ShieldCheck,
+  Sparkles, History, Compass, ChevronUp, ChevronDown, ShieldCheck,
   ShieldAlert, CalendarClock,
 } from 'lucide-react';
 import {
@@ -9,7 +9,7 @@ import {
   useItinerary, useTravelers, useDocuments,
 } from '../../hooks/useTrip';
 import { money } from '../../types';
-import { daysUntil, fmtDate, fmtStamp, tripLength } from '../../utils/format';
+import { daysUntil, fmtDate, fmtStamp } from '../../utils/format';
 import { getLastSync } from '../../lib/config';
 import { computeStops } from '../tripMap';
 import { Monogram } from '../ui';
@@ -39,7 +39,6 @@ export function DashboardTab({ onNavigate }: { onNavigate: (v: any) => void }) {
   const cur = trip.tripCurrency;
 
   const stops = computeStops(transport, stays, itinerary);
-  const cities = new Set(stops.map(s => s.label.toLowerCase())).size;
   const weatherLoc = stops[0]?.label || trip.destinations.split(/[·,]/)[0].trim();
 
   const budgetPct = trip.totalBudget > 0 ? Math.min(100, Math.round((spent / trip.totalBudget) * 100)) : 0;
@@ -117,14 +116,6 @@ export function DashboardTab({ onNavigate }: { onNavigate: (v: any) => void }) {
       </div>
 
       <div className="px-4 -mt-5 relative space-y-4">
-        {/* Stat strip (glass, overlapping hero) */}
-        <div className="grid grid-cols-4 gap-2 stagger">
-          <Stat value={tripLength(trip.startDate, trip.endDate)} label="Days" />
-          <Stat value={cities} label="Cities" />
-          <Stat value={travelers.length} label="People" />
-          <Stat value={itinerary.length} label="Events" />
-        </div>
-
         {/* Weather */}
         <WeatherWidget location={weatherLoc} />
 
@@ -175,8 +166,7 @@ export function DashboardTab({ onNavigate }: { onNavigate: (v: any) => void }) {
         </div>
 
         {/* Quick links */}
-        <div className="grid grid-cols-3 gap-3">
-          <QuickLink onClick={() => onNavigate('map')} icon={<MapPin size={18} />} label="Map" />
+        <div className="grid grid-cols-2 gap-3">
           <QuickLink onClick={() => onNavigate('overview')} icon={<Compass size={18} />} label="Overview" />
           <QuickLink onClick={() => onNavigate('helper')} icon={<Sparkles size={18} />} label="Helper" />
         </div>
@@ -186,15 +176,6 @@ export function DashboardTab({ onNavigate }: { onNavigate: (v: any) => void }) {
           <History size={13} /> {lastSync ? `Last synced ${fmtStamp(lastSync)}` : 'Not synced yet — tap Sync'}
         </button>
       </div>
-    </div>
-  );
-}
-
-function Stat({ value, label }: { value: number; label: string }) {
-  return (
-    <div className="glass rounded-2xl py-3 px-1 text-center shadow-glass">
-      <p className="text-xl font-extrabold text-content leading-none">{value}</p>
-      <p className="text-[10px] text-muted font-semibold uppercase tracking-wide mt-1">{label}</p>
     </div>
   );
 }

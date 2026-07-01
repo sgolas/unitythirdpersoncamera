@@ -24,7 +24,9 @@ function initFocusScroll() {
   window.addEventListener('focusin', e => {
     const el = e.target as HTMLElement;
     if (el && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) {
-      setTimeout(() => el.scrollIntoView({ block: 'center', behavior: 'smooth' }), 300);
+      // 'nearest' only scrolls when the field is actually off-screen, and
+      // scrolls the minimum amount — so it never yanks the header away.
+      setTimeout(() => el.scrollIntoView({ block: 'nearest', behavior: 'smooth' }), 300);
     }
   });
 }

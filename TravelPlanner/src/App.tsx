@@ -49,7 +49,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-50 mx-auto max-w-md relative">
-      <main style={{ paddingBottom: 'calc(74px + env(safe-area-inset-bottom))' }}>
+      <main style={{ paddingBottom: 'calc(74px + env(safe-area-inset-bottom, 0px))' }}>
         {view === 'dashboard'     && <DashboardTab onNavigate={go} />}
         {view === 'overview'      && <TripOverviewTab />}
         {view === 'documents'     && <DocumentsTab />}
@@ -67,7 +67,7 @@ export default function App() {
       </main>
 
       {/* Global sync button (floating, top-right, below status bar) */}
-      <div className="fixed right-3 z-50 max-w-md" style={{ top: 'calc(env(safe-area-inset-top) + 8px)' }}>
+      <div className="fixed right-3 z-50 max-w-md" style={{ top: 'calc(env(safe-area-inset-top, 0px) + 8px)' }}>
         <SyncButton />
       </div>
 
@@ -75,7 +75,7 @@ export default function App() {
       {moreOpen && (
         <div className="fixed inset-0 z-[150] bg-black/50 flex items-end" onClick={() => setMoreOpen(false)}>
           <div className="bg-white w-full max-w-md mx-auto rounded-t-3xl p-5 animate-fadeUp"
-            style={{ paddingBottom: 'calc(88px + env(safe-area-inset-bottom))' }} onClick={e => e.stopPropagation()}>
+            style={{ paddingBottom: 'calc(88px + env(safe-area-inset-bottom, 0px))' }} onClick={e => e.stopPropagation()}>
             <div className="w-10 h-1 rounded-full bg-slate-200 mx-auto mb-4" />
             <h2 className="font-bold text-slate-800 text-lg mb-4">All sections</h2>
             <div className="grid grid-cols-3 gap-3">

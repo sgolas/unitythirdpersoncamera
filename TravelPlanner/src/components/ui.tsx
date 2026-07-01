@@ -36,9 +36,16 @@ export function Sheet({ title, onClose, children, footer }: {
   }, [onClose]);
 
   return (
-    <div className="fixed inset-0 z-[200] bg-black/50 flex items-end sm:items-center sm:justify-center" onClick={onClose}>
+    <div
+      className="fixed inset-0 z-[200] bg-black/50 flex items-end sm:items-center sm:justify-center"
+      onClick={onClose}
+      // Reserve the status-bar space at the top; the sheet (max-h-full) is
+      // then capped to the remaining height, so its header + top fields are
+      // always on screen.
+      style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 8px)' }}
+    >
       <div
-        className="bg-white w-full sm:max-w-md sm:rounded-3xl rounded-t-3xl max-h-[92vh] flex flex-col animate-fadeUp"
+        className="bg-white w-full sm:max-w-md sm:rounded-3xl rounded-t-3xl flex flex-col animate-fadeUp overflow-hidden max-h-full"
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 flex-shrink-0">
@@ -47,8 +54,15 @@ export function Sheet({ title, onClose, children, footer }: {
             <X size={20} />
           </button>
         </div>
-        <div className="px-5 py-4 overflow-y-auto flex-1">{children}</div>
-        {footer && <div className="px-5 py-4 border-t border-slate-100 flex-shrink-0">{footer}</div>}
+        {/* min-h-0 lets this actually scroll instead of pushing the header
+            off-screen; sheet-scroll shows a visible scrollbar. */}
+        <div className="px-5 py-4 overflow-y-auto flex-1 min-h-0 sheet-scroll">{children}</div>
+        {footer && (
+          <div className="px-5 py-4 border-t border-slate-100 flex-shrink-0"
+            style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))' }}>
+            {footer}
+          </div>
+        )}
       </div>
     </div>
   );

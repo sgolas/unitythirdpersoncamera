@@ -106,6 +106,30 @@ export async function syncNow(): Promise<SyncResult> {
   };
 }
 
+/**
+ * Read-only pull for the web portal. Authenticates with the trip code +
+ * password and loads the authoritative record set into the local DB without
+ * pushing anything back.
+ */
+export async function pullOnly(tripCode: string, password: string): Promise<SyncResult> {
+  let res: Response;
+  try {
+    res = await fetch(SYNC_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tripCode, password, readOnly: true }),
+    });
+  } catch {
+    return { ok: false, pushed: 0, pulled: 0, message: 'No connection.' };
+  }
+  if (res.status === 401) return { ok: false, pushed: 0, pulled: 0, message: 'Wrong trip code or password.' };
+  if (!res.ok) return { ok: false, pushed: 0, pulled: 0, message: 'Portal server error.' };
+
+  const data = await res.json() as { records: RelayRecord[] };
+  const pulled = await applyRemote(data.records ?? []);
+  return { ok: true, pushed: 0, pulled, message: `Loaded ${data.records?.length ?? 0} items` };
+}
+
 /** Wipe local data (keeps device name). Used by "reset" in settings. */
 export async function wipeLocal() {
   await Promise.all(ENTITY_KINDS.map(k => tableFor(k).clear()));

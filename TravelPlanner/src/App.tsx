@@ -5,6 +5,7 @@ import {
   Map as MapIcon, Images,
 } from 'lucide-react';
 import { SyncButton } from './components/SyncButton';
+import { StitchIcon } from './components/StitchIcon';
 
 import { DashboardTab } from './components/tabs/DashboardTab';
 import { TripOverviewTab } from './components/tabs/TripOverviewTab';
@@ -67,7 +68,8 @@ export default function App() {
       </main>
 
       {/* Global sync button (floating, top-right, below status bar) */}
-      <div className="fixed right-3 z-50 max-w-md" style={{ top: 'calc(env(safe-area-inset-top, 0px) + 8px)' }}>
+      <div className="fixed right-3 z-50 flex items-start gap-1.5" style={{ top: 'calc(env(safe-area-inset-top, 0px) + 8px)' }}>
+        <StitchIcon />
         <SyncButton />
       </div>
 

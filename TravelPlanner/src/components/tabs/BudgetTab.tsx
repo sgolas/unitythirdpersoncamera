@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useBudget, useExpenses, useTrip } from '../../hooks/useTrip';
 import { put } from '../../db/database';
 import type { BudgetLine, ExpenseCategory, TripMeta } from '../../types';
-import { money, moneyHome, moneyAway } from '../../types';
+import { money, moneyHome, moneyAway, sumExpenses } from '../../types';
 import { convert, getHomeCurrency } from '../../lib/currency';
 import { TabHeader, Sheet, Field, TextInput, FormFooter } from '../ui';
 
@@ -26,9 +26,9 @@ export function BudgetTab() {
   const cur = trip.tripCurrency;
 
   const plannedFor = (c: ExpenseCategory) => budget.find(b => b.category === c)?.planned ?? 0;
-  const spentFor = (c: ExpenseCategory) => expenses.filter(e => e.category === c).reduce((s, e) => s + e.amount, 0);
+  const spentFor = (c: ExpenseCategory) => sumExpenses(expenses.filter(e => e.category === c), cur);
 
-  const totalSpent = expenses.reduce((s, e) => s + e.amount, 0);
+  const totalSpent = sumExpenses(expenses, cur);
   const totalBudget = trip.totalBudget;
   const remaining = totalBudget - totalSpent;
   const pct = totalBudget > 0 ? Math.min(100, (totalSpent / totalBudget) * 100) : 0;

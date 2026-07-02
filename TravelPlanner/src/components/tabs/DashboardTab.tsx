@@ -7,7 +7,7 @@ import {
   useTrip, useChecklist, useExpenses, useTransport, useAccommodation,
   useItinerary, useTravelers,
 } from '../../hooks/useTrip';
-import { money, moneyHome, moneyAway } from '../../types';
+import { money, moneyHome, moneyAway, sumExpenses } from '../../types';
 import type { Transport, Accommodation } from '../../types';
 import { daysUntil, fmtDate, fmtStamp, fmtTime, todayStr, tripLength } from '../../utils/format';
 import { getLastSync } from '../../lib/config';
@@ -34,7 +34,7 @@ export function DashboardTab({ onNavigate }: { onNavigate: (v: any) => void }) {
   if (!trip) return null;
 
   const days = daysUntil(trip.startDate);
-  const spent = expenses.reduce((s, e) => s + e.amount, 0);
+  const spent = sumExpenses(expenses, trip.tripCurrency);
   const done = checklist.filter(c => c.done).length;
   const lastSync = getLastSync();
   const cur = trip.tripCurrency;

@@ -8,7 +8,7 @@ import {
   useTrip, useTravelers, useItinerary, useTransport, useAccommodation,
   useDocuments, useExpenses, useChecklist, useBudget, usePhotos,
 } from '../hooks/useTrip';
-import { money } from '../types';
+import { money, sumExpenses } from '../types';
 import { fmtDate, fmtDateLong, fmtTime, tripLength, daysUntil, dateRange } from '../utils/format';
 
 const SS_CODE = 'portal.code';
@@ -145,7 +145,7 @@ function PortalView() {
     );
   }
   const cur = trip.tripCurrency;
-  const spent = expenses.reduce((s, e) => s + e.amount, 0);
+  const spent = sumExpenses(expenses, cur);
   const days = daysUntil(trip.startDate);
 
   return (

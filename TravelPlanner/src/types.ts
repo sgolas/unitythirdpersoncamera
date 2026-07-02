@@ -212,3 +212,8 @@ export function moneyAway(amount: number, currency: string): string {
   const away = getAwayCurrency();
   return money1(convert(amount, currency, away), away);
 }
+
+/** Sum items that may each be in a different currency into one currency. */
+export function sumExpenses(items: { amount: number; currency: string }[], to: string): number {
+  return items.reduce((s, e) => s + convert(e.amount, e.currency, to), 0);
+}

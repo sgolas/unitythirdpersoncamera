@@ -3,7 +3,7 @@ import { Trash2 } from 'lucide-react';
 import { useExpenses, useTravelers, useTrip, travelerName } from '../../hooks/useTrip';
 import { put, remove } from '../../db/database';
 import type { Expense, ExpenseCategory } from '../../types';
-import { money } from '../../types';
+import { money, sumExpenses, CURRENCY_SYMBOLS } from '../../types';
 import { fmtDate, todayStr } from '../../utils/format';
 import { TabHeader, Sheet, Field, TextInput, TextArea, Select, FormFooter, Fab, EmptyState, ConfirmDelete } from '../ui';
 import { PlaceInput } from '../PlaceInput';
@@ -27,10 +27,10 @@ export function ExpensesTab() {
   const [pendingDelete, setPendingDelete] = useState<Expense | null>(null);
 
   const cur = trip?.tripCurrency ?? 'EUR';
-  const total = expenses.reduce((s, e) => s + e.amount, 0);
+  const total = sumExpenses(expenses, cur);
 
   const byCat = CATS.map(c => ({
-    ...c, sum: expenses.filter(e => e.category === c.key).reduce((s, e) => s + e.amount, 0),
+    ...c, sum: sumExpenses(expenses.filter(e => e.category === c.key), cur),
   })).filter(c => c.sum > 0);
 
   return (
@@ -97,6 +97,7 @@ function ExpenseSheet({ expense, travelers, currency, onClose }: {
 }) {
   const [title, setTitle] = useState(expense?.title ?? '');
   const [amount, setAmount] = useState(expense ? String(expense.amount) : '');
+  const [curSel, setCurSel] = useState(expense?.currency ?? currency);
   const [category, setCategory] = useState<ExpenseCategory>(expense?.category ?? 'food');
   const [date, setDate] = useState(expense?.date ?? todayStr());
   const [paidBy, setPaidBy] = useState(expense?.paidBy ?? '');
@@ -109,10 +110,10 @@ function ExpenseSheet({ expense, travelers, currency, onClose }: {
     const isNew = !expense;
     await put<Expense>({
       kind: 'expense', id: expense?.id ?? crypto.randomUUID(),
-      title: title.trim(), amount: amt, currency, category, date,
+      title: title.trim(), amount: amt, currency: curSel, category, date,
       paidBy: paidBy || null, place: place.trim(), notes: notes.trim(),
       updatedAt: '', updatedBy: '',
-    }, `${isNew ? 'Added' : 'Updated'} expense: ${title.trim()} (${money(amt, currency)})`, isNew ? 'create' : 'update');
+    }, `${isNew ? 'Added' : 'Updated'} expense: ${title.trim()} (${money(amt, curSel)})`, isNew ? 'create' : 'update');
     onClose();
   }
 
@@ -121,9 +122,17 @@ function ExpenseSheet({ expense, travelers, currency, onClose }: {
       footer={<FormFooter onCancel={onClose} onSubmit={save} disabled={!title.trim() || !amount} submitLabel={expense ? 'Save' : 'Add expense'} />}>
       <Field label="What was it?"><TextInput autoFocus value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. Dinner in Rome" /></Field>
       <div className="grid grid-cols-2 gap-3">
-        <Field label={`Amount (${currency})`}><TextInput type="number" inputMode="decimal" value={amount} onChange={e => setAmount(e.target.value)} placeholder="0.00" /></Field>
-        <Field label="Date"><TextInput type="date" value={date} onChange={e => setDate(e.target.value)} /></Field>
+        <Field label="Amount"><TextInput type="number" inputMode="decimal" value={amount} onChange={e => setAmount(e.target.value)} placeholder="0.00" /></Field>
+        <Field label="Currency">
+          <Select value={curSel} onChange={e => setCurSel(e.target.value)}>
+            {Object.keys(CURRENCY_SYMBOLS).map(c => <option key={c} value={c}>{c} {CURRENCY_SYMBOLS[c].trim()}</option>)}
+          </Select>
+        </Field>
       </div>
+      {amount && parseFloat(amount) > 0 && (
+        <p className="text-sm text-slate-500 -mt-2 mb-1">Saved as <b className="text-slate-700">{money(parseFloat(amount), curSel)}</b></p>
+      )}
+      <Field label="Date"><TextInput type="date" value={date} onChange={e => setDate(e.target.value)} /></Field>
       <Field label="Category">
         <Select value={category} onChange={e => setCategory(e.target.value as ExpenseCategory)}>
           {CATS.map(c => <option key={c.key} value={c.key}>{c.emoji} {c.label}</option>)}

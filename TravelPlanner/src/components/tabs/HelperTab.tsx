@@ -2,7 +2,7 @@ import {
   useTrip, useDocuments, useChecklist, useAccommodation, useExpenses,
   useTransport, useItinerary,
 } from '../../hooks/useTrip';
-import { money } from '../../types';
+import { money, sumExpenses } from '../../types';
 import { daysUntil, dateRange, fmtDate } from '../../utils/format';
 import { TabHeader } from '../ui';
 
@@ -57,7 +57,7 @@ export function HelperTab({ onNavigate }: { onNavigate: (v: any) => void }) {
     insights.push({ tone: 'warn', icon: '✈️', text: `No transport booked — add your flights/trains.`, nav: 'transport' });
 
   // Budget
-  const spent = expenses.reduce((s, e) => s + e.amount, 0);
+  const spent = sumExpenses(expenses, trip.tripCurrency);
   if (trip.totalBudget > 0) {
     const pct = (spent / trip.totalBudget) * 100;
     if (pct >= 100) insights.push({ tone: 'alert', icon: '💸', text: `You're over budget by ${money(spent - trip.totalBudget, trip.tripCurrency)}.`, nav: 'budget' });

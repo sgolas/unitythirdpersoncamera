@@ -3,7 +3,7 @@ import { Pencil } from 'lucide-react';
 import { useTrip, useTravelers, useExpenses, useTransport, useAccommodation, useItinerary, useChecklist } from '../../hooks/useTrip';
 import { put } from '../../db/database';
 import type { TripMeta } from '../../types';
-import { money, CURRENCY_SYMBOLS } from '../../types';
+import { money, CURRENCY_SYMBOLS, sumExpenses } from '../../types';
 import { fmtDateLong, tripLength, daysUntil } from '../../utils/format';
 import { TabHeader, Sheet, Field, TextInput, TextArea, Select, FormFooter } from '../ui';
 
@@ -18,7 +18,7 @@ export function TripOverviewTab() {
   const [editing, setEditing] = useState(false);
 
   if (!trip) return null;
-  const spent = expenses.reduce((s, e) => s + e.amount, 0);
+  const spent = sumExpenses(expenses, trip.tripCurrency);
   const days = daysUntil(trip.startDate);
 
   const stats = [

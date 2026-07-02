@@ -5,7 +5,7 @@ import { put, remove } from '../../db/database';
 import type { Accommodation } from '../../types';
 import { money } from '../../types';
 import { fmtDate, todayStr, tripLength } from '../../utils/format';
-import { TabHeader, Sheet, Field, TextInput, TextArea, FormFooter, Fab, EmptyState, ConfirmDelete } from '../ui';
+import { TabHeader, Sheet, Field, TextInput, TextArea, FormFooter, Fab, EmptyState, ConfirmDelete, CostField } from '../ui';
 import { PlaceInput } from '../PlaceInput';
 
 export function AccommodationTab() {
@@ -55,7 +55,7 @@ export function AccommodationTab() {
                 <div className="flex items-center gap-3 mt-2 text-xs text-slate-500">
                   {s.contact && <span className="flex items-center gap-1"><Phone size={11} /> {s.contact}</span>}
                   {s.confirmation && <span>🎫 {s.confirmation}</span>}
-                  {s.cost > 0 && <span className="ml-auto font-semibold text-slate-700">{money(s.cost, cur)}</span>}
+                  {s.cost > 0 && <span className="ml-auto font-semibold text-slate-700">{money(s.cost, s.costCurrency ?? cur)}</span>}
                 </div>
               </div>
             );
@@ -86,6 +86,7 @@ function StaySheet({ stay, currency, onClose }: { stay: Accommodation | null; cu
   const [confirmation, setConfirmation] = useState(stay?.confirmation ?? '');
   const [contact, setContact] = useState(stay?.contact ?? '');
   const [cost, setCost] = useState(stay ? String(stay.cost || '') : '');
+  const [costCurrency, setCostCurrency] = useState(stay?.costCurrency ?? currency);
   const [notes, setNotes] = useState(stay?.notes ?? '');
 
   async function save() {
@@ -95,7 +96,7 @@ function StaySheet({ stay, currency, onClose }: { stay: Accommodation | null; cu
       kind: 'accommodation', id: stay?.id ?? crypto.randomUUID(),
       name: name.trim(), city: city.trim(), address: address.trim(),
       checkIn, checkOut, confirmation: confirmation.trim(), contact: contact.trim(),
-      cost: parseFloat(cost) || 0, notes: notes.trim(),
+      cost: parseFloat(cost) || 0, costCurrency, notes: notes.trim(),
       updatedAt: '', updatedBy: '',
     }, `${isNew ? 'Added' : 'Updated'} stay: ${name.trim()}`, isNew ? 'create' : 'update');
     onClose();
@@ -111,10 +112,8 @@ function StaySheet({ stay, currency, onClose }: { stay: Accommodation | null; cu
         <Field label="Check in"><TextInput type="date" value={checkIn} onChange={e => setCheckIn(e.target.value)} /></Field>
         <Field label="Check out"><TextInput type="date" value={checkOut} onChange={e => setCheckOut(e.target.value)} /></Field>
       </div>
-      <div className="grid grid-cols-2 gap-3">
-        <Field label="Confirmation"><TextInput value={confirmation} onChange={e => setConfirmation(e.target.value)} placeholder="Optional" /></Field>
-        <Field label={`Cost (${currency})`}><TextInput type="number" inputMode="decimal" value={cost} onChange={e => setCost(e.target.value)} placeholder="0.00" /></Field>
-      </div>
+      <Field label="Confirmation"><TextInput value={confirmation} onChange={e => setConfirmation(e.target.value)} placeholder="Optional" /></Field>
+      <CostField value={cost} onChange={setCost} currency={costCurrency} onCurrencyChange={setCostCurrency} />
       <Field label="Contact"><TextInput value={contact} onChange={e => setContact(e.target.value)} placeholder="Phone / email" /></Field>
       <Field label="Notes"><TextArea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Optional" /></Field>
     </Sheet>

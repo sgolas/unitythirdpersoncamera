@@ -5,7 +5,7 @@ import { put, remove } from '../../db/database';
 import type { Transport, TransportMode } from '../../types';
 import { money } from '../../types';
 import { fmtDate, fmtTime, todayStr } from '../../utils/format';
-import { TabHeader, Sheet, Field, TextInput, TextArea, Select, FormFooter, Fab, EmptyState, ConfirmDelete } from '../ui';
+import { TabHeader, Sheet, Field, TextInput, TextArea, Select, FormFooter, Fab, EmptyState, ConfirmDelete, CostField } from '../ui';
 import { PlaceInput } from '../PlaceInput';
 
 const MODES: { key: TransportMode; label: string; emoji: string }[] = [
@@ -63,7 +63,7 @@ export function TransportTab() {
                   <div className="flex gap-3 mt-3 pt-3 border-t border-slate-100 text-xs text-slate-500">
                     {l.confirmation && <span>🎫 {l.confirmation}</span>}
                     {l.seat && <span>💺 {l.seat}</span>}
-                    {l.cost > 0 && <span className="ml-auto font-semibold text-slate-700">{money(l.cost, cur)}</span>}
+                    {l.cost > 0 && <span className="ml-auto font-semibold text-slate-700">{money(l.cost, l.costCurrency ?? cur)}</span>}
                   </div>
                 )}
               </div>
@@ -98,6 +98,7 @@ function TransportSheet({ leg, currency, onClose }: { leg: Transport | null; cur
   const [confirmation, setConfirmation] = useState(leg?.confirmation ?? '');
   const [seat, setSeat] = useState(leg?.seat ?? '');
   const [cost, setCost] = useState(leg ? String(leg.cost || '') : '');
+  const [costCurrency, setCostCurrency] = useState(leg?.costCurrency ?? currency);
   const [notes, setNotes] = useState(leg?.notes ?? '');
 
   async function save() {
@@ -107,7 +108,8 @@ function TransportSheet({ leg, currency, onClose }: { leg: Transport | null; cur
       kind: 'transport', id: leg?.id ?? crypto.randomUUID(),
       mode, provider: provider.trim(), fromPlace: fromPlace.trim(), toPlace: toPlace.trim(),
       departDate, departTime, arriveDate, arriveTime,
-      confirmation: confirmation.trim(), seat: seat.trim(), cost: parseFloat(cost) || 0, notes: notes.trim(),
+      confirmation: confirmation.trim(), seat: seat.trim(),
+      cost: parseFloat(cost) || 0, costCurrency, notes: notes.trim(),
       updatedAt: '', updatedBy: '',
     }, `${isNew ? 'Added' : 'Updated'} ${mode}: ${fromPlace.trim()} → ${toPlace.trim()}`, isNew ? 'create' : 'update');
     onClose();
@@ -140,7 +142,7 @@ function TransportSheet({ leg, currency, onClose }: { leg: Transport | null; cur
         <Field label="Confirmation"><TextInput value={confirmation} onChange={e => setConfirmation(e.target.value)} placeholder="Booking ref" /></Field>
         <Field label="Seat"><TextInput value={seat} onChange={e => setSeat(e.target.value)} placeholder="Optional" /></Field>
       </div>
-      <Field label={`Cost (${currency})`}><TextInput type="number" inputMode="decimal" value={cost} onChange={e => setCost(e.target.value)} placeholder="0.00" /></Field>
+      <CostField value={cost} onChange={setCost} currency={costCurrency} onCurrencyChange={setCostCurrency} />
       <Field label="Notes"><TextArea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Optional" /></Field>
     </Sheet>
   );

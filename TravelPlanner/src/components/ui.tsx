@@ -2,6 +2,7 @@
 import { useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
+import { money, CURRENCY_SYMBOLS } from '../types';
 
 /**
  * Render fixed overlays (sheets, dialogs) at <body> so they escape any
@@ -95,6 +96,31 @@ export function Field({ label, children }: { label: string; children: React.Reac
       <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">{label}</span>
       <div className="mt-1">{children}</div>
     </label>
+  );
+}
+
+/** Cost/amount input paired with a currency dropdown + live dual preview. */
+export function CostField({ label = 'Cost', value, onChange, currency, onCurrencyChange }: {
+  label?: string; value: string; onChange: (v: string) => void;
+  currency: string; onCurrencyChange: (c: string) => void;
+}) {
+  const amt = parseFloat(value);
+  return (
+    <>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label={label}>
+          <TextInput type="number" inputMode="decimal" value={value} onChange={e => onChange(e.target.value)} placeholder="0.00" />
+        </Field>
+        <Field label="Currency">
+          <Select value={currency} onChange={e => onCurrencyChange(e.target.value)}>
+            {Object.keys(CURRENCY_SYMBOLS).map(c => <option key={c} value={c}>{c} {CURRENCY_SYMBOLS[c].trim()}</option>)}
+          </Select>
+        </Field>
+      </div>
+      {amt > 0 && (
+        <p className="text-sm text-slate-500 -mt-2 mb-3">Saved as <b className="text-slate-700">{money(amt, currency)}</b></p>
+      )}
+    </>
   );
 }
 

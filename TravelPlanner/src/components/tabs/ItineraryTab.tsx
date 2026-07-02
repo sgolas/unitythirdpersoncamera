@@ -4,8 +4,9 @@ import { useItinerary, useTrip } from '../../hooks/useTrip';
 import { put, remove } from '../../db/database';
 import type { ItineraryEvent } from '../../types';
 import { money } from '../../types';
+import { convert } from '../../lib/currency';
 import { fmtDate, fmtTime, fmtDateLong, dateRange, todayStr } from '../../utils/format';
-import { TabHeader, Sheet, Field, TextInput, TextArea, Select, FormFooter, Fab, EmptyState, ConfirmDelete } from '../ui';
+import { TabHeader, Sheet, Field, TextInput, TextArea, Select, FormFooter, Fab, EmptyState, ConfirmDelete, CostField } from '../ui';
 import { PlaceInput } from '../PlaceInput';
 
 const CATS = [
@@ -35,7 +36,7 @@ export function ItineraryTab() {
   const cur = trip?.tripCurrency ?? 'EUR';
   const days = trip ? dateRange(trip.startDate, trip.endDate) : [];
   const dayEvents = events.filter(e => e.date === selectedDate);
-  const dayCost = dayEvents.reduce((s, e) => s + (e.cost || 0), 0);
+  const dayCost = dayEvents.reduce((s, e) => s + convert(e.cost || 0, e.costCurrency ?? cur, cur), 0);
 
   return (
     <div className="animate-fadeUp">
@@ -94,7 +95,7 @@ export function ItineraryTab() {
                       <span className="flex items-center gap-1"><Clock size={11} />{fmtTime(ev.startTime)}{ev.endTime ? ` – ${fmtTime(ev.endTime)}` : ''}</span>
                     )}
                     {ev.place && <span className="flex items-center gap-1"><MapPin size={11} />{ev.place}</span>}
-                    {ev.cost > 0 && <span className="font-semibold text-amber">{money(ev.cost, cur)}</span>}
+                    {ev.cost > 0 && <span className="font-semibold text-amber">{money(ev.cost, ev.costCurrency ?? cur)}</span>}
                   </div>
                   {ev.notes && <p className="text-xs text-slate-400 mt-1.5">{ev.notes}</p>}
                 </div>
@@ -126,6 +127,7 @@ function EventSheet({ event, defaultDate, currency, onClose }: { event: Itinerar
   const [place, setPlace] = useState(event?.place ?? '');
   const [category, setCategory] = useState<Cat>((event?.category as Cat) ?? 'sightseeing');
   const [cost, setCost] = useState(event ? String(event.cost || '') : '');
+  const [costCurrency, setCostCurrency] = useState(event?.costCurrency ?? currency);
   const [notes, setNotes] = useState(event?.notes ?? '');
 
   async function save() {
@@ -134,7 +136,7 @@ function EventSheet({ event, defaultDate, currency, onClose }: { event: Itinerar
     await put<ItineraryEvent>({
       kind: 'itinerary', id: event?.id ?? crypto.randomUUID(),
       title: title.trim(), date, startTime, endTime, place: place.trim(), category,
-      cost: parseFloat(cost) || 0, notes: notes.trim(),
+      cost: parseFloat(cost) || 0, costCurrency, notes: notes.trim(),
       updatedAt: '', updatedBy: '',
     }, `${isNew ? 'Added' : 'Updated'} event: ${title.trim()} on ${fmtDate(date)}`, isNew ? 'create' : 'update');
     onClose();
@@ -154,10 +156,8 @@ function EventSheet({ event, defaultDate, currency, onClose }: { event: Itinerar
           {CATS.map(c => <option key={c.key} value={c.key}>{c.emoji} {c.label}</option>)}
         </Select>
       </Field>
-      <div className="grid grid-cols-2 gap-3">
-        <Field label="Location"><PlaceInput value={place} onChange={setPlace} placeholder="Search a location…" /></Field>
-        <Field label={`Cost (${currency})`}><TextInput type="number" inputMode="decimal" value={cost} onChange={e => setCost(e.target.value)} placeholder="0.00" /></Field>
-      </div>
+      <Field label="Location"><PlaceInput value={place} onChange={setPlace} placeholder="Search a location…" /></Field>
+      <CostField value={cost} onChange={setCost} currency={costCurrency} onCurrencyChange={setCostCurrency} />
       <Field label="Notes"><TextArea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Optional" /></Field>
     </Sheet>
   );

@@ -74,6 +74,7 @@ export interface Transport extends SyncMeta {
   confirmation: string;      // booking reference
   seat: string;
   cost: number;
+  costCurrency?: string;     // currency of `cost` (defaults to trip currency)
   notes: string;
 }
 
@@ -87,6 +88,7 @@ export interface Accommodation extends SyncMeta {
   checkOut: ISODate;
   confirmation: string;
   cost: number;
+  costCurrency?: string;     // currency of `cost` (defaults to trip currency)
   contact: string;           // phone / email
   notes: string;
 }
@@ -117,6 +119,7 @@ export interface ItineraryEvent extends SyncMeta {
   place: string;
   category: 'sightseeing' | 'food' | 'travel' | 'rest' | 'event' | 'other';
   cost: number;          // estimated / actual cost for this activity
+  costCurrency?: string; // currency of `cost` (defaults to trip currency)
   notes: string;
 }
 

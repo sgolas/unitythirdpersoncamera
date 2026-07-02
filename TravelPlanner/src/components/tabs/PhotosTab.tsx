@@ -5,6 +5,7 @@ import { put, remove } from '../../db/database';
 import type { TripPhoto } from '../../types';
 import { fmtStamp, todayStr } from '../../utils/format';
 import { getSyncCode, getSyncPass, isSyncConfigured, PHOTO_ENDPOINT } from '../../lib/config';
+import { isNative } from '../../lib/platform';
 import { TabHeader, Sheet, Field, TextInput, FormFooter, EmptyState, Fab, ConfirmDelete } from '../ui';
 import { PlaceInput } from '../PlaceInput';
 
@@ -148,12 +149,30 @@ function UploadSheet({ file, defaultFolder, onClose }: { file: File; defaultFold
   const [err, setErr] = useState('');
   const [locating, setLocating] = useState(false);
 
-  function useMyLocation() {
-    if (!navigator.geolocation) { setErr('Device location isn’t available — search a place above instead.'); return; }
+  async function useMyLocation() {
     setLocating(true); setErr('');
+    // Native: use the Geolocation plugin, which shows the OS permission popup.
+    if (isNative) {
+      try {
+        const { Geolocation } = await import('@capacitor/geolocation');
+        let perm = await Geolocation.checkPermissions();
+        if (perm.location !== 'granted') perm = await Geolocation.requestPermissions();
+        if (perm.location !== 'granted') {
+          setErr('Location permission denied. Enable it in Settings, or search a place above.');
+          setLocating(false); return;
+        }
+        const pos = await Geolocation.getCurrentPosition({ enableHighAccuracy: true, timeout: 10000 });
+        setCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+        setLocating(false); return;
+      } catch {
+        // Plugin missing on an older install, or GPS unavailable → fall through.
+      }
+    }
+    // Web / fallback.
+    if (!navigator.geolocation) { setErr('Device location isn’t available — search a place above instead.'); setLocating(false); return; }
     navigator.geolocation.getCurrentPosition(
       pos => { setCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude }); setLocating(false); },
-      () => { setErr('Device location is off for this app — search a place above to tag it instead.'); setLocating(false); },
+      () => { setErr('Update the app to the newest version for GPS, or search a place above to tag it.'); setLocating(false); },
       { enableHighAccuracy: true, timeout: 8000 },
     );
   }

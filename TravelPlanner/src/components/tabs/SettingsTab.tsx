@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Smartphone, KeyRound, RefreshCw, Globe, Trash2, Check, Download, Palette, Sun, Moon, Monitor, Coins, AlertTriangle } from 'lucide-react';
+import { Smartphone, KeyRound, RefreshCw, Globe, Trash2, Check, Download, Palette, Sun, Moon, Monitor, Coins, AlertTriangle, Github, ShieldCheck } from 'lucide-react';
 import { getOtaStatus, runOTA } from '../../lib/ota';
 import { isNative } from '../../lib/platform';
 import { getMode, setMode, getAccent, setAccent, ACCENTS, type ThemeMode, type Accent } from '../../lib/theme';
@@ -11,7 +11,7 @@ import { money } from '../../types';
 import type { TripMeta } from '../../types';
 import { getDeviceName, setDeviceName, put } from '../../db/database';
 import { getSyncCode, getSyncPass, setSyncCredentials, getLastSync, isSyncConfigured } from '../../lib/config';
-import { syncNow, wipeLocal } from '../../db/sync';
+import { syncNow, wipeLocal, backupToGitHub } from '../../db/sync';
 import { fmtStamp } from '../../utils/format';
 import { TabHeader, Field, TextInput, PrimaryButton, GhostButton } from '../ui';
 
@@ -40,6 +40,14 @@ export function SettingsTab() {
   const [ota, setOta] = useState(getOtaStatus());
   const [otaBusy, setOtaBusy] = useState(false);
   const [bundleVer, setBundleVer] = useState('');
+  const [backupBusy, setBackupBusy] = useState(false);
+  const [backupMsg, setBackupMsg] = useState('');
+
+  async function backupNow() {
+    setBackupBusy(true); setBackupMsg('');
+    const r = await backupToGitHub();
+    setBackupBusy(false); setBackupMsg(r.message);
+  }
 
   const lastSync = getLastSync();
 
@@ -181,6 +189,20 @@ export function SettingsTab() {
               {lastSync ? `Last synced ${fmtStamp(lastSync)}` : 'Tap Sync to publish your data to the portal.'}
             </p>
           )}
+        </div>
+
+        {/* GitHub backup */}
+        <div className="bg-white rounded-2xl p-4 shadow-sm">
+          <p className="flex items-center gap-2 font-semibold text-slate-800 mb-2"><Github size={16} /> GitHub backup</p>
+          <p className="text-sm text-slate-500 leading-snug">
+            Every sync also commits a permanent snapshot of your trip and photos to GitHub. Because git keeps full
+            history, <b>nothing you delete in the app can be erased from the backup</b>.
+          </p>
+          <button onClick={backupNow} disabled={backupBusy || !isSyncConfigured()}
+            className="w-full mt-3 py-2.5 rounded-2xl font-semibold text-white bg-ink active:scale-[0.98] disabled:opacity-40 transition flex items-center justify-center gap-2">
+            <ShieldCheck size={16} /> {backupBusy ? 'Backing up…' : 'Back up to GitHub now'}
+          </button>
+          {backupMsg && <p className="text-center text-sm mt-2 text-slate-600">{backupMsg}</p>}
         </div>
 
         {/* App updates (OTA) */}

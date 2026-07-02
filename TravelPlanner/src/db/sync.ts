@@ -9,7 +9,7 @@
 import { db, tableFor, getDeviceName, logChange } from './database';
 import type { AnyRecord, EntityKind } from '../types';
 import {
-  getSyncCode, getSyncPass, isSyncConfigured, setLastSync, SYNC_ENDPOINT,
+  getSyncCode, getSyncPass, isSyncConfigured, setLastSync, SYNC_ENDPOINT, BACKUP_ENDPOINT,
 } from '../lib/config';
 
 const ENTITY_KINDS: EntityKind[] = [
@@ -89,6 +89,9 @@ export async function syncNow(): Promise<SyncResult> {
   const data = await res.json() as { records: RelayRecord[]; accepted: number };
   const pulled = await applyRemote(data.records ?? []);
 
+  // Fire-and-forget an immutable GitHub backup. Never blocks or fails the sync.
+  backupToGitHub();
+
   const now = new Date().toISOString();
   setLastSync(now);
   await logChange({
@@ -104,6 +107,37 @@ export async function syncNow(): Promise<SyncResult> {
     pulled,
     message: pulled === 0 ? 'Everyone is up to date ✓' : `Pulled ${pulled} update${pulled === 1 ? '' : 's'} from other devices`,
   };
+}
+
+export interface BackupResult { ok: boolean; message: string; }
+
+/**
+ * Commit an immutable snapshot (records + photos) to GitHub via the backup
+ * relay. Safe to call fire-and-forget: it swallows errors and returns a status
+ * for the manual "Back up now" button in Settings.
+ */
+export async function backupToGitHub(): Promise<BackupResult> {
+  if (!isSyncConfigured()) return { ok: false, message: 'Set a trip code first.' };
+  try {
+    const res = await fetch(BACKUP_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tripCode: getSyncCode(), password: getSyncPass() }),
+    });
+    if (res.status === 503) return { ok: false, message: 'GitHub backup isn’t switched on yet.' };
+    if (res.status === 401) return { ok: false, message: 'Wrong trip code or password.' };
+    if (res.status === 404) return { ok: false, message: 'Tap Sync once before backing up.' };
+    if (!res.ok) return { ok: false, message: 'Backup server error. Try again shortly.' };
+    const d = await res.json() as { changed: boolean; records: number; newPhotos: number };
+    return {
+      ok: true,
+      message: d.changed
+        ? `Backed up to GitHub — ${d.records} records${d.newPhotos ? `, +${d.newPhotos} photos` : ''} ✓`
+        : 'GitHub backup already up to date ✓',
+    };
+  } catch {
+    return { ok: false, message: 'No connection for backup.' };
+  }
 }
 
 /**

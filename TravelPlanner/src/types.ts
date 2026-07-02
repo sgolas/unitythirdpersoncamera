@@ -23,7 +23,8 @@ export interface Traveler extends SyncMeta {
   kind: 'traveler';
   name: string;
   role: 'adult' | 'child';
-  emoji: string;         // avatar emoji
+  emoji: string;         // avatar emoji (fallback when no photo)
+  photo?: string;        // optional profile-picture URL (uploaded like trip photos)
 }
 
 /* ── 1. Travel Documents ────────────────────────────────────── */

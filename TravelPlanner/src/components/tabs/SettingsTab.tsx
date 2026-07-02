@@ -10,6 +10,7 @@ import { useTrip } from '../../hooks/useTrip';
 import { money } from '../../types';
 import type { TripMeta } from '../../types';
 import { getDeviceName, setDeviceName, put } from '../../db/database';
+import { TravelersManager } from '../TravelersManager';
 import { getSyncCode, getSyncPass, setSyncCredentials, getLastSync, isSyncConfigured } from '../../lib/config';
 import { syncNow, wipeLocal, backupToGitHub } from '../../db/sync';
 import { fmtStamp } from '../../utils/format';
@@ -109,6 +110,9 @@ export function SettingsTab() {
             ))}
           </div>
         </div>
+
+        {/* Travellers — add/remove people + profile pictures */}
+        <TravelersManager />
 
         {/* Currencies — home + away, both always shown together */}
         <div className="bg-white rounded-2xl p-4 shadow-sm">

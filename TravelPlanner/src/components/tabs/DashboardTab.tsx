@@ -91,7 +91,10 @@ export function DashboardTab({ onNavigate }: { onNavigate: (v: any) => void }) {
             <div className="flex gap-1.5 mt-4 flex-wrap">
               {travelers.map(t => (
                 <div key={t.id} className="flex items-center gap-1.5 glass px-2.5 py-1 rounded-full text-sm">
-                  <span>{t.emoji}</span><span className="text-white/90 text-xs font-medium">{t.name}</span>
+                  {t.photo
+                    ? <img src={t.photo} alt="" className="w-5 h-5 rounded-full object-cover" />
+                    : <span>{t.emoji}</span>}
+                  <span className="text-white/90 text-xs font-medium">{t.name}</span>
                 </div>
               ))}
             </div>

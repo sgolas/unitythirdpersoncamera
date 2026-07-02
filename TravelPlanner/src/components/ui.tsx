@@ -141,9 +141,9 @@ export function EmptyState({ emoji, title, hint }: { emoji: string; title: strin
 /* ── Floating add button ────────────────────────────────────── */
 export function Fab({ onClick, label }: { onClick: () => void; label: string }) {
   return (
-    <button onClick={onClick}
-      className="fixed bottom-24 right-4 z-40 flex items-center gap-2 px-5 py-3.5 rounded-2xl bg-ink text-white font-semibold shadow-xl shadow-ink/30 active:scale-95 transition">
-      <span className="text-lg leading-none">＋</span> {label}
+    <button onClick={onClick} aria-label={label} title={label}
+      className="fixed bottom-24 right-4 z-40 w-11 h-11 rounded-full bg-ink/90 text-white shadow-lg shadow-ink/25 active:scale-90 transition flex items-center justify-center backdrop-blur">
+      <span className="text-xl leading-none -mt-0.5">＋</span>
     </button>
   );
 }

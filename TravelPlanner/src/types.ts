@@ -143,16 +143,17 @@ export interface TripMeta extends SyncMeta {
   notes: string;
 }
 
-/* ── Photos (uploaded online, time + location stamped) ──────── */
+/* ── Photos & files (stored locally, synced to the group) ───── */
 export interface TripPhoto extends SyncMeta {
   kind: 'photo';
-  url: string;            // Supabase Storage public URL
+  data?: string;          // local-first image as a data: URI (synced to all)
+  url?: string;           // legacy: Supabase Storage URL (older cloud photos)
   caption: string;
   place: string;          // optional location label
   lat: number | null;     // optional GPS
   lng: number | null;
-  takenAt: ISOStamp;      // capture/upload time
-  folder: string;         // grouping folder (defaults to the date)
+  takenAt: ISOStamp;      // capture time
+  folder: string;         // grouping folder (e.g. Documents, Bills, Recipes)
 }
 
 /* ── Change Log ─────────────────────────────────────────────── */

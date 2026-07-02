@@ -388,7 +388,7 @@ function PortalPhotos({ photos }: { photos: any[] }) {
               <button key={f} onClick={() => setFolder(f)}
                 className="rounded-2xl overflow-hidden bg-white shadow-sm text-left active:scale-[0.98] transition">
                 <div className="aspect-square bg-slate-100">
-                  {inF[0] && <img src={inF[0].url} alt="" className="w-full h-full object-cover" loading="lazy" />}
+                  {inF[0] && <img src={inF[0].data || inF[0].url} alt="" className="w-full h-full object-cover" loading="lazy" />}
                 </div>
                 <div className="p-2.5">
                   <p className="font-semibold text-slate-800 text-sm truncate">📁 {f}</p>
@@ -401,9 +401,9 @@ function PortalPhotos({ photos }: { photos: any[] }) {
       ) : (
         <div className="grid grid-cols-3 gap-1.5">
           {shown.map(p => (
-            <a key={p.id} href={p.url} target="_blank" rel="noopener noreferrer"
+            <a key={p.id} href={p.data || p.url} target="_blank" rel="noopener noreferrer"
               className="relative aspect-square rounded-lg overflow-hidden bg-slate-100 block group">
-              <img src={p.url} alt={p.caption} className="w-full h-full object-cover" loading="lazy" />
+              <img src={p.data || p.url} alt={p.caption} className="w-full h-full object-cover" loading="lazy" />
               {(p.place || p.caption) && (
                 <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent p-1.5 pt-4">
                   {p.place && <p className="text-white text-[9px] font-medium flex items-center gap-0.5 leading-tight"><MapPin size={8} />{p.place}</p>}

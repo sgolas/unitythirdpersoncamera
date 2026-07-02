@@ -4,17 +4,17 @@ import { getOtaStatus, runOTA } from '../../lib/ota';
 import { isNative } from '../../lib/platform';
 import { getMode, setMode, getAccent, setAccent, ACCENTS, type ThemeMode, type Accent } from '../../lib/theme';
 import {
-  HOME_OPTIONS, AWAY_OPTIONS, getHomeCurrency, getAwayCurrency, setHomeCurrency, setAwayCurrency,
+  getHomeCurrency, getAwayCurrency, setHomeCurrency, setAwayCurrency,
 } from '../../lib/currency';
 import { useTrip } from '../../hooks/useTrip';
-import { money } from '../../types';
+import { money, CURRENCY_SYMBOLS } from '../../types';
 import type { TripMeta } from '../../types';
 import { getDeviceName, setDeviceName, put } from '../../db/database';
 import { TravelersManager } from '../TravelersManager';
 import { getSyncCode, getSyncPass, setSyncCredentials, getLastSync, isSyncConfigured } from '../../lib/config';
 import { syncNow, wipeLocal, backupToGitHub } from '../../db/sync';
 import { fmtStamp } from '../../utils/format';
-import { TabHeader, Field, TextInput, PrimaryButton, GhostButton, Overlay } from '../ui';
+import { TabHeader, Field, TextInput, Select, PrimaryButton, GhostButton, Overlay } from '../ui';
 
 export function SettingsTab() {
   const [device, setDevice] = useState(getDeviceName());
@@ -127,24 +127,17 @@ export function SettingsTab() {
           <p className="flex items-center gap-2 font-semibold text-slate-800 mb-1"><Coins size={16} /> Currencies</p>
           <p className="text-xs text-slate-400 mb-3">Every amount shows in both your home and away currency.</p>
 
-          <p className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-2">Home currency</p>
-          <div className="grid grid-cols-2 gap-2 mb-4">
-            {HOME_OPTIONS.map(o => (
-              <button key={o.code} onClick={() => pickHome(o.code)}
-                className={`flex items-center justify-center gap-1.5 py-2.5 rounded-xl border-2 transition press ${home === o.code ? 'border-accent text-accent' : 'border-line text-muted'}`}>
-                <span className="text-sm font-semibold">{o.label} · {o.sym}</span>
-              </button>
-            ))}
-          </div>
-
-          <p className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-2">Away currency (where you're spending)</p>
-          <div className="grid grid-cols-2 gap-2">
-            {AWAY_OPTIONS.map(o => (
-              <button key={o.code} onClick={() => pickAway(o.code)}
-                className={`flex items-center justify-center gap-1.5 py-2.5 rounded-xl border-2 transition press ${away === o.code ? 'border-accent text-accent' : 'border-line text-muted'}`}>
-                <span className="text-sm font-semibold">{o.label} · {o.sym}</span>
-              </button>
-            ))}
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Home currency">
+              <Select value={home} onChange={e => pickHome(e.target.value)}>
+                {Object.keys(CURRENCY_SYMBOLS).map(c => <option key={c} value={c}>{c} {CURRENCY_SYMBOLS[c].trim()}</option>)}
+              </Select>
+            </Field>
+            <Field label="Spending currency">
+              <Select value={away} onChange={e => pickAway(e.target.value)}>
+                {Object.keys(CURRENCY_SYMBOLS).map(c => <option key={c} value={c}>{c} {CURRENCY_SYMBOLS[c].trim()}</option>)}
+              </Select>
+            </Field>
           </div>
 
           <p className="text-xs text-slate-500 mt-3 bg-slate-50 rounded-xl px-3 py-2">

@@ -15,6 +15,14 @@ import type { Stop } from './tripMap';
 
 const PIN_COLORS = ['#0ea5a3', '#fb7185', '#f59e0b', '#a78bfa', '#38bdf8', '#34d399'];
 
+/** Escape user-entered text before it goes into Leaflet HTML (pins/popups),
+ *  so a place named like `<img onerror=…>` can't run script. */
+function esc(s: string): string {
+  return String(s ?? '').replace(/[&<>"']/g, c => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string
+  ));
+}
+
 async function geocode(label: string): Promise<{ lat: number; lng: number } | null> {
   const key = 'geo:' + label.toLowerCase().trim();
   const cached = localStorage.getItem(key);
@@ -66,10 +74,10 @@ export function TripLeafletMap({ stops, onFallback }: { stops: Stop[]; onFallbac
       pts.forEach((p, i) => {
         const color = PIN_COLORS[i % PIN_COLORS.length];
         const html =
-          `<div class="cmap-pin" style="--c:${color}"><span>${p.stop.emoji}</span><b>${i + 1}</b></div>`;
+          `<div class="cmap-pin" style="--c:${color}"><span>${esc(p.stop.emoji)}</span><b>${i + 1}</b></div>`;
         L.marker([p.lat, p.lng], {
           icon: L.divIcon({ html, className: 'cmap-icon', iconSize: [46, 46], iconAnchor: [23, 23] }),
-        }).addTo(map!).bindPopup(`<b>${p.stop.label}</b><br>${p.stop.date}`);
+        }).addTo(map!).bindPopup(`<b>${esc(p.stop.label)}</b><br>${esc(p.stop.date)}`);
         latlngs.push([p.lat, p.lng]);
       });
 

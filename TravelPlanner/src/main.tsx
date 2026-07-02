@@ -4,7 +4,6 @@ import App from './App';
 import { PortalApp } from './portal/PortalApp';
 import './index.css';
 import { isPortal, isNative } from './lib/platform';
-import { seedIfEmpty } from './db/seed';
 import { initOTA } from './lib/ota';
 import { initTheme } from './lib/theme';
 
@@ -61,9 +60,9 @@ async function boot() {
   initFocusScroll();
   initKeyboardVar();
 
-  // The editor (native app) seeds a starter trip; the read-only portal never
-  // seeds — it only shows data pulled from the family's synced trip.
-  if (!isPortal) await seedIfEmpty();
+  // No pre-seeded trip: a brand-new editor install shows the first-run
+  // onboarding wizard (see App.tsx) so each user creates their own trip.
+  // The read-only portal never seeds — it shows data pulled from sync.
 
   ReactDOM.createRoot(document.getElementById('root')!).render(
     <React.StrictMode>

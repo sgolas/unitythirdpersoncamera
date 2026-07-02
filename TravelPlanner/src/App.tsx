@@ -1,5 +1,8 @@
 import { useState, useEffect, useReducer } from 'react';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { db } from './db/database';
 import { initCurrency } from './lib/currency';
+import { Onboarding } from './components/Onboarding';
 import {
   LayoutDashboard, CalendarRange, Wallet, FileText, LayoutGrid,
   ListChecks, Plane, BedDouble, PiggyBank, Compass, Sparkles, History, Settings2,
@@ -50,6 +53,9 @@ export default function App() {
   const [moreOpen, setMoreOpen] = useState(false);
   const [, bump] = useReducer(x => x + 1, 0);
 
+  // undefined = still loading, null = no trip yet (show onboarding), object = ready.
+  const tripState = useLiveQuery(() => db.trip.get('trip').then(t => t ?? null), [], undefined);
+
   // Load live exchange rates, and re-render money whenever they or the
   // currency preference change.
   useEffect(() => {
@@ -90,6 +96,10 @@ export default function App() {
   }, [stack, moreOpen]);
 
   const canGoBack = stack.length > 0;
+
+  // First run: no trip yet → onboarding wizard. (undefined = DB still loading.)
+  if (tripState === undefined) return <div className="min-h-screen bg-bg" />;
+  if (tripState === null) return <Onboarding onDone={() => bump()} />;
 
   return (
     <div className={`min-h-screen bg-bg text-content mx-auto max-w-md relative app-frame ${canGoBack ? 'with-back' : ''}`}>

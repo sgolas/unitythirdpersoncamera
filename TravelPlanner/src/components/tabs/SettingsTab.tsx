@@ -41,6 +41,14 @@ export function SettingsTab() {
   const [ota, setOta] = useState(getOtaStatus());
   const [otaBusy, setOtaBusy] = useState(false);
   const [bundleVer, setBundleVer] = useState('');
+  const [appVer, setAppVer] = useState('');
+  const [hasGps, setHasGps] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    if (!isNative) { setHasGps(false); return; }
+    import('@capacitor/app').then(({ App }) => App.getInfo().then(i => setAppVer(`${i.version} (${i.build})`)).catch(() => {}));
+    import('@capacitor/core').then(({ Capacitor }) => setHasGps(Capacitor.isPluginAvailable('Geolocation')));
+  }, []);
   const [backupBusy, setBackupBusy] = useState(false);
   const [backupMsg, setBackupMsg] = useState('');
 
@@ -212,7 +220,13 @@ export function SettingsTab() {
         {/* App updates (OTA) */}
         <div className="bg-white rounded-2xl p-4 shadow-sm">
           <p className="flex items-center gap-2 font-semibold text-slate-800 mb-2"><Download size={16} /> App updates</p>
-          <p className="text-sm text-slate-500">Running version: <b className="text-slate-700">{bundleVer || '…'}</b></p>
+          <p className="text-sm text-slate-500">Content version: <b className="text-slate-700">{bundleVer || '…'}</b></p>
+          {isNative && (
+            <p className="text-sm text-slate-500">App package: <b className="text-slate-700">{appVer || '…'}</b>
+              {hasGps === true && <span className="text-emerald-600"> · GPS ✓</span>}
+              {hasGps === false && <span className="text-amber-600"> · install v1.1 for GPS</span>}
+            </p>
+          )}
           <p className="text-sm text-slate-500 mt-1 break-words">{ota}</p>
           <button onClick={checkUpdates} disabled={otaBusy}
             className="w-full mt-3 py-2.5 rounded-2xl font-semibold text-white bg-ink active:scale-[0.98] disabled:opacity-40 transition">

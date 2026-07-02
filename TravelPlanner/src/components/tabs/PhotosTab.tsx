@@ -153,26 +153,33 @@ function UploadSheet({ file, defaultFolder, onClose }: { file: File; defaultFold
     setLocating(true); setErr('');
     // Native: use the Geolocation plugin, which shows the OS permission popup.
     if (isNative) {
+      const { Capacitor } = await import('@capacitor/core');
+      if (!Capacitor.isPluginAvailable('Geolocation')) {
+        setErr('This installed app doesn’t include GPS yet. Install the latest app file (v1.1) from your download link — the in-app "Check for updates" can’t add GPS. Or just search a place above.');
+        setLocating(false); return;
+      }
       try {
         const { Geolocation } = await import('@capacitor/geolocation');
         let perm = await Geolocation.checkPermissions();
-        if (perm.location !== 'granted') perm = await Geolocation.requestPermissions();
-        if (perm.location !== 'granted') {
-          setErr('Location permission denied. Enable it in Settings, or search a place above.');
+        const granted = (p: any) => p.location === 'granted' || p.coarseLocation === 'granted';
+        if (!granted(perm)) perm = await Geolocation.requestPermissions();
+        if (!granted(perm)) {
+          setErr('Location permission was denied. Turn it on in Settings → Apps → Trip Planner → Permissions, or search a place above.');
           setLocating(false); return;
         }
         const pos = await Geolocation.getCurrentPosition({ enableHighAccuracy: true, timeout: 10000 });
         setCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude });
         setLocating(false); return;
       } catch {
-        // Plugin missing on an older install, or GPS unavailable → fall through.
+        setErr('Couldn’t read your location — check that phone location is turned on, then try again (or search a place above).');
+        setLocating(false); return;
       }
     }
-    // Web / fallback.
-    if (!navigator.geolocation) { setErr('Device location isn’t available — search a place above instead.'); setLocating(false); return; }
+    // Web / desktop.
+    if (!navigator.geolocation) { setErr('Device location isn’t available here — search a place above instead.'); setLocating(false); return; }
     navigator.geolocation.getCurrentPosition(
       pos => { setCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude }); setLocating(false); },
-      () => { setErr('Update the app to the newest version for GPS, or search a place above to tag it.'); setLocating(false); },
+      () => { setErr('Location blocked in the browser — allow it, or search a place above to tag it.'); setLocating(false); },
       { enableHighAccuracy: true, timeout: 8000 },
     );
   }

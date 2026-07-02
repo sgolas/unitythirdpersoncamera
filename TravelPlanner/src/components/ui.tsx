@@ -1,6 +1,17 @@
 /** Small reusable UI primitives shared across all tabs. */
 import { useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
+
+/**
+ * Render fixed overlays (sheets, dialogs) at <body> so they escape any
+ * ancestor with a `transform`/animation — which otherwise becomes the
+ * containing block for `position: fixed` and clips the overlay to the tab's
+ * height instead of the full screen.
+ */
+export function Overlay({ children }: { children: React.ReactNode }) {
+  return createPortal(children, document.body);
+}
 
 /* ── LV-style monogram overlay for dark headers ─────────────── */
 export function Monogram() {
@@ -36,6 +47,7 @@ export function Sheet({ title, onClose, children, footer }: {
   }, [onClose]);
 
   return (
+    <Overlay>
     <div
       className="fixed inset-0 z-[200] bg-black/50 flex items-end sm:items-center sm:justify-center"
       onClick={onClose}
@@ -72,6 +84,7 @@ export function Sheet({ title, onClose, children, footer }: {
         )}
       </div>
     </div>
+    </Overlay>
   );
 }
 
@@ -148,10 +161,12 @@ export function EmptyState({ emoji, title, hint }: { emoji: string; title: strin
 /* ── Floating add button ────────────────────────────────────── */
 export function Fab({ onClick, label }: { onClick: () => void; label: string }) {
   return (
-    <button onClick={onClick} aria-label={label} title={label}
-      className="fixed bottom-24 right-4 z-40 w-11 h-11 rounded-full bg-ink/90 text-white shadow-lg shadow-ink/25 active:scale-90 transition flex items-center justify-center backdrop-blur">
-      <span className="text-xl leading-none -mt-0.5">＋</span>
-    </button>
+    <Overlay>
+      <button onClick={onClick} aria-label={label} title={label}
+        className="fixed bottom-24 right-4 z-40 w-11 h-11 rounded-full bg-ink/90 text-white shadow-lg shadow-ink/25 active:scale-90 transition flex items-center justify-center backdrop-blur">
+        <span className="text-xl leading-none -mt-0.5">＋</span>
+      </button>
+    </Overlay>
   );
 }
 
@@ -160,6 +175,7 @@ export function ConfirmDelete({ label, onCancel, onConfirm }: {
   label: string; onCancel: () => void; onConfirm: () => void;
 }) {
   return (
+    <Overlay>
     <div className="fixed inset-0 z-[300] bg-black/50 flex items-end sm:items-center sm:justify-center" onClick={onCancel}>
       <div className="bg-white w-full sm:max-w-sm sm:rounded-3xl rounded-t-3xl p-6 pb-8 animate-fadeUp" onClick={e => e.stopPropagation()}>
         <h3 className="font-bold text-slate-800 text-lg mb-1">Delete this?</h3>
@@ -170,5 +186,6 @@ export function ConfirmDelete({ label, onCancel, onConfirm }: {
         </div>
       </div>
     </div>
+    </Overlay>
   );
 }

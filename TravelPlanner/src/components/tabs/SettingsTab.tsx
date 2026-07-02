@@ -14,7 +14,7 @@ import { TravelersManager } from '../TravelersManager';
 import { getSyncCode, getSyncPass, setSyncCredentials, getLastSync, isSyncConfigured } from '../../lib/config';
 import { syncNow, wipeLocal, backupToGitHub } from '../../db/sync';
 import { fmtStamp } from '../../utils/format';
-import { TabHeader, Field, TextInput, PrimaryButton, GhostButton } from '../ui';
+import { TabHeader, Field, TextInput, PrimaryButton, GhostButton, Overlay } from '../ui';
 
 export function SettingsTab() {
   const [device, setDevice] = useState(getDeviceName());
@@ -249,6 +249,7 @@ function WipeConfirm({ synced, onCancel, onConfirm }: {
   const [text, setText] = useState('');
   const ok = text.trim().toLowerCase() === 'i understand';
   return (
+    <Overlay>
     <div className="fixed inset-0 z-[200] bg-black/60 flex items-center justify-center p-6" onClick={onCancel}>
       <div className="bg-white rounded-3xl p-6 w-full max-w-sm animate-pop" onClick={e => e.stopPropagation()}>
         <div className="w-14 h-14 rounded-2xl bg-rose-100 flex items-center justify-center mx-auto mb-3">
@@ -272,5 +273,6 @@ function WipeConfirm({ synced, onCancel, onConfirm }: {
         </div>
       </div>
     </div>
+    </Overlay>
   );
 }

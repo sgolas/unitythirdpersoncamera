@@ -4,6 +4,7 @@ import { put } from '../db/database';
 import type { TripMeta, Traveler } from '../types';
 import { CURRENCY_SYMBOLS } from '../types';
 import { setHomeCurrency, setAwayCurrency } from '../lib/currency';
+import { ensureSyncCredentials } from '../lib/config';
 import { todayStr } from '../utils/format';
 import { Field, TextInput, Select } from './ui';
 
@@ -49,6 +50,8 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
     // Currency preference drives the dual-currency display everywhere.
     setHomeCurrency(home);
     setAwayCurrency(away);
+    // Give the trip a sync identity up front so Sync + Share just work.
+    ensureSyncCredentials();
 
     await put<TripMeta>({
       kind: 'trip', id: 'trip',

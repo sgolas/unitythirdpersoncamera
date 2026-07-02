@@ -11,6 +11,7 @@ import { money, CURRENCY_SYMBOLS } from '../../types';
 import type { TripMeta } from '../../types';
 import { getDeviceName, setDeviceName, put } from '../../db/database';
 import { TravelersManager } from '../TravelersManager';
+import { InvitePanel } from '../InvitePanel';
 import { getSyncCode, getSyncPass, setSyncCredentials, getLastSync, isSyncConfigured } from '../../lib/config';
 import { syncNow, wipeLocal, backupToGitHub } from '../../db/sync';
 import { fmtStamp } from '../../utils/format';
@@ -147,11 +148,11 @@ export function SettingsTab() {
 
         {/* How it works */}
         <div className="bg-sky-50 border border-sky/20 rounded-2xl p-4 text-sm text-sky-900">
-          <p className="font-semibold mb-1">🔒 How sync works</p>
+          <p className="font-semibold mb-1">🔒 How sharing works</p>
           <p className="text-sky-800/90 leading-snug">
-            Everything is stored on <b>your device</b> and works offline. Pick a shared <b>trip code</b> and
-            <b> password</b>, enter the same on each family member's phone, then tap <b>Sync</b> to push and pull
-            changes. Nothing syncs automatically.
+            Everything is stored on <b>your device</b> and works offline. Tap <b>Sync</b> to back up and pull changes.
+            To let family follow along, use <b>Share this trip</b> below — they open a link to view everything, with no
+            app or account. Nothing syncs automatically.
           </p>
         </div>
 
@@ -163,9 +164,12 @@ export function SettingsTab() {
           </Field>
         </div>
 
-        {/* Sync credentials */}
+        {/* Invite by link (primary sharing path) */}
+        <InvitePanel />
+
+        {/* Sync credentials (advanced / manual) */}
         <div className="bg-white rounded-2xl p-4 shadow-sm">
-          <p className="flex items-center gap-2 font-semibold text-slate-800 mb-3"><KeyRound size={16} /> Trip sync code</p>
+          <p className="flex items-center gap-2 font-semibold text-slate-800 mb-3"><KeyRound size={16} /> Trip code (advanced)</p>
           <Field label="Trip code (share with family)">
             <TextInput value={code} onChange={e => setCode(e.target.value)} placeholder="e.g. golas-europe-2026" autoCapitalize="none" />
           </Field>

@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import { PortalApp } from './portal/PortalApp';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import './index.css';
 import { isPortal, isNative } from './lib/platform';
 import { initOTA } from './lib/ota';
@@ -66,7 +67,9 @@ async function boot() {
 
   ReactDOM.createRoot(document.getElementById('root')!).render(
     <React.StrictMode>
-      {isPortal ? <PortalApp /> : <App />}
+      <ErrorBoundary>
+        {isPortal ? <PortalApp /> : <App />}
+      </ErrorBoundary>
     </React.StrictMode>,
   );
 

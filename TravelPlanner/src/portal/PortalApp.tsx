@@ -14,8 +14,44 @@ import { fmtDate, fmtDateLong, fmtTime, tripLength, daysUntil, dateRange } from 
 const SS_CODE = 'portal.code';
 const SS_PASS = 'portal.pass';
 
+/** Read credentials from an invite link (#t=code&k=pass) if present. */
+function credsFromHash(): { code: string; pass: string } | null {
+  const h = location.hash.replace(/^#/, '');
+  if (!h) return null;
+  const p = new URLSearchParams(h);
+  const code = p.get('t'); const pass = p.get('k');
+  return code && pass ? { code, pass } : null;
+}
+
 export function PortalApp() {
   const [authed, setAuthed] = useState(!!sessionStorage.getItem(SS_CODE));
+  const [booting, setBooting] = useState(!authed && !!credsFromHash());
+
+  // An invite link (#t=…&k=…) signs the viewer straight in — no typing.
+  useEffect(() => {
+    const c = credsFromHash();
+    if (authed || !c) return;
+    (async () => {
+      const res = await pullOnly(c.code.trim(), c.pass);
+      if (res.ok) {
+        sessionStorage.setItem(SS_CODE, c.code.trim());
+        sessionStorage.setItem(SS_PASS, c.pass);
+        setAuthed(true);
+      }
+      // Clear the secret from the address bar either way.
+      history.replaceState(null, '', location.pathname + location.search);
+      setBooting(false);
+    })();
+  }, []);
+
+  if (booting) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-white"
+        style={{ background: 'linear-gradient(150deg,#0f172a,#1e293b,#334155)' }}>
+        <div className="flex items-center gap-3 text-white/80"><RefreshCw size={18} className="animate-spin" /> Opening your trip…</div>
+      </div>
+    );
+  }
   if (!authed) return <PortalLogin onDone={() => setAuthed(true)} />;
   return <PortalView />;
 }

@@ -14,10 +14,12 @@ const config: CapacitorConfig = {
       showSpinner: false,
     },
     Keyboard: {
-      // Resize the whole web view when the keyboard opens so form fields
-      // above the keyboard stay visible and scrollable.
-      resize: 'native' as any,
-      resizeOnFullScreen: true,
+      // Do NOT resize the web view. On edge-to-edge Android the native resize
+      // fails to restore full height when the keyboard hides, leaving a blank
+      // gap under forms. Instead the web view stays full-screen at all times
+      // and we lift the form sheet above the keyboard using a --kb CSS var
+      // (see the keyboard listeners in main.tsx and the Sheet component).
+      resize: 'none' as any,
     },
     CapacitorUpdater: {
       // Self-managed OTA: the app checks our own manifest and downloads new

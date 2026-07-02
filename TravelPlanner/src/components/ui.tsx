@@ -41,8 +41,13 @@ export function Sheet({ title, onClose, children, footer }: {
       onClick={onClose}
       // Reserve the status-bar space at the top; the sheet (max-h-full) is
       // then capped to the remaining height, so its header + top fields are
-      // always on screen.
-      style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 8px)' }}
+      // always on screen. --kb lifts the sheet above the on-screen keyboard
+      // while it's open, and is 0 the instant it hides (so no leftover gap).
+      style={{
+        paddingTop: 'calc(env(safe-area-inset-top, 0px) + 8px)',
+        paddingBottom: 'var(--kb, 0px)',
+        transition: 'padding-bottom 0.22s ease',
+      }}
     >
       <div
         className="bg-white w-full sm:max-w-md sm:rounded-3xl rounded-t-3xl flex flex-col animate-fadeUp overflow-hidden max-h-full"

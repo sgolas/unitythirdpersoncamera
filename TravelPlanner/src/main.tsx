@@ -36,9 +36,30 @@ function initFocusScroll() {
   });
 }
 
+/**
+ * The web view no longer resizes for the keyboard (see capacitor.config), so
+ * it always fills the screen. We publish the keyboard height as a --kb CSS
+ * variable; the Sheet lifts above the keyboard while it's open and drops back
+ * to full-screen the instant it hides.
+ */
+function initKeyboardVar() {
+  const root = document.documentElement;
+  const set = (px: number) => root.style.setProperty('--kb', `${Math.max(0, Math.round(px))}px`);
+  set(0);
+  if (!isNative) return;
+  import('@capacitor/keyboard').then(({ Keyboard, KeyboardResize }) => {
+    // Force resize:none at runtime so it also applies to already-installed
+    // APKs via OTA (the config value is only baked into fresh builds).
+    Keyboard.setResizeMode({ mode: KeyboardResize.None }).catch(() => {});
+    Keyboard.addListener('keyboardWillShow', info => set(info.keyboardHeight));
+    Keyboard.addListener('keyboardWillHide', () => set(0));
+  }).catch(() => { /* plugin unavailable */ });
+}
+
 async function boot() {
   await initNativeChrome();
   initFocusScroll();
+  initKeyboardVar();
 
   // The editor (native app) seeds a starter trip; the read-only portal never
   // seeds — it only shows data pulled from the family's synced trip.

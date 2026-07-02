@@ -6,6 +6,7 @@ import type { TripPhoto } from '../../types';
 import { fmtStamp, todayStr } from '../../utils/format';
 import { getSyncCode, getSyncPass, isSyncConfigured, PHOTO_ENDPOINT } from '../../lib/config';
 import { TabHeader, Sheet, Field, TextInput, FormFooter, EmptyState, Fab, ConfirmDelete } from '../ui';
+import { PlaceInput } from '../PlaceInput';
 
 /* Compress an image and return base64 (no data: prefix) for upload. */
 function compressToBase64(file: File): Promise<{ base64: string; type: string }> {
@@ -147,12 +148,12 @@ function UploadSheet({ file, defaultFolder, onClose }: { file: File; defaultFold
   const [err, setErr] = useState('');
   const [locating, setLocating] = useState(false);
 
-  function tagLocation() {
-    if (!navigator.geolocation) { setErr('Location not available on this device'); return; }
-    setLocating(true);
+  function useMyLocation() {
+    if (!navigator.geolocation) { setErr('Device location isn’t available — search a place above instead.'); return; }
+    setLocating(true); setErr('');
     navigator.geolocation.getCurrentPosition(
       pos => { setCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude }); setLocating(false); },
-      () => { setErr('Could not get location (permission denied?)'); setLocating(false); },
+      () => { setErr('Device location is off for this app — search a place above to tag it instead.'); setLocating(false); },
       { enableHighAccuracy: true, timeout: 8000 },
     );
   }
@@ -194,15 +195,18 @@ function UploadSheet({ file, defaultFolder, onClose }: { file: File; defaultFold
       <img src={preview} alt="" className="w-full max-h-56 object-contain rounded-2xl bg-slate-50 mb-4" />
       <Field label="Caption"><TextInput autoFocus value={caption} onChange={e => setCaption(e.target.value)} placeholder="Optional" /></Field>
       <Field label="Location / place">
-        <div className="flex gap-2">
-          <TextInput value={place} onChange={e => setPlace(e.target.value)} placeholder="e.g. Eiffel Tower" />
-          <button onClick={tagLocation} disabled={locating}
-            className="flex-shrink-0 px-3 rounded-xl bg-pink-50 text-pink-600 font-semibold text-sm flex items-center gap-1">
-            {locating ? <Loader size={14} className="animate-spin" /> : <Navigation size={14} />} GPS
-          </button>
-        </div>
+        <PlaceInput value={place}
+          onChange={v => { setPlace(v); setCoords(null); }}
+          onPick={(c) => setCoords(c)}
+          placeholder="Search a place, e.g. Eiffel Tower" />
       </Field>
-      {coords && <p className="text-xs text-mint -mt-2 mb-2">📍 Tagged {coords.lat.toFixed(4)}, {coords.lng.toFixed(4)}</p>}
+      <div className="flex items-center gap-2 -mt-1 mb-2">
+        <button onClick={useMyLocation} disabled={locating}
+          className="px-3 py-1.5 rounded-xl bg-pink-50 text-pink-600 font-semibold text-xs flex items-center gap-1">
+          {locating ? <Loader size={13} className="animate-spin" /> : <Navigation size={13} />} Use my location
+        </button>
+        {coords && <span className="text-xs text-mint">📍 Tagged {coords.lat.toFixed(4)}, {coords.lng.toFixed(4)}</span>}
+      </div>
       <Field label="Folder"><TextInput value={folder} onChange={e => setFolder(e.target.value)} placeholder="YYYY-MM-DD or a place" /></Field>
       {busy && (
         <div className="flex items-center gap-2 text-sm text-slate-500 mt-1"><Loader size={15} className="animate-spin" /> Uploading online…</div>

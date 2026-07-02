@@ -11,7 +11,7 @@ import { MapPin } from 'lucide-react';
 const inputCls =
   'w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:border-sky focus:ring-2 focus:ring-sky/20 outline-none transition text-slate-800';
 
-interface Sug { label: string }
+interface Sug { label: string; lat?: number; lng?: number }
 
 function label(p: Record<string, string>): string {
   const line1 = [p.housenumber, p.street].filter(Boolean).join(' ') || p.name;
@@ -19,8 +19,9 @@ function label(p: Record<string, string>): string {
   return [...new Set(parts)].join(', ');
 }
 
-export function PlaceInput({ value, onChange, placeholder }: {
+export function PlaceInput({ value, onChange, placeholder, onPick }: {
   value: string; onChange: (v: string) => void; placeholder?: string;
+  onPick?: (coords: { lat: number; lng: number } | null, label: string) => void;
 }) {
   const [sugs, setSugs] = useState<Sug[]>([]);
   const [open, setOpen] = useState(false);
@@ -35,10 +36,10 @@ export function PlaceInput({ value, onChange, placeholder }: {
     const t = setTimeout(async () => {
       try {
         const r = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(q)}&limit=6`, { signal: ctrl.signal });
-        const d = await r.json() as { features?: { properties: Record<string, string> }[] };
+        const d = await r.json() as { features?: { properties: Record<string, string>; geometry?: { coordinates: [number, number] } }[] };
         const seen = new Set<string>();
         const items = (d.features ?? [])
-          .map(f => ({ label: label(f.properties) }))
+          .map(f => ({ label: label(f.properties), lng: f.geometry?.coordinates?.[0], lat: f.geometry?.coordinates?.[1] }))
           .filter(s => s.label && !seen.has(s.label) && seen.add(s.label));
         setSugs(items);
         setOpen(items.length > 0);
@@ -50,6 +51,7 @@ export function PlaceInput({ value, onChange, placeholder }: {
   function pick(s: Sug) {
     skip.current = true;
     onChange(s.label);
+    onPick?.(s.lat != null && s.lng != null ? { lat: s.lat, lng: s.lng } : null, s.label);
     setOpen(false);
     setSugs([]);
   }

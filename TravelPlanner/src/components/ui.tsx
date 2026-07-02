@@ -50,7 +50,9 @@ export function Sheet({ title, onClose, children, footer }: {
       }}
     >
       <div
-        className="bg-white w-full sm:max-w-md sm:rounded-3xl rounded-t-3xl flex flex-col animate-fadeUp overflow-hidden max-h-full"
+        // Mobile: a full-height form so it always fills the screen (no blank
+        // gap under short forms). Desktop: a centered auto-height card.
+        className="bg-white w-full flex flex-col animate-fadeUp overflow-hidden rounded-t-3xl h-full max-h-full sm:h-auto sm:max-h-[88vh] sm:max-w-md sm:rounded-3xl"
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 flex-shrink-0">

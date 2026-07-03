@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import {
   ListChecks, Plane, BedDouble, Wallet, CalendarRange, PiggyBank,
-  Sparkles, History, Compass, ChevronUp, ChevronDown, CalendarClock,
+  Sparkles, History, Compass, ChevronUp, ChevronDown, CalendarClock, Calculator,
 } from 'lucide-react';
 import {
   useTrip, useChecklist, useExpenses, useTransport, useAccommodation,
@@ -163,8 +163,9 @@ export function DashboardTab({ onNavigate }: { onNavigate: (v: any) => void }) {
         </div>
 
         {/* Quick links */}
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-3 gap-3">
           <QuickLink onClick={() => onNavigate('overview')} icon={<Compass size={18} />} label="Overview" />
+          <QuickLink onClick={() => onNavigate('converter')} icon={<Calculator size={18} />} label="Currency" />
           <QuickLink onClick={() => onNavigate('helper')} icon={<Sparkles size={18} />} label="Helper" />
         </div>
 

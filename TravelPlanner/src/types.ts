@@ -47,7 +47,7 @@ export interface TravelDocument extends SyncMeta {
 
 /* ── 2. Checklist ───────────────────────────────────────────── */
 export type ChecklistCategory =
-  | 'packing' | 'before-leaving' | 'documents' | 'health' | 'tech' | 'other';
+  | 'packing' | 'before-leaving' | 'reservations' | 'documents' | 'health' | 'tech' | 'other';
 
 export interface ChecklistItem extends SyncMeta {
   kind: 'checklist';
@@ -56,6 +56,7 @@ export interface ChecklistItem extends SyncMeta {
   done: boolean;
   assignedTo: string | null; // travelerId or null
   dueDate: ISODate | '';
+  notes?: string;
 }
 
 /* ── 3. Transport Details ───────────────────────────────────── */

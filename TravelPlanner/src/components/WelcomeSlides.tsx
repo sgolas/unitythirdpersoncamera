@@ -27,6 +27,11 @@ const SLIDES: Slide[] = [
     body: 'Track expenses and budgets in both your home and destination currency — no mental math required.',
   },
   {
+    emoji: '💱', from: '#0f766e', to: '#0ea5e9',
+    title: 'Convert on the go',
+    body: 'A built-in currency calculator with live exchange rates, so you always know what a price really costs back home.',
+  },
+  {
     emoji: '🔗', from: '#0ea5e9', to: '#6366f1',
     title: 'Everyone, in sync',
     body: 'Share one QR code and family joins in a tap. Prefer a browser? Send a view-only link — no app needed.',

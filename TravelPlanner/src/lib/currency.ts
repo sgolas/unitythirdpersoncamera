@@ -55,20 +55,40 @@ export function convert(amount: number, from: string, to: string): number {
   return (amount / rf) * rt;
 }
 
-/** Fetch fresh rates once per day; refresh the display when they land. */
-export async function initCurrency(): Promise<void> {
+/** When the cached rates were last fetched (ms), or null if never. */
+export function getRatesUpdatedAt(): number | null {
   try {
     const raw = localStorage.getItem(RATES_KEY);
-    if (raw) { const { at } = JSON.parse(raw); if (Date.now() - at < DAY) return; }
-  } catch { /* ignore */ }
+    if (!raw) return null;
+    const { at } = JSON.parse(raw);
+    return typeof at === 'number' ? at : null;
+  } catch { return null; }
+}
+
+/** Do the actual fetch + store. Returns true if fresh rates were applied. */
+async function fetchRates(): Promise<boolean> {
   try {
     const r = await fetch('https://open.er-api.com/v6/latest/USD').then(res => res.json());
     if (r?.result === 'success' && r.rates) {
       rates = { ...BAKED, ...r.rates };
       localStorage.setItem(RATES_KEY, JSON.stringify({ at: Date.now(), data: rates }));
       emitChange();
+      return true;
     }
   } catch { /* offline — baked / cached rates stay in effect */ }
+  return false;
+}
+
+/** Fetch fresh rates once per day; refresh the display when they land. */
+export async function initCurrency(): Promise<void> {
+  const at = getRatesUpdatedAt();
+  if (at && Date.now() - at < DAY) return;
+  await fetchRates();
+}
+
+/** Force a rate update now (used by the currency calculator). */
+export async function refreshRates(): Promise<boolean> {
+  return fetchRates();
 }
 
 /** Notify the app to re-render money after a rate refresh or setting change. */

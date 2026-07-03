@@ -3,11 +3,12 @@ import { Trash2 } from 'lucide-react';
 import { useChecklist, useTravelers, travelerName } from '../../hooks/useTrip';
 import { put, remove } from '../../db/database';
 import type { ChecklistItem, ChecklistCategory } from '../../types';
-import { TabHeader, Sheet, Field, TextInput, Select, FormFooter, Fab, EmptyState, ConfirmDelete } from '../ui';
+import { TabHeader, Sheet, Field, TextInput, TextArea, Select, FormFooter, Fab, EmptyState, ConfirmDelete } from '../ui';
 
 const CATS: { key: ChecklistCategory; label: string; emoji: string }[] = [
   { key: 'packing',        label: 'Packing',        emoji: '🧳' },
   { key: 'before-leaving', label: 'Before Leaving', emoji: '🏠' },
+  { key: 'reservations',   label: 'Reservations',   emoji: '📅' },
   { key: 'documents',      label: 'Documents',      emoji: '📄' },
   { key: 'health',         label: 'Health',         emoji: '💊' },
   { key: 'tech',           label: 'Tech',           emoji: '🔌' },
@@ -19,6 +20,7 @@ export function ChecklistTab() {
   const items = useChecklist();
   const travelers = useTravelers();
   const [adding, setAdding] = useState(false);
+  const [editing, setEditing] = useState<ChecklistItem | null>(null);
   const [pendingDelete, setPendingDelete] = useState<ChecklistItem | null>(null);
 
   const doneCount = items.filter(i => i.done).length;
@@ -60,10 +62,13 @@ export function ChecklistTab() {
                       }`}>
                       {item.done && '✓'}
                     </button>
-                    <div className="flex-1 min-w-0">
+                    <div className="flex-1 min-w-0" onClick={() => setEditing(item)}>
                       <p className={`font-medium ${item.done ? 'line-through text-slate-400' : 'text-slate-800'}`}>{item.text}</p>
+                      {item.notes && (
+                        <p className="text-xs text-slate-500 mt-0.5 whitespace-pre-wrap break-words">{item.notes}</p>
+                      )}
                       {item.assignedTo && (
-                        <p className="text-xs text-slate-400">{travelerName(travelers, item.assignedTo)}</p>
+                        <p className="text-xs text-slate-400 mt-0.5">{travelerName(travelers, item.assignedTo)}</p>
                       )}
                     </div>
                     <button onClick={() => setPendingDelete(item)}
@@ -80,7 +85,7 @@ export function ChecklistTab() {
 
       <Fab onClick={() => setAdding(true)} label="Add item" />
 
-      {adding && <AddSheet travelers={travelers} onClose={() => setAdding(false)} />}
+      {(adding || editing) && <ItemSheet item={editing} travelers={travelers} onClose={() => { setAdding(false); setEditing(null); }} />}
       {pendingDelete && (
         <ConfirmDelete label={`"${pendingDelete.text}"`}
           onCancel={() => setPendingDelete(null)}
@@ -90,24 +95,27 @@ export function ChecklistTab() {
   );
 }
 
-function AddSheet({ travelers, onClose }: { travelers: any[]; onClose: () => void }) {
-  const [text, setText] = useState('');
-  const [category, setCategory] = useState<ChecklistCategory>('packing');
-  const [assignedTo, setAssignedTo] = useState('');
+function ItemSheet({ item, travelers, onClose }: { item: ChecklistItem | null; travelers: any[]; onClose: () => void }) {
+  const [text, setText] = useState(item?.text ?? '');
+  const [category, setCategory] = useState<ChecklistCategory>(item?.category ?? 'packing');
+  const [assignedTo, setAssignedTo] = useState(item?.assignedTo ?? '');
+  const [notes, setNotes] = useState(item?.notes ?? '');
 
   async function save() {
     if (!text.trim()) return;
+    const isNew = !item;
     await put<ChecklistItem>({
-      kind: 'checklist', id: crypto.randomUUID(), text: text.trim(), category,
-      done: false, assignedTo: assignedTo || null, dueDate: '',
+      kind: 'checklist', id: item?.id ?? crypto.randomUUID(), text: text.trim(), category,
+      done: item?.done ?? false, assignedTo: assignedTo || null, dueDate: item?.dueDate ?? '',
+      notes: notes.trim(),
       updatedAt: '', updatedBy: '',
-    }, `Added ${catMeta(category).label.toLowerCase()} item: ${text.trim()}`, 'create');
+    }, `${isNew ? 'Added' : 'Updated'} ${catMeta(category).label.toLowerCase()} item: ${text.trim()}`, isNew ? 'create' : 'update');
     onClose();
   }
 
   return (
-    <Sheet title="Add checklist item" onClose={onClose}
-      footer={<FormFooter onCancel={onClose} onSubmit={save} disabled={!text.trim()} submitLabel="Add item" />}>
+    <Sheet title={item ? 'Edit item' : 'Add checklist item'} onClose={onClose}
+      footer={<FormFooter onCancel={onClose} onSubmit={save} disabled={!text.trim()} submitLabel={item ? 'Save' : 'Add item'} />}>
       <Field label="Item"><TextInput autoFocus value={text} onChange={e => setText(e.target.value)} placeholder="e.g. Passport, Chargers, Sunscreen" /></Field>
       <Field label="Category">
         <Select value={category} onChange={e => setCategory(e.target.value as ChecklistCategory)}>
@@ -120,6 +128,7 @@ function AddSheet({ travelers, onClose }: { travelers: any[]; onClose: () => voi
           {travelers.map(t => <option key={t.id} value={t.id}>{t.emoji} {t.name}</option>)}
         </Select>
       </Field>
+      <Field label="Notes"><TextArea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Confirmation #, details, links…" /></Field>
     </Sheet>
   );
 }

@@ -1,10 +1,12 @@
 import { useState } from 'react';
-import { Plane, Plus, X, Check } from 'lucide-react';
+import { Plane, Plus, X, Check, QrCode, Loader } from 'lucide-react';
 import { put } from '../db/database';
 import type { TripMeta, Traveler } from '../types';
 import { CURRENCY_SYMBOLS } from '../types';
 import { setHomeCurrency, setAwayCurrency } from '../lib/currency';
 import { ensureSyncCredentials } from '../lib/config';
+import { scanToJoin } from '../lib/join';
+import { isNative } from '../lib/platform';
 import { todayStr } from '../utils/format';
 import { Field, TextInput, Select } from './ui';
 
@@ -33,6 +35,16 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
   const [away, setAway] = useState('EUR');
   const [rows, setRows] = useState<Row[]>([{ name: '', role: 'adult', emoji: '🧑' }]);
   const [saving, setSaving] = useState(false);
+  const [joining, setJoining] = useState(false);
+  const [joinErr, setJoinErr] = useState('');
+
+  async function join() {
+    setJoining(true); setJoinErr('');
+    const res = await scanToJoin();
+    if (res.ok) { onDone(); return; } // synced trip now exists → app renders it
+    setJoinErr(res.message);
+    setJoining(false);
+  }
 
   const namedRows = rows.filter(r => r.name.trim());
   const datesOk = startDate <= endDate;
@@ -89,6 +101,20 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
       </div>
 
       <div className="px-4 py-5 space-y-5 max-w-md mx-auto" style={{ paddingBottom: 'calc(96px + env(safe-area-inset-bottom, 0px))' }}>
+        {/* Join an existing trip via QR */}
+        {isNative && (
+          <div className="bg-accent/5 border border-accent/20 rounded-2xl p-4">
+            <p className="font-semibold text-content mb-0.5">Invited to a trip?</p>
+            <p className="text-xs text-muted mb-3">Scan the QR from whoever set it up to join and sync with the group.</p>
+            <button onClick={join} disabled={joining}
+              className="w-full py-2.5 rounded-2xl font-semibold text-white bg-accent active:scale-[0.98] disabled:opacity-50 transition flex items-center justify-center gap-2">
+              {joining ? <><Loader size={16} className="animate-spin" /> Joining…</> : <><QrCode size={16} /> Scan a QR to join</>}
+            </button>
+            {joinErr && <p className="text-sunset text-sm mt-2">{joinErr}</p>}
+            <p className="text-[11px] text-muted mt-2 text-center">or set up your own trip below</p>
+          </div>
+        )}
+
         {/* Basics */}
         <div className="bg-surface rounded-2xl p-4 shadow-soft border border-line">
           <Field label="Trip name"><TextInput autoFocus value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Europe 2026" /></Field>

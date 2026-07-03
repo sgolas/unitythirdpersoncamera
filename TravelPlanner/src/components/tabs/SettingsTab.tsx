@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Smartphone, KeyRound, RefreshCw, Globe, Trash2, Check, Download, Palette, Sun, Moon, Monitor, Coins, AlertTriangle, Github, ShieldCheck } from 'lucide-react';
+import { Smartphone, KeyRound, RefreshCw, Globe, Trash2, Check, Download, Palette, Sun, Moon, Monitor, Coins, AlertTriangle, Github, ShieldCheck, QrCode } from 'lucide-react';
 import { getOtaStatus, runOTA } from '../../lib/ota';
 import { isNative } from '../../lib/platform';
 import { getMode, setMode, getAccent, setAccent, ACCENTS, type ThemeMode, type Accent } from '../../lib/theme';
@@ -15,6 +15,7 @@ import { InvitePanel } from '../InvitePanel';
 import { getSyncCode, getSyncPass, setSyncCredentials, getLastSync, isSyncConfigured } from '../../lib/config';
 import { syncNow, wipeLocal, backupToGitHub } from '../../db/sync';
 import { saveBackup, restoreFromFile, backupExists } from '../../lib/persist';
+import { scanToJoin } from '../../lib/join';
 import { fmtStamp } from '../../utils/format';
 import { TabHeader, Field, TextInput, Select, PrimaryButton, GhostButton, Overlay } from '../ui';
 
@@ -56,6 +57,15 @@ export function SettingsTab() {
   const [devBusy, setDevBusy] = useState(false);
   const [devMsg, setDevMsg] = useState('');
   const [hasFile, setHasFile] = useState<boolean | null>(null);
+  const [joinBusy, setJoinBusy] = useState(false);
+  const [joinMsg, setJoinMsg] = useState('');
+
+  async function joinByScan() {
+    setJoinBusy(true); setJoinMsg('');
+    const res = await scanToJoin();
+    setJoinBusy(false); setJoinMsg(res.message);
+    if (res.ok) setTimeout(() => location.reload(), 1000);
+  }
 
   useEffect(() => { backupExists().then(setHasFile); }, []);
 
@@ -187,6 +197,19 @@ export function SettingsTab() {
 
         {/* Invite by link (primary sharing path) */}
         <InvitePanel />
+
+        {/* Join someone else's trip by scanning their QR */}
+        {isNative && (
+          <div className="bg-white rounded-2xl p-4 shadow-sm">
+            <p className="flex items-center gap-2 font-semibold text-slate-800 mb-2"><QrCode size={16} /> Join a trip</p>
+            <p className="text-sm text-slate-500 leading-snug">Scan the QR from whoever set up the trip to join it and sync with the group.</p>
+            <button onClick={joinByScan} disabled={joinBusy}
+              className="w-full mt-3 py-2.5 rounded-2xl font-semibold text-white bg-accent active:scale-[0.98] disabled:opacity-50 transition flex items-center justify-center gap-2">
+              <QrCode size={16} /> {joinBusy ? 'Scanning…' : 'Scan a QR to join'}
+            </button>
+            {joinMsg && <p className="text-center text-sm mt-2 text-slate-600">{joinMsg}</p>}
+          </div>
+        )}
 
         {/* Sync credentials (advanced / manual) */}
         <div className="bg-white rounded-2xl p-4 shadow-sm">

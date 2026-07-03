@@ -49,8 +49,8 @@ export function InvitePanel() {
     <div className="bg-white rounded-2xl p-4 shadow-sm">
       <p className="flex items-center gap-2 font-semibold text-slate-800 mb-1"><Share2 size={16} /> Share this trip</p>
       <p className="text-sm text-slate-500 leading-snug">
-        Send family a link to <b>view</b> your trip in their browser — no app, no accounts, nothing to type. They see
-        everything; only you can edit.
+        Family with the app can <b>scan the QR to join</b> and sync with the group. Anyone else can open the link to
+        <b> view</b> the trip in their browser — no app or account needed.
       </p>
 
       {!link ? (

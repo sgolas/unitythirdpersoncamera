@@ -81,10 +81,10 @@ function PortalLogin({ onDone }: { onDone: () => void }) {
           <Lock size={24} />
         </div>
         <h1 className="text-xl font-bold text-slate-800 text-center">Trip Planner Portal</h1>
-        <p className="text-slate-400 text-sm text-center mt-1 mb-6">Enter your trip code to view your plans</p>
+        <p className="text-slate-400 text-sm text-center mt-1 mb-6">Enter your family trip code to view your plans</p>
 
         <label className="block mb-3">
-          <span className="text-xs font-semibold text-slate-500 uppercase">Trip code</span>
+          <span className="text-xs font-semibold text-slate-500 uppercase">Family trip code</span>
           <input value={code} onChange={e => setCode(e.target.value)} autoCapitalize="none"
             className="mt-1 w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:border-sky outline-none"
             placeholder="e.g. golas-europe-2026" />

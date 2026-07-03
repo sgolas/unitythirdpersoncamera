@@ -213,8 +213,8 @@ export function SettingsTab() {
 
         {/* Sync credentials (advanced / manual) */}
         <div className="bg-white rounded-2xl p-4 shadow-sm">
-          <p className="flex items-center gap-2 font-semibold text-slate-800 mb-3"><KeyRound size={16} /> Trip code (advanced)</p>
-          <Field label="Trip code (share with family)">
+          <p className="flex items-center gap-2 font-semibold text-slate-800 mb-3"><KeyRound size={16} /> Family trip code (advanced)</p>
+          <Field label="Family trip code">
             <TextInput value={code} onChange={e => setCode(e.target.value)} placeholder="e.g. golas-europe-2026" autoCapitalize="none" />
           </Field>
           <Field label="Password">

@@ -3,6 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from './db/database';
 import { initCurrency } from './lib/currency';
 import { Onboarding } from './components/Onboarding';
+import { WelcomeSlides } from './components/WelcomeSlides';
 import {
   LayoutDashboard, CalendarRange, Wallet, FileText, LayoutGrid,
   ListChecks, Plane, BedDouble, PiggyBank, Compass, Sparkles, History, Settings2,
@@ -52,6 +53,7 @@ export default function App() {
   const [stack, setStack] = useState<View[]>([]);
   const [moreOpen, setMoreOpen] = useState(false);
   const [, bump] = useReducer(x => x + 1, 0);
+  const [welcomeSeen, setWelcomeSeen] = useState(() => localStorage.getItem('welcome.seen') === '1');
 
   // undefined = still loading, null = no trip yet (show onboarding), object = ready.
   const tripState = useLiveQuery(() => db.trip.get('trip').then(t => t ?? null), [], undefined);
@@ -97,6 +99,10 @@ export default function App() {
 
   const canGoBack = stack.length > 0;
 
+  // First launch ever → warm welcome tour, then onboarding.
+  if (!welcomeSeen) {
+    return <WelcomeSlides onDone={() => { localStorage.setItem('welcome.seen', '1'); setWelcomeSeen(true); }} />;
+  }
   // First run: no trip yet → onboarding wizard. (undefined = DB still loading.)
   if (tripState === undefined) return <div className="min-h-screen bg-bg" />;
   if (tripState === null) return <Onboarding onDone={() => bump()} />;

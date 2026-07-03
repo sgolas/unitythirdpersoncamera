@@ -16,6 +16,7 @@ import { getSyncCode, getSyncPass, setSyncCredentials, getLastSync, isSyncConfig
 import { syncNow, wipeLocal, backupToGitHub } from '../../db/sync';
 import { saveBackup, restoreFromFile, backupExists } from '../../lib/persist';
 import { scanToJoin } from '../../lib/join';
+import { WelcomeSlides } from '../WelcomeSlides';
 import { fmtStamp } from '../../utils/format';
 import { TabHeader, Field, TextInput, Select, PrimaryButton, GhostButton, Overlay } from '../ui';
 
@@ -59,6 +60,7 @@ export function SettingsTab() {
   const [hasFile, setHasFile] = useState<boolean | null>(null);
   const [joinBusy, setJoinBusy] = useState(false);
   const [joinMsg, setJoinMsg] = useState('');
+  const [showTour, setShowTour] = useState(false);
 
   async function joinByScan() {
     setJoinBusy(true); setJoinMsg('');
@@ -150,6 +152,16 @@ export function SettingsTab() {
             ))}
           </div>
         </div>
+
+        {/* Welcome tour (replay anytime) */}
+        <button onClick={() => setShowTour(true)}
+          className="w-full bg-white rounded-2xl p-4 shadow-sm flex items-center gap-3 active:bg-slate-50 transition text-left">
+          <span className="w-10 h-10 rounded-2xl accent-gradient flex items-center justify-center text-xl">👋</span>
+          <span className="flex-1">
+            <span className="block font-semibold text-slate-800">Welcome tour</span>
+            <span className="block text-sm text-slate-500">Replay the quick intro to what the app can do.</span>
+          </span>
+        </button>
 
         {/* Travellers — add/remove people + profile pictures */}
         <TravelersManager />
@@ -317,6 +329,7 @@ export function SettingsTab() {
           onCancel={() => setWiping(false)}
           onConfirm={async () => { await wipeLocal(); setWiping(false); location.reload(); }} />
       )}
+      {showTour && <WelcomeSlides onDone={() => setShowTour(false)} />}
     </div>
   );
 }

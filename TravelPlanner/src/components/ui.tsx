@@ -52,15 +52,10 @@ export function Sheet({ title, onClose, children, footer }: {
     <div
       className="fixed inset-0 z-[200] bg-black/50 flex items-end sm:items-center sm:justify-center"
       onClick={onClose}
-      // Reserve the status-bar space at the top; the sheet (max-h-full) is
-      // then capped to the remaining height, so its header + top fields are
-      // always on screen. --kb lifts the sheet above the on-screen keyboard
-      // while it's open, and is 0 the instant it hides (so no leftover gap).
-      style={{
-        paddingTop: 'calc(env(safe-area-inset-top, 0px) + 8px)',
-        paddingBottom: 'var(--kb, 0px)',
-        transition: 'padding-bottom 0.22s ease',
-      }}
+      // Reserve only the status-bar space at the top. The full-screen sheet
+      // stays put when the keyboard opens — the keyboard simply overlays the
+      // bottom, and the focused field scrolls itself into view (see main.tsx).
+      style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 8px)' }}
     >
       <div
         // Mobile: a full-height form so it always fills the screen (no blank
@@ -75,8 +70,10 @@ export function Sheet({ title, onClose, children, footer }: {
           </button>
         </div>
         {/* min-h-0 lets this actually scroll instead of pushing the header
-            off-screen; sheet-scroll shows a visible scrollbar. */}
-        <div className="px-5 py-4 overflow-y-auto flex-1 min-h-0 sheet-scroll">{children}</div>
+            off-screen. Extra bottom padding = keyboard height so the lowest
+            fields can be scrolled up above the on-screen keyboard. */}
+        <div className="px-5 pt-4 overflow-y-auto flex-1 min-h-0 sheet-scroll"
+          style={{ paddingBottom: 'calc(1rem + var(--kb, 0px))' }}>{children}</div>
         {footer && (
           <div className="px-5 py-4 border-t border-slate-100 flex-shrink-0"
             style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))' }}>

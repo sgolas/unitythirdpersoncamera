@@ -27,14 +27,24 @@ async function initNativeChrome() {
  * view so it isn't hidden behind the keyboard — works on web and native.
  */
 function initFocusScroll() {
+  // If the focused field is hidden behind the on-screen keyboard, scroll it
+  // up into the visible area. Uses the visual viewport (which shrinks for the
+  // keyboard) so we only scroll when a field is actually covered.
+  function ensureVisible() {
+    const el = document.activeElement as HTMLElement | null;
+    if (!el || !/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) return;
+    const vv = window.visualViewport;
+    const visibleBottom = vv ? vv.offsetTop + vv.height : window.innerHeight;
+    const r = el.getBoundingClientRect();
+    if (r.bottom > visibleBottom - 16 || r.top < 8) {
+      el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }
+  }
   window.addEventListener('focusin', e => {
     const el = e.target as HTMLElement;
-    if (el && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) {
-      // 'nearest' only scrolls when the field is actually off-screen, and
-      // scrolls the minimum amount — so it never yanks the header away.
-      setTimeout(() => el.scrollIntoView({ block: 'nearest', behavior: 'smooth' }), 300);
-    }
+    if (el && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) setTimeout(ensureVisible, 300);
   });
+  window.visualViewport?.addEventListener('resize', () => setTimeout(ensureVisible, 100));
 }
 
 /**

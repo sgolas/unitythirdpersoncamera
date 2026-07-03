@@ -14,6 +14,7 @@ import { TravelersManager } from '../TravelersManager';
 import { InvitePanel } from '../InvitePanel';
 import { getSyncCode, getSyncPass, setSyncCredentials, getLastSync, isSyncConfigured } from '../../lib/config';
 import { syncNow, wipeLocal, backupToGitHub } from '../../db/sync';
+import { saveBackup, restoreFromFile, backupExists } from '../../lib/persist';
 import { fmtStamp } from '../../utils/format';
 import { TabHeader, Field, TextInput, Select, PrimaryButton, GhostButton, Overlay } from '../ui';
 
@@ -52,6 +53,26 @@ export function SettingsTab() {
   }, []);
   const [backupBusy, setBackupBusy] = useState(false);
   const [backupMsg, setBackupMsg] = useState('');
+  const [devBusy, setDevBusy] = useState(false);
+  const [devMsg, setDevMsg] = useState('');
+  const [hasFile, setHasFile] = useState<boolean | null>(null);
+
+  useEffect(() => { backupExists().then(setHasFile); }, []);
+
+  async function deviceBackupNow() {
+    setDevBusy(true); setDevMsg('');
+    await saveBackup();
+    setHasFile(await backupExists());
+    setDevBusy(false);
+    setDevMsg('Saved to your phone’s Documents › TripPlanner folder ✓');
+  }
+  async function deviceRestore() {
+    setDevBusy(true); setDevMsg('');
+    const ok = await restoreFromFile();
+    setDevBusy(false);
+    setDevMsg(ok ? 'Restored from your device backup ✓' : 'No backup file found on this device yet.');
+    if (ok) setTimeout(() => location.reload(), 900);
+  }
 
   async function backupNow() {
     setBackupBusy(true); setBackupMsg('');
@@ -201,6 +222,30 @@ export function SettingsTab() {
         </div>
 
         {/* GitHub backup */}
+        {/* On-device backup (survives uninstall) */}
+        {isNative && (
+          <div className="bg-white rounded-2xl p-4 shadow-sm">
+            <p className="flex items-center gap-2 font-semibold text-slate-800 mb-2"><ShieldCheck size={16} /> On-device backup</p>
+            <p className="text-sm text-slate-500 leading-snug">
+              Your trip is auto-saved to a file in your phone’s <b>Documents › TripPlanner</b> folder. It survives
+              uninstalling the app and restores automatically when you reinstall.
+              {hasFile === true && <span className="text-emerald-600"> Backup file present ✓</span>}
+            </p>
+            <div className="grid grid-cols-2 gap-2 mt-3">
+              <button onClick={deviceBackupNow} disabled={devBusy}
+                className="py-2.5 rounded-2xl font-semibold text-white bg-ink active:scale-[0.98] disabled:opacity-40 transition text-sm">
+                {devBusy ? 'Working…' : 'Back up now'}
+              </button>
+              <button onClick={deviceRestore} disabled={devBusy}
+                className="py-2.5 rounded-2xl font-semibold text-slate-700 bg-slate-100 active:bg-slate-200 disabled:opacity-40 transition text-sm">
+                Restore from device
+              </button>
+            </div>
+            {devMsg && <p className="text-center text-sm mt-2 text-slate-600">{devMsg}</p>}
+          </div>
+        )}
+
+        {/* GitHub backup */}
         <div className="bg-white rounded-2xl p-4 shadow-sm">
           <p className="flex items-center gap-2 font-semibold text-slate-800 mb-2"><Github size={16} /> GitHub backup</p>
           <p className="text-sm text-slate-500 leading-snug">
@@ -235,7 +280,7 @@ export function SettingsTab() {
         {/* Danger zone */}
         <div className="bg-white rounded-2xl p-4 shadow-sm">
           <p className="flex items-center gap-2 font-semibold text-slate-800 mb-2"><Trash2 size={16} /> Clear data</p>
-          <p className="text-sm text-slate-500 mb-3">Wipes all trip data on this device. If sync is set up, you can pull it all back with Sync.</p>
+          <p className="text-sm text-slate-500 mb-3">Wipes all trip data on this device <b>and the on-device backup file</b> — the only thing that fully erases the trip. If sync is set up, you can still pull it back with Sync.</p>
           <button onClick={() => setWiping(true)} className="w-full py-2.5 rounded-2xl font-semibold text-sunset bg-rose-50 active:bg-rose-100">
             Clear data
           </button>

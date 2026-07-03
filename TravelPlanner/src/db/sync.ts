@@ -7,6 +7,7 @@
  * user taps Sync.
  */
 import { db, tableFor, getDeviceName, logChange } from './database';
+import { scheduleBackup, deleteBackup, cancelScheduledBackup } from '../lib/persist';
 import type { AnyRecord, EntityKind } from '../types';
 import {
   getSyncCode, getSyncPass, isSyncConfigured, setLastSync, SYNC_ENDPOINT, BACKUP_ENDPOINT,
@@ -53,6 +54,7 @@ async function applyRemote(remote: RelayRecord[]): Promise<number> {
       applied++;
     }
   }
+  if (applied) scheduleBackup(); // persist pulled-in changes to the device file too
   return applied;
 }
 
@@ -165,8 +167,10 @@ export async function pullOnly(tripCode: string, password: string): Promise<Sync
   return { ok: true, pushed: 0, pulled, message: `Loaded ${data.records?.length ?? 0} items` };
 }
 
-/** Wipe local data (keeps device name). Used by "reset" in settings. */
+/** Wipe local data AND the on-device backup file. Used by "Clear data". */
 export async function wipeLocal() {
+  cancelScheduledBackup();
   await Promise.all(ENTITY_KINDS.map(k => tableFor(k).clear()));
   await db.changelog.clear();
+  await deleteBackup();
 }

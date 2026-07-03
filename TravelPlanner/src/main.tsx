@@ -7,6 +7,7 @@ import './index.css';
 import { isPortal, isNative } from './lib/platform';
 import { initOTA } from './lib/ota';
 import { initTheme } from './lib/theme';
+import { restoreIfEmpty, scheduleBackup, saveBackup } from './lib/persist';
 
 // Apply the saved theme immediately to avoid a flash of the wrong mode.
 initTheme();
@@ -60,6 +61,20 @@ async function boot() {
   await initNativeChrome();
   initFocusScroll();
   initKeyboardVar();
+
+  // Survive uninstall: if this is a fresh install with an empty database,
+  // restore from the backup file kept in the phone's Documents folder.
+  if (!isPortal) {
+    await restoreIfEmpty();
+    // Re-save the on-device backup whenever data changes (debounced), and
+    // flush immediately when the app goes to the background.
+    window.addEventListener('trip-data-changed', scheduleBackup);
+    if (isNative) {
+      import('@capacitor/app').then(({ App: CapApp }) => {
+        CapApp.addListener('appStateChange', s => { if (!s.isActive) void saveBackup(); });
+      }).catch(() => {});
+    }
+  }
 
   // No pre-seeded trip: a brand-new editor install shows the first-run
   // onboarding wizard (see App.tsx) so each user creates their own trip.

@@ -87,6 +87,11 @@ export function setDeviceName(name: string) {
   localStorage.setItem(DEVICE_KEY, name.trim() || 'This device');
 }
 
+/* Signal that data changed so the on-device backup can re-save (debounced). */
+function notifyChange() {
+  try { window.dispatchEvent(new Event('trip-data-changed')); } catch { /* SSR */ }
+}
+
 /* ── Change-log helper ──────────────────────────────────────── */
 export async function logChange(entry: Omit<ChangeLogEntry, 'id' | 'at' | 'device'>) {
   await db.changelog.add({
@@ -95,6 +100,7 @@ export async function logChange(entry: Omit<ChangeLogEntry, 'id' | 'at' | 'devic
     at: new Date().toISOString(),
     device: getDeviceName(),
   });
+  notifyChange();
 }
 
 /* ── Generic write API (auto-logs) ──────────────────────────── */

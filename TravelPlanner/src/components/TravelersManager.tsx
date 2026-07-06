@@ -3,8 +3,7 @@ import { Users, Plus, Pencil, Trash2, Upload, Loader, X } from 'lucide-react';
 import { useTravelers } from '../hooks/useTrip';
 import { put, remove } from '../db/database';
 import type { Traveler } from '../types';
-import { isSyncConfigured } from '../lib/config';
-import { uploadImageFile } from '../lib/photoUpload';
+import { compressToDataUrl } from '../lib/photoUpload';
 import { Sheet, Field, TextInput, Select, FormFooter, ConfirmDelete } from './ui';
 
 const EMOJIS = ['🧑', '👩', '👨', '🧒', '👧', '👦', '👶', '👴', '👵', '🧕', '🧑‍🦱', '🧑‍🦰', '🧑‍🦳', '🐶'];
@@ -81,10 +80,9 @@ function TravelerSheet({ traveler, onClose }: { traveler: Traveler | null; onClo
     const f = e.target.files?.[0];
     e.target.value = '';
     if (!f) return;
-    if (!isSyncConfigured()) { setErr('Set a trip code in Sync & Setup first to upload pictures.'); return; }
     setBusy(true); setErr('');
-    try { setPhoto(await uploadImageFile(f, 600, 0.85)); }
-    catch (e2) { setErr(e2 instanceof Error ? e2.message : 'Upload failed'); }
+    try { setPhoto(await compressToDataUrl(f, 600, 0.85)); }
+    catch (e2) { setErr(e2 instanceof Error ? e2.message : 'Could not read image'); }
     setBusy(false);
   }
 

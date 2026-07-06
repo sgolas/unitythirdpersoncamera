@@ -5,44 +5,37 @@
  * we merge last-write-wins into Supabase `trip_sync` and return the
  * authoritative set. Password-gated per shared trip code.
  *
- * Uses Web Crypto (crypto.subtle) instead of node:crypto, since Workers has no
- * Node built-ins. Env vars (Cloudflare Pages → Settings → Environment):
- *   SUPABASE_URL, SUPABASE_SERVICE_KEY
+ * Auth, CORS and rate limiting live in ./_shared. Env vars (Cloudflare Pages →
+ * Settings → Environment):
+ *   SUPABASE_URL, SUPABASE_SERVICE_KEY, AUTH_SALT
  */
 import { createClient } from '@supabase/supabase-js';
+import { cors, verifyAccess, clientIp, overRequestLimit, overFailLimit } from './_shared';
 
 interface Env {
   SUPABASE_URL: string;
   SUPABASE_SERVICE_KEY: string;
+  AUTH_SALT: string;
 }
 
-const CORS: Record<string, string> = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'Content-Type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Content-Type': 'application/json',
-};
-
-async function hash(code: string, pass: string): Promise<string> {
-  const data = new TextEncoder().encode(`${code}::${pass}`);
-  const buf = await crypto.subtle.digest('SHA-256', data);
-  return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
-}
-
-const json = (body: unknown, status = 200) =>
-  new Response(JSON.stringify(body), { status, headers: CORS });
-
-export const onRequestOptions: PagesFunction = () =>
-  new Response('', { headers: CORS });
+export const onRequestOptions: PagesFunction = (ctx) =>
+  new Response('', { headers: cors(ctx.request.headers.get('Origin')) });
 
 export const onRequestPost: PagesFunction<Env> = async (ctx) => {
   const { request, env } = ctx;
+  const headers = cors(request.headers.get('Origin'));
+  const json = (body: unknown, status = 200) =>
+    new Response(JSON.stringify(body), { status, headers });
+
   if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_KEY)
     return json({ error: 'Sync backend not configured' }, 500);
 
   const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_KEY, {
     auth: { persistSession: false },
   });
+
+  const ip = clientIp(request);
+  if (await overRequestLimit(supabase, ip)) return json({ error: 'Too many requests' }, 429);
 
   try {
     const { tripCode, password, device, records, readOnly } = await request.json() as {
@@ -53,16 +46,11 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
 
     if (!tripCode || !password) return json({ error: 'Missing trip code or password' }, 400);
 
-    const pwHash = await hash(tripCode, password);
-
-    const { data: access } = await supabase
-      .from('trip_access').select('password_hash').eq('trip_code', tripCode).maybeSingle();
-
-    if (!access) {
-      // The read-only portal must never create a trip — only the app claims a code.
-      if (readOnly) return json({ error: 'no-trip' }, 404);
-      await supabase.from('trip_access').insert({ trip_code: tripCode, password_hash: pwHash });
-    } else if (access.password_hash !== pwHash) {
+    // The read-only portal must never create a trip — only the app claims a code.
+    const access = await verifyAccess(supabase, tripCode, password, env.AUTH_SALT, !readOnly);
+    if (access === 'notfound') return json({ error: 'no-trip' }, 404);
+    if (access === 'wrong') {
+      if (await overFailLimit(supabase, ip, tripCode)) return json({ error: 'Too many attempts' }, 429);
       return json({ error: 'Wrong trip code or password' }, 401);
     }
 

@@ -24,6 +24,14 @@ export function compressToBase64(file: File, max = 1600, quality = 0.82): Promis
   });
 }
 
+/** Compress an image file to a local `data:` URI (no network). Used for
+ *  profile pictures and local-first trip photos — stored/synced in the record. */
+export async function compressToDataUrl(file: File, max = 600, quality = 0.85): Promise<string> {
+  const { base64, type } = await compressToBase64(file, max, quality);
+  if (!base64) throw new Error('Could not read image');
+  return `data:${type};base64,${base64}`;
+}
+
 /** Upload an image file and return its public URL. Throws with a clear message. */
 export async function uploadImageFile(file: File, max = 1600, quality = 0.82): Promise<string> {
   const { base64, type } = await compressToBase64(file, max, quality);

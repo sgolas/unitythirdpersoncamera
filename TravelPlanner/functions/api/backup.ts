@@ -15,28 +15,39 @@
  *   GITHUB_BRANCH  (optional)            — defaults to "trip-backups"
  */
 import { createClient } from '@supabase/supabase-js';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { cors, verifyAccess, clientIp, overRequestLimit, overFailLimit } from './_shared';
 
 interface Env {
   SUPABASE_URL: string;
   SUPABASE_SERVICE_KEY: string;
+  AUTH_SALT: string;
   GITHUB_TOKEN: string;
   GITHUB_REPO: string;
   GITHUB_BRANCH?: string;
 }
 
-const CORS: Record<string, string> = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'Content-Type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Content-Type': 'application/json',
-};
-const json = (body: unknown, status = 200) =>
-  new Response(JSON.stringify(body), { status, headers: CORS });
+/** Decode a `data:` URI into its content-type and raw bytes. */
+function decodeDataUri(uri: string): { bytes: Uint8Array; ext: string } | null {
+  const m = /^data:([^;,]+)?(;base64)?,(.*)$/s.exec(uri);
+  if (!m) return null;
+  const mime = m[1] || 'image/jpeg';
+  const isB64 = !!m[2];
+  const raw = isB64 ? atob(m[3]) : decodeURIComponent(m[3]);
+  const bytes = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
+  const ext = (mime.split('/')[1] || 'jpg').replace('jpeg', 'jpg').toLowerCase();
+  return { bytes, ext };
+}
 
-async function hash(code: string, pass: string): Promise<string> {
-  const data = new TextEncoder().encode(`${code}::${pass}`);
-  const buf = await crypto.subtle.digest('SHA-256', data);
-  return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
+/** For a legacy public Storage URL on the (now private) bucket, mint a signed
+ *  URL so the backup can still read the bytes. Non-storage URLs pass through. */
+async function readableUrl(supabase: SupabaseClient, url: string): Promise<string> {
+  const m = /\/storage\/v1\/object\/(?:public|sign)\/tripphotos\/([^?]+)/.exec(url);
+  if (!m) return url;
+  const path = decodeURIComponent(m[1]);
+  const { data } = await supabase.storage.from('tripphotos').createSignedUrl(path, 300);
+  return data?.signedUrl || url;
 }
 
 /** Safe folder name for a trip code. */
@@ -54,10 +65,15 @@ function toBase64(bytes: Uint8Array): string {
   return btoa(bin);
 }
 
-export const onRequestOptions: PagesFunction = () => new Response('', { headers: CORS });
+export const onRequestOptions: PagesFunction = (ctx) =>
+  new Response('', { headers: cors(ctx.request.headers.get('Origin')) });
 
 export const onRequestPost: PagesFunction<Env> = async (ctx) => {
   const { request, env } = ctx;
+  const headers = cors(request.headers.get('Origin'));
+  const json = (body: unknown, status = 200) =>
+    new Response(JSON.stringify(body), { status, headers });
+
   if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_KEY)
     return json({ error: 'Sync backend not configured' }, 500);
   if (!env.GITHUB_TOKEN || !env.GITHUB_REPO)
@@ -82,12 +98,16 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
 
     const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_KEY, { auth: { persistSession: false } });
 
-    // Auth against the same trip_access table the sync relay uses.
-    const { data: access } = await supabase
-      .from('trip_access').select('password_hash').eq('trip_code', tripCode).maybeSingle();
-    if (!access) return json({ error: 'no-trip' }, 404);
-    if (access.password_hash !== await hash(tripCode, password))
+    const ip = clientIp(request);
+    if (await overRequestLimit(supabase, ip)) return json({ error: 'Too many requests' }, 429);
+
+    // Auth against the same trip_access table the sync relay uses (read-only: no claim).
+    const access = await verifyAccess(supabase, tripCode, password, env.AUTH_SALT, false);
+    if (access === 'notfound') return json({ error: 'no-trip' }, 404);
+    if (access === 'wrong') {
+      if (await overFailLimit(supabase, ip, tripCode)) return json({ error: 'Too many attempts' }, 429);
       return json({ error: 'Wrong trip code or password' }, 401);
+    }
 
     // Pull the authoritative record set.
     const { data: rows } = await supabase
@@ -121,21 +141,31 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
 
     const treeEntries: any[] = [{ path: `${dir}/data.json`, mode: '100644', type: 'blob', content: dataJson }];
 
-    // Back up photo image files that aren't already stored.
+    // Back up photo image files that aren't already stored. New photos are
+    // local-first (`data:` URIs); older ones are Storage `url`s (now private).
     let newPhotos = 0;
     for (const r of records) {
       if (r.entity !== 'photo') continue;
       const p = r.payload as any;
-      const url: string | undefined = p?.url;
-      if (!url) continue;
-      const ext = (url.split('?')[0].match(/\.(jpe?g|png|webp|gif|heic)$/i)?.[1] || 'jpg').toLowerCase();
+      let bytes: Uint8Array | null = null;
+      let ext = 'jpg';
+
+      if (typeof p?.data === 'string' && p.data.startsWith('data:')) {
+        const dec = decodeDataUri(p.data);
+        if (!dec) continue;
+        bytes = dec.bytes; ext = dec.ext;
+      } else if (typeof p?.url === 'string') {
+        ext = (p.url.split('?')[0].match(/\.(jpe?g|png|webp|gif|heic)$/i)?.[1] || 'jpg').toLowerCase();
+        const img = await fetch(await readableUrl(supabase, p.url));
+        if (!img.ok) continue;
+        bytes = new Uint8Array(await img.arrayBuffer());
+      } else continue;
+
       const path = `${dir}/photos/${r.record_id}.${ext}`;
       if (havePaths.has(path)) continue;
-      const img = await fetch(url);
-      if (!img.ok) continue;
       const blob = await gh(`/repos/${repo}/git/blobs`, {
         method: 'POST',
-        body: JSON.stringify({ encoding: 'base64', content: toBase64(new Uint8Array(await img.arrayBuffer())) }),
+        body: JSON.stringify({ encoding: 'base64', content: toBase64(bytes) }),
       }).then(res => res.json()) as any;
       treeEntries.push({ path, mode: '100644', type: 'blob', sha: blob.sha });
       newPhotos++;

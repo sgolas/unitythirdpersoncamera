@@ -11,8 +11,10 @@ import type { LatLng } from '../lib/geo';
  * with number badges, and a dashed yarn-style route between stops.
  *
  * On top of the trip route it also shows:
- *   • the user's current location (a pulsing "you are here" dot), and
- *   • custom pins the user has dropped, tappable to view/edit.
+ *   • the user's current location (a pulsing "you are here" dot) and zooms
+ *     the map straight in to it, and
+ *   • custom pins the user has dropped — tap a pin to see its info in a little
+ *     bubble, press-and-hold a pin to edit it.
  * Tapping empty map calls `onMapTap` so the caller can drop a new pin there.
  *
  * Place names are geocoded with the free Nominatim service and cached in
@@ -22,6 +24,8 @@ import type { LatLng } from '../lib/geo';
  */
 
 const PIN_COLORS = ['#0ea5a3', '#fb7185', '#f59e0b', '#a78bfa', '#38bdf8', '#34d399'];
+const ME_ZOOM = 16;         // street-level zoom when we lock onto current location
+const HOLD_MS = 500;        // press-and-hold duration to trigger edit
 
 /** Escape user-entered text before it goes into Leaflet HTML (pins/popups),
  *  so a place named like `<img onerror=…>` can't run script. */
@@ -61,37 +65,33 @@ interface Props {
   pins?: MapPin[];
   me?: LatLng | null;
   onMapTap?: (lat: number, lng: number) => void;
-  onPinTap?: (pin: MapPin) => void;
+  onPinEdit?: (pin: MapPin) => void;
 }
 
-export function TripLeafletMap({ stops, onFallback, pins = [], me = null, onMapTap, onPinTap }: Props) {
+export function TripLeafletMap({ stops, onFallback, pins = [], me = null, onMapTap, onPinEdit }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const stopLayer = useRef<L.LayerGroup | null>(null);
   const pinLayer = useRef<L.LayerGroup | null>(null);
   const meLayer = useRef<L.LayerGroup | null>(null);
   const stopPts = useRef<[number, number][]>([]);
-  const lastFitSig = useRef('');
+  const didInitialView = useRef(false);
   const firedFallback = useRef(false);
   const [loading, setLoading] = useState(true);
 
   // Keep the latest callbacks reachable from Leaflet event handlers.
   const tapRef = useRef(onMapTap); tapRef.current = onMapTap;
-  const pinTapRef = useRef(onPinTap); pinTapRef.current = onPinTap;
+  const editRef = useRef(onPinEdit); editRef.current = onPinEdit;
 
-  /** Fit the view to everything we know about — but only when that set of
-   *  points actually changes, so we never yank the map while the user pans. */
-  function fitAll() {
+  /** Fit the view to the trip route — used only on first load when we don't
+   *  have a current location to zoom into. */
+  function fitStops() {
     const map = mapRef.current;
-    if (!map) return;
-    const all: [number, number][] = [...stopPts.current];
-    pins.forEach(p => all.push([p.lat, p.lng]));
-    if (me) all.push([me.lat, me.lng]);
+    if (!map || didInitialView.current) return;
+    const all = stopPts.current;
     if (all.length === 0) return;
-    const sig = all.map(p => p.join(',')).sort().join('|');
-    if (sig === lastFitSig.current) return;
-    lastFitSig.current = sig;
-    if (all.length === 1) map.setView(all[0], 13);
+    didInitialView.current = true;
+    if (all.length === 1) map.setView(all[0], 12);
     else map.fitBounds(L.latLngBounds(all).pad(0.25));
   }
 
@@ -106,9 +106,19 @@ export function TripLeafletMap({ stops, onFallback, pins = [], me = null, onMapT
     stopLayer.current = L.layerGroup().addTo(map);
     pinLayer.current = L.layerGroup().addTo(map);
     meLayer.current = L.layerGroup().addTo(map);
-    map.on('click', (e: L.LeafletMouseEvent) => tapRef.current?.(e.latlng.lat, e.latlng.lng));
+    // Tap on empty map: if an info bubble is open, just dismiss it; otherwise
+    // offer to drop a new pin there.
+    let popupShowing = false;
+    map.on('popupopen', () => { popupShowing = true; });
+    map.on('popupclose', () => { setTimeout(() => { popupShowing = false; }, 0); });
+    map.on('click', (e: L.LeafletMouseEvent) => {
+      if (popupShowing) { map.closePopup(); return; }
+      tapRef.current?.(e.latlng.lat, e.latlng.lng);
+    });
     map.setView([20, 0], 2); // neutral start until we have points
     mapRef.current = map;
+    // Test hook (only when ?e2e=1) so automated checks can read the zoom/center.
+    if (new URLSearchParams(location.search).has('e2e')) (window as unknown as { __map?: L.Map }).__map = map;
     setTimeout(() => map.invalidateSize(), 200);
     return () => { map.remove(); mapRef.current = null; };
   }, []);
@@ -147,7 +157,7 @@ export function TripLeafletMap({ stops, onFallback, pins = [], me = null, onMapT
         onFallback();
         return;
       }
-      fitAll();
+      fitStops(); // only fits if we haven't already locked onto a location
       setLoading(false);
     })();
     return () => { cancelled = true; };
@@ -157,39 +167,82 @@ export function TripLeafletMap({ stops, onFallback, pins = [], me = null, onMapT
   // ── Draw custom (user-dropped) pins ─────────────────────────
   useEffect(() => {
     const layer = pinLayer.current;
-    if (!layer) return;
+    const map = mapRef.current;
+    if (!layer || !map) return;
     layer.clearLayers();
+
     pins.forEach(p => {
       const html = `<div class="cmap-drop"><span>${esc(p.emoji || '📍')}</span></div>`;
       const m = L.marker([p.lat, p.lng], {
         icon: L.divIcon({ html, className: 'cmap-icon', iconSize: [40, 40], iconAnchor: [20, 36] }),
       }).addTo(layer);
-      if (pinTapRef.current) {
-        m.on('click', () => pinTapRef.current!(p));
-      } else {
-        // Read-only (portal): show the details in a popup.
-        const note = p.note ? `<br>${esc(p.note)}` : '';
-        m.bindPopup(`<b>${esc(p.label || 'Pin')}</b>${note}`);
+
+      // Tap shows the info bubble; press-and-hold opens the editor.
+      const note = p.note ? `<br><span class="cmap-pop-note">${esc(p.note)}</span>` : '';
+      const popupHtml = `<b>${esc(p.label || 'Pin')}</b>${note}`;
+
+      const el = m.getElement();
+      if (!el) {
+        // Fallback: no DOM handle → just show info on click.
+        m.bindPopup(popupHtml, { offset: [0, -30] });
+        return;
       }
+      // Keep pin taps from reaching the map (which would open the new-pin
+      // sheet and dismiss the bubble we're about to show).
+      L.DomEvent.disableClickPropagation(el);
+      el.addEventListener('contextmenu', e => e.preventDefault()); // Android long-press menu
+
+      let timer: ReturnType<typeof setTimeout> | null = null;
+      let held = false;
+      let moved = false;
+      let sx = 0, sy = 0;
+      const clear = () => { if (timer) { clearTimeout(timer); timer = null; } };
+      const down = (x: number, y: number) => {
+        held = false; moved = false; sx = x; sy = y;
+        if (!editRef.current) return; // read-only (portal): no hold-to-edit
+        clear();
+        timer = setTimeout(() => { held = true; map.closePopup(); editRef.current!(p); }, HOLD_MS);
+      };
+      const move = (x: number, y: number) => {
+        if (Math.hypot(x - sx, y - sy) > 10) { moved = true; clear(); }
+      };
+      const up = () => {
+        clear();
+        if (!held && !moved) {
+          // A genuine tap → show the info bubble.
+          L.popup({ offset: [0, -30], className: 'cmap-pop' })
+            .setLatLng([p.lat, p.lng]).setContent(popupHtml).openOn(map);
+        }
+        held = false;
+      };
+      el.addEventListener('pointerdown', e => down((e as PointerEvent).clientX, (e as PointerEvent).clientY));
+      el.addEventListener('pointermove', e => move((e as PointerEvent).clientX, (e as PointerEvent).clientY));
+      el.addEventListener('pointerup', up);
+      el.addEventListener('pointercancel', clear);
+      el.addEventListener('pointerleave', clear);
     });
+
     if (pins.length) setLoading(false);
-    fitAll();
+    // Don't refit/zoom when pins change — dropping a pin shouldn't move the map.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pins]);
 
-  // ── Draw the "you are here" marker ──────────────────────────
+  // ── Draw the "you are here" marker + zoom straight in to it ──
   useEffect(() => {
     const layer = meLayer.current;
-    if (!layer) return;
+    const map = mapRef.current;
+    if (!layer || !map) return;
     layer.clearLayers();
     if (me) {
       L.marker([me.lat, me.lng], {
         icon: L.divIcon({ html: '<div class="cmap-me"><i></i></div>', className: 'cmap-icon', iconSize: [20, 20], iconAnchor: [10, 10] }),
         interactive: false, zIndexOffset: 1000,
       }).addTo(layer);
+      // Auto-zoom in to the current location.
+      didInitialView.current = true;
+      map.setView([me.lat, me.lng], ME_ZOOM, { animate: true });
       setLoading(false);
     }
-    fitAll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [me]);
 
@@ -204,7 +257,7 @@ export function TripLeafletMap({ stops, onFallback, pins = [], me = null, onMapT
         )}
       </div>
       <p className="text-center text-xs text-slate-400 mt-3">
-        {onMapTap ? 'Tap the map to drop a pin · ' : ''}pinch to zoom, drag to pan
+        {onMapTap ? 'Tap the map to drop a pin · tap a pin for info · hold to edit' : 'tap a pin for info'}
       </p>
     </div>
   );

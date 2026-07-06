@@ -181,6 +181,10 @@ input, textarea, select { font-size: 16px; font-family: inherit; }
 }
 .cmap-drop span { transform: rotate(45deg); font-size: 18px; line-height: 1; }
 
+/* Compact info bubble shown when a dropped pin is tapped. */
+.cmap-pop .leaflet-popup-content { margin: 10px 12px; font-size: 13px; max-width: 200px; }
+.cmap-pop-note { display: block; margin-top: 2px; font-weight: 500; color: #475569; font-size: 12px; }
+
 /* "You are here" current-location marker — pulsing blue dot. */
 .cmap-me { position: relative; width: 20px; height: 20px; }
 .cmap-me i {

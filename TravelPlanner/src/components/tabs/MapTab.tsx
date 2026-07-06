@@ -80,7 +80,7 @@ export function MapTab() {
           <TripLeafletMap stops={stops} pins={pins} me={me}
             onFallback={() => setFallback(true)}
             onMapTap={(lat, lng) => setSheet({ pin: null, lat, lng })}
-            onPinTap={pin => setSheet({ pin, lat: pin.lat, lng: pin.lng })} />
+            onPinEdit={pin => setSheet({ pin, lat: pin.lat, lng: pin.lng })} />
 
           {/* Drop-a-pin-at-my-location button, floating over the map. */}
           <button onClick={() => locate(true)} disabled={locating}

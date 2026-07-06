@@ -10,7 +10,8 @@ import { Capacitor } from '@capacitor/core';
 
 export interface LatLng { lat: number; lng: number }
 
-const OPTS = { enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 };
+// Accept a recent OS-cached fix (2 min) so the first answer comes back fast.
+const OPTS = { enableHighAccuracy: true, timeout: 12000, maximumAge: 120000 };
 
 export async function getCurrentLocation(): Promise<LatLng> {
   // Native (Android/iOS) path — request permission first, then read position.

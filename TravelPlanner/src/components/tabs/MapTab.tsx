@@ -10,6 +10,19 @@ import { TripLeafletMap } from '../TripLeafletMap';
 
 const PIN_EMOJIS = ['📍', '🏨', '🍽️', '☕', '🏖️', '⛰️', '🎡', '🛍️', '🚉', '⭐', '⚠️', '🅿️'];
 
+/* Remember the last GPS fix so the map can zoom to you the instant it opens,
+ * then refine once a fresh fix arrives (a cold fix can take several seconds). */
+const LAST_LOC_KEY = 'map.lastloc';
+function loadLastLocation(): LatLng | null {
+  try {
+    const v = JSON.parse(localStorage.getItem(LAST_LOC_KEY) || 'null');
+    return v && typeof v.lat === 'number' && typeof v.lng === 'number' ? v : null;
+  } catch { return null; }
+}
+function saveLastLocation(loc: LatLng) {
+  try { localStorage.setItem(LAST_LOC_KEY, JSON.stringify(loc)); } catch { /* full */ }
+}
+
 /**
  * Trip Map: a real geographic map with a playful cartoon treatment. Shows the
  * trip route, your current location, and any custom pins you drop — tap the map
@@ -23,7 +36,8 @@ export function MapTab() {
   const itinerary = useItinerary();
   const pins = useMapPins();
   const [fallback, setFallback] = useState(false);
-  const [me, setMe] = useState<LatLng | null>(null);
+  // Start from the last known fix so the map opens zoomed-in on you right away.
+  const [me, setMe] = useState<LatLng | null>(loadLastLocation);
   const [locating, setLocating] = useState(false);
   const [geoErr, setGeoErr] = useState('');
   const [sheet, setSheet] = useState<{ pin: MapPin | null; lat: number; lng: number } | null>(null);
@@ -31,7 +45,7 @@ export function MapTab() {
   const stops = computeStops(transport, stays, itinerary);
   const hasMap = stops.length > 0 || pins.length > 0 || !!me;
 
-  // Show the user's starting location automatically the first time they open the map.
+  // Refresh with a fresh GPS fix as soon as the map opens.
   useEffect(() => { locate(false); /* eslint-disable-next-line */ }, []);
 
   async function locate(openSheet: boolean) {
@@ -39,6 +53,7 @@ export function MapTab() {
     try {
       const loc = await getCurrentLocation();
       setMe(loc);
+      saveLastLocation(loc);
       setFallback(false);
       if (openSheet) setSheet({ pin: null, lat: loc.lat, lng: loc.lng });
     } catch (e) {

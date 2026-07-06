@@ -6,7 +6,7 @@ import { computeStops, StringMap } from '../components/tripMap';
 import { TripLeafletMap } from '../components/TripLeafletMap';
 import {
   useTrip, useTravelers, useItinerary, useTransport, useAccommodation,
-  useDocuments, useExpenses, useChecklist, useBudget, usePhotos,
+  useDocuments, useExpenses, useChecklist, useBudget, usePhotos, useMapPins,
 } from '../hooks/useTrip';
 import { money, sumExpenses } from '../types';
 import { fmtDate, fmtDateLong, fmtTime, tripLength, daysUntil, dateRange } from '../utils/format';
@@ -132,6 +132,7 @@ function PortalView() {
   const checklist = useChecklist();
   const budget = useBudget();
   const photos = usePhotos();
+  const mapPins = useMapPins();
   const [refreshing, setRefreshing] = useState(false);
   const [waited, setWaited] = useState(false);
   const [view, setView] = useState<'overview' | 'map' | 'photos'>('overview');
@@ -225,7 +226,7 @@ function PortalView() {
         ))}
       </div>
 
-      {view === 'map' && <PortalMap transport={transport} stays={stays} itinerary={itinerary} />}
+      {view === 'map' && <PortalMap transport={transport} stays={stays} itinerary={itinerary} pins={mapPins} />}
       {view === 'photos' && <PortalPhotos photos={photos} />}
 
       {view === 'overview' && (
@@ -348,17 +349,17 @@ function PortalView() {
 }
 
 /* ── Portal: Map view ───────────────────────────────────────── */
-function PortalMap({ transport, stays, itinerary }: {
-  transport: any[]; stays: any[]; itinerary: any[];
+function PortalMap({ transport, stays, itinerary, pins }: {
+  transport: any[]; stays: any[]; itinerary: any[]; pins: any[];
 }) {
   const [fallback, setFallback] = useState(false);
   const stops = computeStops(transport, stays, itinerary);
-  if (stops.length === 0)
+  if (stops.length === 0 && pins.length === 0)
     return <p className="text-center text-slate-400 py-16">No places pinned yet — add stays, transport or itinerary in the app.</p>;
   return (
     <div className="max-w-md mx-auto">
-      {fallback ? <StringMap stops={stops} /> : <TripLeafletMap stops={stops} onFallback={() => setFallback(true)} />}
-      <p className="text-center text-xs text-slate-400 -mt-2 pb-6">pins come from stays, transport &amp; itinerary</p>
+      {fallback ? <StringMap stops={stops} /> : <TripLeafletMap stops={stops} pins={pins} onFallback={() => setFallback(true)} />}
+      <p className="text-center text-xs text-slate-400 -mt-2 pb-6">pins from your stops &amp; the spots you dropped</p>
     </div>
   );
 }

@@ -173,6 +173,29 @@ input, textarea, select { font-size: 16px; font-family: inherit; }
   display: flex; align-items: center; justify-content: center; border: 2px solid #fff;
 }
 
+/* Custom map pin (user-dropped) — round bubble with an emoji. */
+.cmap-drop {
+  width: 40px; height: 40px; border-radius: 50% 50% 50% 8px; transform: rotate(-45deg);
+  background: #6366f1; border: 3px solid #fff; box-shadow: 0 4px 8px rgba(0,0,0,0.35);
+  display: flex; align-items: center; justify-content: center;
+}
+.cmap-drop span { transform: rotate(45deg); font-size: 18px; line-height: 1; }
+
+/* "You are here" current-location marker — pulsing blue dot. */
+.cmap-me { position: relative; width: 20px; height: 20px; }
+.cmap-me i {
+  position: absolute; inset: 0; margin: auto; width: 16px; height: 16px; border-radius: 50%;
+  background: #2563eb; border: 3px solid #fff; box-shadow: 0 0 0 1px rgba(0,0,0,0.25);
+}
+.cmap-me::before {
+  content: ''; position: absolute; inset: -6px; border-radius: 50%;
+  background: rgba(37, 99, 235, 0.28); animation: cmap-pulse 1.8s ease-out infinite;
+}
+@keyframes cmap-pulse {
+  0% { transform: scale(0.6); opacity: 0.8; }
+  100% { transform: scale(1.8); opacity: 0; }
+}
+
 /* ── Stitch monogram watermark (LV-style, plastered & faded) ─── */
 .bg-monogram {
   background-image: url('/stitch-mono.png');

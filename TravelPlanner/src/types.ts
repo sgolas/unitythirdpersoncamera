@@ -157,6 +157,16 @@ export interface TripPhoto extends SyncMeta {
   folder: string;         // grouping folder (e.g. Documents, Bills, Recipes)
 }
 
+/* ── Map pins (custom markers dropped on the trip map) ──────── */
+export interface MapPin extends SyncMeta {
+  kind: 'mappin';
+  label: string;       // short name for the spot
+  note: string;        // free-text details / info
+  emoji: string;       // marker glyph
+  lat: number;
+  lng: number;
+}
+
 /* ── Change Log ─────────────────────────────────────────────── */
 export type ChangeAction = 'create' | 'update' | 'delete' | 'sync';
 
@@ -176,7 +186,7 @@ export interface ChangeLogEntry {
 /* ── Union of all synced records ────────────────────────────── */
 export type AnyRecord =
   | Traveler | TravelDocument | ChecklistItem | Transport
-  | Accommodation | Expense | ItineraryEvent | BudgetLine | TripMeta | TripPhoto;
+  | Accommodation | Expense | ItineraryEvent | BudgetLine | TripMeta | TripPhoto | MapPin;
 
 export type EntityKind = AnyRecord['kind'];
 

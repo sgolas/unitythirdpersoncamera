@@ -171,12 +171,13 @@ export function FormFooter({ onCancel, onSubmit, submitLabel = 'Save', disabled 
 }
 
 /* ── Empty state ────────────────────────────────────────────── */
-export function EmptyState({ emoji, title, hint }: { emoji: string; title: string; hint: string }) {
+export function EmptyState({ emoji, title, hint, action }: { emoji: string; title: string; hint: string; action?: React.ReactNode }) {
   return (
     <div className="flex flex-col items-center text-center py-14 px-8">
       <span className="text-5xl mb-3">{emoji}</span>
       <p className="font-semibold text-slate-700">{title}</p>
       <p className="text-slate-400 text-sm mt-1">{hint}</p>
+      {action && <div className="mt-4">{action}</div>}
     </div>
   );
 }

@@ -181,6 +181,13 @@ input, textarea, select { font-size: 16px; font-family: inherit; }
 }
 .cmap-drop span { transform: rotate(45deg); font-size: 18px; line-height: 1; }
 
+/* Direction arrow riding the yarn route between stops. */
+.cmap-arrow {
+  width: 22px; height: 22px; display: flex; align-items: center; justify-content: center;
+  color: #0f766e; font-size: 16px; font-weight: 900; line-height: 1;
+  text-shadow: 0 0 3px #fff, 0 0 3px #fff, 0 0 6px #fff;
+}
+
 /* Compact info bubble shown when a dropped pin is tapped. */
 .cmap-pop .leaflet-popup-content { margin: 10px 12px; font-size: 13px; max-width: 200px; }
 .cmap-pop-note { display: block; margin-top: 2px; font-weight: 500; color: #475569; font-size: 12px; }

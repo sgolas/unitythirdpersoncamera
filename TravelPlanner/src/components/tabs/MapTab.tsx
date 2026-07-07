@@ -1,14 +1,25 @@
 import { useEffect, useState } from 'react';
-import { MapPin as MapPinIcon, Crosshair, Loader } from 'lucide-react';
+import { MapPin as MapPinIcon, Crosshair, Loader, SlidersHorizontal, Check } from 'lucide-react';
 import { useTransport, useAccommodation, useItinerary, useTrip, useMapPins } from '../../hooks/useTrip';
 import { put, remove } from '../../db/database';
-import type { MapPin } from '../../types';
+import type { MapPin, PinCategory } from '../../types';
 import { getCurrentLocation, type LatLng } from '../../lib/geo';
-import { TabHeader, EmptyState, Sheet, Field, TextInput, TextArea, FormFooter, ConfirmDelete } from '../ui';
+import { TabHeader, EmptyState, Sheet, Field, TextInput, TextArea, FormFooter, ConfirmDelete, Overlay } from '../ui';
 import { computeStops, StringMap } from '../tripMap';
 import { TripLeafletMap } from '../TripLeafletMap';
 
-const PIN_EMOJIS = ['📍', '🏨', '🍽️', '☕', '🏖️', '⛰️', '🎡', '🛍️', '🚉', '⭐', '⚠️', '🅿️'];
+const PIN_EMOJIS = ['📍', '🏨', '🍽️', '☕', '🏖️', '⛰️', '🎡', '🛍️', '✈️', '🚉', '⭐', '⚠️', '🅿️'];
+
+/** Pin categories — used both to tag dropped pins and to filter the map.
+ *  `stopKind` maps a category onto the trip-route stops so filtering also
+ *  narrows the route pins (flights → transport, hotels → stays, …). */
+const CATS: { key: PinCategory; label: string; emoji: string; stopKind: string | null }[] = [
+  { key: 'flight',     label: 'Flights',     emoji: '✈️', stopKind: 'transport' },
+  { key: 'restaurant', label: 'Restaurants', emoji: '🍽️', stopKind: null },
+  { key: 'attraction', label: 'Attractions', emoji: '🎡', stopKind: 'event' },
+  { key: 'hotel',      label: 'Hotels',      emoji: '🏨', stopKind: 'stay' },
+];
+const catOf = (k: PinCategory) => CATS.find(c => c.key === k);
 
 /* Remember the last GPS fix so the map can zoom to you the instant it opens,
  * then refine once a fresh fix arrives (a cold fix can take several seconds). */
@@ -25,9 +36,10 @@ function saveLastLocation(loc: LatLng) {
 
 /**
  * Trip Map: a real geographic map with a playful cartoon treatment. Shows the
- * trip route, your current location, and any custom pins you drop — tap the map
- * (or the locate button) to add a pin with your own notes. Falls back to the
- * illustrated string-map if nothing can be located and there's a route to draw.
+ * trip route (with direction arrows), your current location, and any custom
+ * pins you drop — tap the map (or the locate button) to add a pin with your
+ * own notes; the filter button narrows the map to one kind of place. Falls
+ * back to the illustrated string-map if nothing can be located.
  */
 export function MapTab() {
   const trip = useTrip();
@@ -41,8 +53,14 @@ export function MapTab() {
   const [locating, setLocating] = useState(false);
   const [geoErr, setGeoErr] = useState('');
   const [sheet, setSheet] = useState<{ pin: MapPin | null; lat: number; lng: number } | null>(null);
+  const [filter, setFilter] = useState<'all' | PinCategory>('all');
+  const [filterOpen, setFilterOpen] = useState(false);
 
   const stops = computeStops(transport, stays, itinerary);
+  const visibleStops = filter === 'all' ? stops
+    : stops.filter(s => s.kind === catOf(filter)?.stopKind);
+  const visiblePins = filter === 'all' ? pins
+    : pins.filter(p => (p.category ?? 'other') === filter);
   const hasMap = stops.length > 0 || pins.length > 0 || !!me;
 
   // Refresh with a fresh GPS fix as soon as the map opens.
@@ -92,10 +110,22 @@ export function MapTab() {
         </>
       ) : (
         <div className="relative">
-          <TripLeafletMap stops={stops} pins={pins} me={me}
+          <TripLeafletMap stops={visibleStops} pins={visiblePins} me={me}
             onFallback={() => setFallback(true)}
             onMapTap={(lat, lng) => setSheet({ pin: null, lat, lng })}
             onPinEdit={pin => setSheet({ pin, lat: pin.lat, lng: pin.lng })} />
+
+          {/* Filter what the map shows. */}
+          <button onClick={() => setFilterOpen(true)}
+            className={`absolute right-7 top-8 z-[600] h-11 rounded-full shadow-lg border flex items-center justify-center gap-1.5 px-3.5 active:scale-95 transition ${
+              filter === 'all' ? 'bg-surface border-line text-content' : 'accent-gradient border-transparent text-white'
+            }`}
+            aria-label="Filter map">
+            {filter === 'all'
+              ? <SlidersHorizontal size={18} />
+              : <><span className="text-base leading-none">{catOf(filter)?.emoji}</span>
+                  <span className="text-sm font-bold">{catOf(filter)?.label}</span></>}
+          </button>
 
           {/* Drop-a-pin-at-my-location button, floating over the map. */}
           <button onClick={() => locate(true)} disabled={locating}
@@ -106,24 +136,76 @@ export function MapTab() {
         </div>
       )}
 
+      {filterOpen && (
+        <FilterModal current={filter}
+          onPick={f => { setFilter(f); setFilterOpen(false); }}
+          onClose={() => setFilterOpen(false)} />
+      )}
+
       {sheet && (
-        <PinSheet lat={sheet.lat} lng={sheet.lng} pin={sheet.pin} onClose={() => setSheet(null)} />
+        <PinSheet lat={sheet.lat} lng={sheet.lng} pin={sheet.pin}
+          defaultCategory={filter === 'all' ? 'other' : filter}
+          onClose={() => setSheet(null)} />
       )}
     </div>
   );
 }
 
-function PinSheet({ lat, lng, pin, onClose }: { lat: number; lng: number; pin: MapPin | null; onClose: () => void }) {
+/* ── Filter popup ───────────────────────────────────────────── */
+function FilterModal({ current, onPick, onClose }: {
+  current: 'all' | PinCategory;
+  onPick: (f: 'all' | PinCategory) => void;
+  onClose: () => void;
+}) {
+  const options: { key: 'all' | PinCategory; label: string; emoji: string }[] = [
+    { key: 'all', label: 'View all', emoji: '🌍' },
+    ...CATS.map(c => ({ key: c.key, label: c.label, emoji: c.emoji })),
+  ];
+  return (
+    <Overlay>
+      <div className="fixed inset-0 z-[700] bg-black/40 flex items-center justify-center p-6 animate-fadeIn" onClick={onClose}>
+        <div className="bg-surface rounded-3xl p-5 w-full max-w-xs shadow-2xl" onClick={e => e.stopPropagation()}>
+          <p className="font-bold text-content text-lg">Filter the map</p>
+          <p className="text-xs text-muted mb-4">Choose what kind of pins to show</p>
+          <div className="space-y-1.5">
+            {options.map(o => (
+              <button key={o.key} onClick={() => onPick(o.key)}
+                className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-2xl border-2 transition text-left ${
+                  current === o.key ? 'border-accent bg-accent/5' : 'border-line active:bg-slate-50'
+                }`}>
+                <span className="text-xl">{o.emoji}</span>
+                <span className="flex-1 font-semibold text-content">{o.label}</span>
+                {current === o.key && <Check size={18} className="text-accent" />}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </Overlay>
+  );
+}
+
+/* ── Add / edit a dropped pin ───────────────────────────────── */
+function PinSheet({ lat, lng, pin, defaultCategory, onClose }: {
+  lat: number; lng: number; pin: MapPin | null; defaultCategory: PinCategory; onClose: () => void;
+}) {
   const [label, setLabel] = useState(pin?.label ?? '');
   const [note, setNote] = useState(pin?.note ?? '');
-  const [emoji, setEmoji] = useState(pin?.emoji ?? '📍');
+  const [category, setCategory] = useState<PinCategory>(pin?.category ?? defaultCategory);
+  const [emoji, setEmoji] = useState(pin?.emoji ?? (catOf(defaultCategory)?.emoji ?? '📍'));
   const [confirmDel, setConfirmDel] = useState(false);
+
+  function pickCategory(c: PinCategory) {
+    setCategory(c);
+    // Picking a type also picks a sensible marker (still changeable below).
+    setEmoji(catOf(c)?.emoji ?? '📍');
+  }
 
   async function save() {
     const isNew = !pin;
     await put<MapPin>({
       kind: 'mappin', id: pin?.id ?? crypto.randomUUID(),
-      label: label.trim() || 'Dropped pin', note: note.trim(), emoji,
+      label: label.trim() || 'Dropped pin', note: note.trim(), emoji, category,
       lat, lng, updatedAt: '', updatedBy: '',
     }, `${isNew ? 'Dropped' : 'Updated'} map pin: ${label.trim() || 'Dropped pin'}`, isNew ? 'create' : 'update');
     onClose();
@@ -132,6 +214,18 @@ function PinSheet({ lat, lng, pin, onClose }: { lat: number; lng: number; pin: M
   return (
     <Sheet title={pin ? 'Edit pin' : 'Drop a pin here'} onClose={onClose}
       footer={<FormFooter onCancel={onClose} onSubmit={save} submitLabel={pin ? 'Save' : 'Drop pin'} />}>
+      <Field label="Type">
+        <div className="flex flex-wrap gap-2">
+          {[...CATS, { key: 'other' as PinCategory, label: 'Other', emoji: '📍' }].map(c => (
+            <button key={c.key} onClick={() => pickCategory(c.key)}
+              className={`px-3 py-2 rounded-xl text-sm font-semibold flex items-center gap-1.5 border-2 transition ${
+                category === c.key ? 'border-accent bg-accent/5 text-content' : 'border-line text-muted'
+              }`}>
+              <span>{c.emoji}</span> {c.label}
+            </button>
+          ))}
+        </div>
+      </Field>
       <Field label="Marker">
         <div className="flex flex-wrap gap-2">
           {PIN_EMOJIS.map(em => (

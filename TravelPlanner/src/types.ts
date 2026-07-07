@@ -158,11 +158,14 @@ export interface TripPhoto extends SyncMeta {
 }
 
 /* ── Map pins (custom markers dropped on the trip map) ──────── */
+export type PinCategory = 'flight' | 'restaurant' | 'attraction' | 'hotel' | 'other';
+
 export interface MapPin extends SyncMeta {
   kind: 'mappin';
   label: string;       // short name for the spot
   note: string;        // free-text details / info
   emoji: string;       // marker glyph
+  category?: PinCategory; // filterable type (older pins count as 'other')
   lat: number;
   lng: number;
 }

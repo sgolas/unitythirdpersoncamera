@@ -147,6 +147,23 @@ export function TripLeafletMap({ stops, onFallback, pins = [], me = null, onMapT
       if (latlngs.length > 1) {
         L.polyline(latlngs, { color: '#0f766e', weight: 4, opacity: 0.85, dashArray: '1 12', lineCap: 'round' })
           .addTo(stopLayer.current!);
+        // Direction arrows: one at each segment's midpoint, rotated to point
+        // from the previous stop to the next. The angle is computed in
+        // projected (Mercator) space so it matches the drawn line at any zoom.
+        const mapNow = mapRef.current!;
+        for (let i = 1; i < latlngs.length; i++) {
+          const a = mapNow.project(L.latLng(latlngs[i - 1]), 12);
+          const b = mapNow.project(L.latLng(latlngs[i]), 12);
+          const ang = Math.atan2(b.y - a.y, b.x - a.x) * 180 / Math.PI;
+          const mid = mapNow.unproject(a.add(b).divideBy(2), 12);
+          L.marker(mid, {
+            icon: L.divIcon({
+              html: `<div class="cmap-arrow" style="transform:rotate(${ang}deg)">➤</div>`,
+              className: 'cmap-icon', iconSize: [22, 22], iconAnchor: [11, 11],
+            }),
+            interactive: false,
+          }).addTo(stopLayer.current!);
+        }
       }
       stopPts.current = latlngs;
 

@@ -6,7 +6,8 @@ import type { MapPin, PinCategory } from '../../types';
 import { getCurrentLocation, type LatLng } from '../../lib/geo';
 import { TabHeader, EmptyState, Sheet, Field, TextInput, TextArea, FormFooter, ConfirmDelete, Overlay } from '../ui';
 import { computeStops, StringMap } from '../tripMap';
-import { TripLeafletMap } from '../TripLeafletMap';
+import { TripLeafletMap, type PlacedStop } from '../TripLeafletMap';
+import { fmtDate } from '../../utils/format';
 
 const PIN_EMOJIS = ['📍', '🏨', '🍽️', '☕', '🏖️', '⛰️', '🎡', '🛍️', '✈️', '🚉', '⭐', '⚠️', '🅿️'];
 
@@ -55,7 +56,8 @@ export function MapTab() {
   const [sheet, setSheet] = useState<{ pin: MapPin | null; lat: number; lng: number } | null>(null);
   const [filter, setFilter] = useState<'all' | PinCategory>('all');
   const [filterOpen, setFilterOpen] = useState(false);
-  const [focus, setFocus] = useState<{ lat: number; lng: number; pin?: MapPin; n: number } | null>(null);
+  const [focus, setFocus] = useState<{ lat: number; lng: number; pin?: MapPin; label?: string; sub?: string; n: number } | null>(null);
+  const [placedStops, setPlacedStops] = useState<PlacedStop[]>([]);
   const mapBoxRef = useRef<HTMLDivElement>(null);
 
   const stops = computeStops(transport, stays, itinerary);
@@ -115,6 +117,12 @@ export function MapTab() {
         <div className="relative" ref={mapBoxRef}>
           <TripLeafletMap stops={visibleStops} pins={visiblePins} me={me} focus={focus}
             onFallback={() => setFallback(true)}
+            onStopsPlaced={pts => setPlacedStops(prev =>
+              // Keep the same state identity when nothing changed, so the
+              // geocode effect re-running doesn't cause a render loop.
+              prev.length === pts.length && prev.every((x, i) =>
+                x.stop.label === pts[i].stop.label && x.lat === pts[i].lat && x.lng === pts[i].lng)
+                ? prev : pts)}
             onMapTap={(lat, lng) => setSheet({ pin: null, lat, lng })}
             onPinEdit={pin => setSheet({ pin, lat: pin.lat, lng: pin.lng })} />
 
@@ -138,9 +146,13 @@ export function MapTab() {
           </button>
         </div>
 
-        <PinDrawer pins={visiblePins}
+        <PinDrawer pins={visiblePins} stops={placedStops}
           onPick={p => {
             setFocus({ lat: p.lat, lng: p.lng, pin: p, n: Date.now() });
+            mapBoxRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }}
+          onPickStop={s => {
+            setFocus({ lat: s.lat, lng: s.lng, label: s.stop.label, sub: fmtDate(s.stop.date), n: Date.now() });
             mapBoxRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
           }}
           onEdit={p => setSheet({ pin: p, lat: p.lat, lng: p.lng })} />
@@ -162,52 +174,89 @@ export function MapTab() {
   );
 }
 
-/* ── Expandable drawer listing all dropped pins ─────────────── */
-function PinDrawer({ pins, onPick, onEdit }: {
+/* ── Expandable drawer listing everything on the map ────────── */
+const STOP_KIND_LABEL: Record<string, string> = {
+  stay: 'Stay', transport: 'Travel', event: 'Itinerary spot',
+};
+
+function PinDrawer({ pins, stops, onPick, onPickStop, onEdit }: {
   pins: MapPin[];
+  stops: PlacedStop[];
   onPick: (p: MapPin) => void;
+  onPickStop: (s: PlacedStop) => void;
   onEdit: (p: MapPin) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const total = pins.length + stops.length;
   return (
     <div className="mx-3 mb-4 bg-surface rounded-3xl shadow-soft border border-line overflow-hidden">
       <button onClick={() => setOpen(o => !o)}
         className="w-full flex items-center gap-2.5 px-4 py-3.5 active:bg-slate-50 transition"
         aria-expanded={open} aria-label="Pin list">
         <span className="text-lg">📍</span>
-        <span className="flex-1 text-left font-bold text-content">My pins
-          <span className="ml-1.5 text-xs font-semibold text-muted">({pins.length})</span>
+        <span className="flex-1 text-left font-bold text-content">Places on the map
+          <span className="ml-1.5 text-xs font-semibold text-muted">({total})</span>
         </span>
         <ChevronDown size={18} className={`text-muted transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
 
       {open && (
-        pins.length === 0 ? (
-          <p className="px-4 pb-4 text-sm text-muted">No pins yet — tap the map or use the 📍 button to drop one.</p>
+        total === 0 ? (
+          <p className="px-4 pb-4 text-sm text-muted">Nothing yet — add flights, stays or itinerary spots, or drop a pin on the map.</p>
         ) : (
-          <div className="border-t border-line divide-y divide-line">
-            {pins.map(p => (
-              <div key={p.id} className="flex items-center gap-3 px-4 py-3 active:bg-slate-50 transition"
-                onClick={() => onPick(p)} role="button" aria-label={`Go to ${p.label || 'pin'}`}>
-                <span className="w-9 h-9 rounded-xl bg-accent/10 flex items-center justify-center text-lg flex-shrink-0">
-                  {p.emoji || '📍'}
-                </span>
-                <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-content truncate">{p.label || 'Dropped pin'}</p>
-                  {(p.note || p.category) && (
-                    <p className="text-xs text-muted truncate">
-                      {p.category && p.category !== 'other' ? `${catOf(p.category)?.emoji} ${catOf(p.category)?.label}` : ''}
-                      {p.category && p.category !== 'other' && p.note ? ' · ' : ''}
-                      {p.note}
-                    </p>
-                  )}
+          <div className="border-t border-line">
+            {stops.length > 0 && (
+              <>
+                <p className="px-4 pt-3 pb-1 text-[11px] font-bold uppercase tracking-wide text-muted">Trip route</p>
+                <div className="divide-y divide-line">
+                  {stops.map((s, i) => (
+                    <div key={`${s.stop.label}-${i}`} className="flex items-center gap-3 px-4 py-3 active:bg-slate-50 transition"
+                      onClick={() => onPickStop(s)} role="button" aria-label={`Go to ${s.stop.label}`}>
+                      <span className="relative w-9 h-9 rounded-xl bg-teal-500/10 flex items-center justify-center text-lg flex-shrink-0">
+                        {s.stop.emoji}
+                        <b className="absolute -top-1 -right-1 w-4.5 h-4.5 min-w-[18px] min-h-[18px] rounded-full bg-ink text-white text-[10px] font-bold flex items-center justify-center">{i + 1}</b>
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-content truncate">{s.stop.label}</p>
+                        <p className="text-xs text-muted truncate">
+                          {STOP_KIND_LABEL[s.stop.kind] ?? 'Stop'}{s.stop.date ? ` · ${fmtDate(s.stop.date)}` : ''}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-                <button onClick={e => { e.stopPropagation(); onEdit(p); }} aria-label={`Edit ${p.label || 'pin'}`}
-                  className="p-2 rounded-lg text-muted active:bg-slate-200 flex-shrink-0">
-                  <Pencil size={15} />
-                </button>
-              </div>
-            ))}
+              </>
+            )}
+
+            {pins.length > 0 && (
+              <>
+                <p className="px-4 pt-3 pb-1 text-[11px] font-bold uppercase tracking-wide text-muted">My pins</p>
+                <div className="divide-y divide-line">
+                  {pins.map(p => (
+                    <div key={p.id} className="flex items-center gap-3 px-4 py-3 active:bg-slate-50 transition"
+                      onClick={() => onPick(p)} role="button" aria-label={`Go to ${p.label || 'pin'}`}>
+                      <span className="w-9 h-9 rounded-xl bg-accent/10 flex items-center justify-center text-lg flex-shrink-0">
+                        {p.emoji || '📍'}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-content truncate">{p.label || 'Dropped pin'}</p>
+                        {(p.note || p.category) && (
+                          <p className="text-xs text-muted truncate">
+                            {p.category && p.category !== 'other' ? `${catOf(p.category)?.emoji} ${catOf(p.category)?.label}` : ''}
+                            {p.category && p.category !== 'other' && p.note ? ' · ' : ''}
+                            {p.note}
+                          </p>
+                        )}
+                      </div>
+                      <button onClick={e => { e.stopPropagation(); onEdit(p); }} aria-label={`Edit ${p.label || 'pin'}`}
+                        className="p-2 rounded-lg text-muted active:bg-slate-200 flex-shrink-0">
+                        <Pencil size={15} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
         )
       )}

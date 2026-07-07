@@ -65,6 +65,9 @@ function pinPopupHtml(p: MapPin): string {
   return `<b>${esc(p.label || 'Pin')}</b>${note}`;
 }
 
+/** A trip-route stop with its geocoded position (for the drawer list). */
+export interface PlacedStop { stop: Stop; lat: number; lng: number }
+
 interface Props {
   stops: Stop[];
   onFallback: () => void;
@@ -72,12 +75,14 @@ interface Props {
   me?: LatLng | null;
   onMapTap?: (lat: number, lng: number) => void;
   onPinEdit?: (pin: MapPin) => void;
-  /** Fly to this spot (e.g. a pin picked from the drawer list). `n` makes
-   *  repeated picks of the same pin re-trigger the flight. */
-  focus?: { lat: number; lng: number; pin?: MapPin; n: number } | null;
+  /** Called once the stops are geocoded, with each one's map position. */
+  onStopsPlaced?: (placed: PlacedStop[]) => void;
+  /** Fly to this spot (e.g. a point picked from the drawer list). `n` makes
+   *  repeated picks of the same point re-trigger the flight. */
+  focus?: { lat: number; lng: number; pin?: MapPin; label?: string; sub?: string; n: number } | null;
 }
 
-export function TripLeafletMap({ stops, onFallback, pins = [], me = null, onMapTap, onPinEdit, focus = null }: Props) {
+export function TripLeafletMap({ stops, onFallback, pins = [], me = null, onMapTap, onPinEdit, onStopsPlaced, focus = null }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const stopLayer = useRef<L.LayerGroup | null>(null);
@@ -91,6 +96,7 @@ export function TripLeafletMap({ stops, onFallback, pins = [], me = null, onMapT
   // Keep the latest callbacks reachable from Leaflet event handlers.
   const tapRef = useRef(onMapTap); tapRef.current = onMapTap;
   const editRef = useRef(onPinEdit); editRef.current = onPinEdit;
+  const placedRef = useRef(onStopsPlaced); placedRef.current = onStopsPlaced;
 
   /** Fit the view to the trip route — used only on first load when we don't
    *  have a current location to zoom into. */
@@ -142,6 +148,7 @@ export function TripLeafletMap({ stops, onFallback, pins = [], me = null, onMapT
         if (g) pts.push({ stop: s, ...g });
       }
       if (cancelled || !mapRef.current || !stopLayer.current) return;
+      placedRef.current?.(pts.map(p => ({ stop: p.stop, lat: p.lat, lng: p.lng })));
 
       stopLayer.current.clearLayers();
       const latlngs: [number, number][] = [];
@@ -277,9 +284,13 @@ export function TripLeafletMap({ stops, onFallback, pins = [], me = null, onMapT
     if (!map || !focus) return;
     didInitialView.current = true;
     map.setView([focus.lat, focus.lng], 17, { animate: true });
-    if (focus.pin) {
+    const html = focus.pin ? pinPopupHtml(focus.pin)
+      : focus.label
+        ? `<b>${esc(focus.label)}</b>${focus.sub ? `<br><span class="cmap-pop-note">${esc(focus.sub)}</span>` : ''}`
+        : '';
+    if (html) {
       L.popup({ offset: [0, -30], className: 'cmap-pop' })
-        .setLatLng([focus.lat, focus.lng]).setContent(pinPopupHtml(focus.pin)).openOn(map);
+        .setLatLng([focus.lat, focus.lng]).setContent(html).openOn(map);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focus]);

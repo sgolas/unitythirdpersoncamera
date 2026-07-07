@@ -7,7 +7,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db, activeRows } from '../db/database';
 import type {
   Traveler, TravelDocument, ChecklistItem, Transport, Accommodation,
-  Expense, ItineraryEvent, BudgetLine, TripMeta, TripPhoto, MapPin, ChangeLogEntry,
+  Expense, ItineraryEvent, BudgetLine, TripMeta, TripPhoto, MapPin, ChatMessage, ChangeLogEntry,
 } from '../types';
 
 export const useTrip = () =>
@@ -44,6 +44,9 @@ export const useBudget = () =>
 export const usePhotos = () =>
   activeRows<TripPhoto>(useLiveQuery(() => db.photos.toArray(), []))
     .sort((a, b) => b.takenAt.localeCompare(a.takenAt));
+
+export const useChat = () =>
+  activeRows<ChatMessage>(useLiveQuery(() => db.chat.orderBy('at').toArray(), []));
 
 export const useMapPins = () =>
   activeRows<MapPin>(useLiveQuery(() => db.mappins.toArray(), []))

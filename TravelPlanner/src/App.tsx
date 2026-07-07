@@ -7,7 +7,7 @@ import { WelcomeSlides } from './components/WelcomeSlides';
 import {
   LayoutDashboard, CalendarRange, Wallet, FileText, LayoutGrid,
   ListChecks, Plane, BedDouble, PiggyBank, Compass, Sparkles, History, Settings2,
-  Map as MapIcon, Images, ChevronLeft, Calculator,
+  Map as MapIcon, Images, ChevronLeft, Calculator, MessageCircle,
 } from 'lucide-react';
 import { SyncButton } from './components/SyncButton';
 import { StitchIcon } from './components/StitchIcon';
@@ -28,11 +28,12 @@ import { SettingsTab } from './components/tabs/SettingsTab';
 import { MapTab } from './components/tabs/MapTab';
 import { PhotosTab } from './components/tabs/PhotosTab';
 import { ConverterTab } from './components/tabs/ConverterTab';
+import { ChatTab } from './components/tabs/ChatTab';
 
 type View =
   | 'dashboard' | 'overview' | 'documents' | 'checklist' | 'transport'
   | 'accommodation' | 'expenses' | 'itinerary' | 'budget' | 'helper'
-  | 'changelog' | 'settings' | 'map' | 'photos' | 'converter';
+  | 'changelog' | 'settings' | 'map' | 'photos' | 'converter' | 'chat';
 
 interface MenuItem { key: View; label: string; icon: React.ReactNode; color: string; }
 
@@ -127,6 +128,7 @@ export default function App() {
         {view === 'map'           && <MapTab />}
         {view === 'photos'        && <PhotosTab />}
         {view === 'converter'     && <ConverterTab />}
+        {view === 'chat'          && <ChatTab />}
       </main>
 
       {/* Back button (top-left) — shown whenever there's history */}
@@ -171,6 +173,7 @@ export default function App() {
         <NavTab label="Plan"    active={view === 'itinerary'} onClick={() => go('itinerary')} icon={<CalendarRange size={22} />} />
         <NavTab label="Money"   active={view === 'expenses'}  onClick={() => go('expenses')}  icon={<Wallet size={22} />} />
         <NavTab label="Map"     active={view === 'map'}       onClick={() => go('map')}       icon={<MapIcon size={22} />} />
+        <NavTab label="Chat"    active={view === 'chat'}      onClick={() => go('chat')}      icon={<MessageCircle size={22} />} />
         <NavTab label="More"    active={moreOpen || MORE_ITEMS.some(m => m.key === view)} onClick={() => setMoreOpen(o => !o)} icon={<LayoutGrid size={22} />} />
       </nav>
     </div>

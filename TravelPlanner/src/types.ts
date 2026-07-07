@@ -175,6 +175,16 @@ export interface MapPin extends SyncMeta {
   lng: number;
 }
 
+/* ── Family chat (messages sync to the whole group) ─────────── */
+export interface ChatMessage extends SyncMeta {
+  kind: 'chatmsg';
+  text: string;
+  author: string;    // display name picked by the sender
+  emoji: string;     // avatar emoji shown next to the name
+  at: ISOStamp;      // send time
+  deviceId?: string; // random per-install id — device names can collide
+}
+
 /* ── Change Log ─────────────────────────────────────────────── */
 export type ChangeAction = 'create' | 'update' | 'delete' | 'sync';
 
@@ -194,7 +204,7 @@ export interface ChangeLogEntry {
 /* ── Union of all synced records ────────────────────────────── */
 export type AnyRecord =
   | Traveler | TravelDocument | ChecklistItem | Transport
-  | Accommodation | Expense | ItineraryEvent | BudgetLine | TripMeta | TripPhoto | MapPin;
+  | Accommodation | Expense | ItineraryEvent | BudgetLine | TripMeta | TripPhoto | MapPin | ChatMessage;
 
 export type EntityKind = AnyRecord['kind'];
 

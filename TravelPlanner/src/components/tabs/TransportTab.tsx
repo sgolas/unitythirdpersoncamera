@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Trash2, ArrowRight } from 'lucide-react';
 import { useTransport, useTrip } from '../../hooks/useTrip';
 import { put, remove } from '../../db/database';
@@ -163,6 +163,21 @@ function TransportSheet({ leg, currency, onClose }: { leg: Transport | null; cur
   const [notes, setNotes] = useState(leg?.notes ?? '');
   const [looking, setLooking] = useState(false);
   const [lookupMsg, setLookupMsg] = useState('');
+  // Remembered from the lookup so the arrival date follows whenever the
+  // departure date is changed afterwards (+1 for overnight flights).
+  const [flightOffset, setFlightOffset] = useState<number | null>(null);
+  const autoLooked = useRef('');
+
+  function shiftDate(base: string, days: number): string {
+    const d = new Date((base || todayStr()) + 'T00:00:00');
+    d.setDate(d.getDate() + days);
+    return d.toISOString().slice(0, 10);
+  }
+
+  function pickDepartDate(v: string) {
+    setDepartDate(v);
+    if (flightOffset != null && v) setArriveDate(shiftDate(v, flightOffset));
+  }
 
   /** Fill the form from the flight number: airline, airports, times. */
   async function findFlight() {
@@ -181,13 +196,24 @@ function TransportSheet({ leg, currency, onClose }: { leg: Transport | null; cur
     if (toLabel)   { setTo(toLabel);     setToCoord(null);   resolveAirport(toLabel).then(c => c && setToCoord(c)); }
     if (info.depTime) setDepartTime(info.depTime);
     if (info.arrTime) setArriveTime(info.arrTime);
-    // Arrival date follows the chosen departure date (+1 for overnights).
-    const base = departDate || todayStr();
-    const d = new Date(base + 'T00:00:00');
-    d.setDate(d.getDate() + (info.dayOffset || 0));
-    setArriveDate(d.toISOString().slice(0, 10));
-    setLookupMsg(`Filled from ${iata}${info.airline ? ` · ${info.airline}` : ''} ✓ — set your travel date and save.`);
+    setFlightOffset(info.dayOffset || 0);
+    setArriveDate(shiftDate(departDate, info.dayOffset || 0));
+    setLookupMsg(info.depTime
+      ? `Filled from ${iata}${info.airline ? ` · ${info.airline}` : ''} ✓ — pick your travel date and the arrival date follows.`
+      : `Found the route for ${iata}${info.airline ? ` · ${info.airline}` : ''}, but no times were available — fill those in from your booking.`);
   }
+
+  // Auto-look-up once a full flight number is typed (only while the route
+  // fields are still empty, so it never overwrites what you entered).
+  useEffect(() => {
+    if (mode !== 'flight' || looking) return;
+    const iata = flightNumber.replace(/\s+/g, '').toUpperCase();
+    if (!/^[A-Z]{2}\d{1,4}$|^[A-Z0-9]{2}\d{2,4}$/.test(iata)) return;
+    if (autoLooked.current === iata || fromPlace.trim() || toPlace.trim()) return;
+    const t = setTimeout(() => { autoLooked.current = iata; void findFlight(); }, 900);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [flightNumber, mode]);
 
   async function save() {
     if (!fromPlace.trim() || !toPlace.trim()) return;
@@ -240,7 +266,7 @@ function TransportSheet({ leg, currency, onClose }: { leg: Transport | null; cur
           placeholder={hubPlaceholder(mode)} osmTags={HUB_TAGS[mode] ?? DEFAULT_HUBS} /></Field>
       </div>
       <div className="grid grid-cols-2 gap-3">
-        <Field label="Depart date"><TextInput type="date" value={departDate} onChange={e => setDepartDate(e.target.value)} /></Field>
+        <Field label="Depart date"><TextInput type="date" value={departDate} onChange={e => pickDepartDate(e.target.value)} /></Field>
         <Field label="Depart time"><TextInput type="time" value={departTime} onChange={e => setDepartTime(e.target.value)} /></Field>
       </div>
       <div className="grid grid-cols-2 gap-3">

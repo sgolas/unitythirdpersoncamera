@@ -59,20 +59,26 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
       if (d.error || !r2.ok) return json({ info: null });
     }
 
-    const hit = (d.data ?? []).find(f => f.departure?.scheduled && f.arrival?.scheduled) ?? (d.data ?? [])[0];
-    if (!hit) return json({ info: null });
+    const rows = d.data ?? [];
+    if (rows.length === 0) return json({ info: null });
+    // A flight number keeps the same schedule day to day, but individual rows
+    // can have gaps — merge fields across rows so times fill whenever any
+    // instance has them.
+    const hit = rows.find(f => f.departure?.scheduled && f.arrival?.scheduled) ?? rows[0];
+    const timed = rows.find(f => f.departure?.scheduled && f.arrival?.scheduled)
+      ?? rows.find(f => f.departure?.scheduled) ?? hit;
 
-    const depDay = day(hit.departure?.scheduled);
-    const arrDay = day(hit.arrival?.scheduled);
+    const depDay = day(timed.departure?.scheduled);
+    const arrDay = day(timed.arrival?.scheduled);
     const dayOffset = depDay && arrDay
       ? Math.round((new Date(arrDay).getTime() - new Date(depDay).getTime()) / 86400000) : 0;
 
     return json({ info: {
-      airline: hit.airline?.name ?? null,
+      airline: hit.airline?.name ?? rows.find(f => f.airline?.name)?.airline?.name ?? null,
       from: { name: hit.departure?.airport ?? null, iata: hit.departure?.iata ?? null },
       to:   { name: hit.arrival?.airport ?? null,   iata: hit.arrival?.iata ?? null },
-      depTime: hhmm(hit.departure?.scheduled),
-      arrTime: hhmm(hit.arrival?.scheduled),
+      depTime: hhmm(timed.departure?.scheduled),
+      arrTime: hhmm(timed.arrival?.scheduled),
       dayOffset,
     } });
   } catch (err) {

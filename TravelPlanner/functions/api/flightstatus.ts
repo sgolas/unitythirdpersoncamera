@@ -51,10 +51,17 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
 
     const statuses = await Promise.all(wanted.map(async f => {
       try {
-        const r = await fetch(
-          `https://api.aviationstack.com/v1/flights?access_key=${env.FLIGHT_API_KEY}&flight_iata=${f.iata}&limit=5`);
-        if (!r.ok) return null;
-        const d = await r.json() as { data?: AvFlight[] };
+        // aviationstack's free plan only allows plain-HTTP API calls; try
+        // HTTPS first (works on paid plans) and fall back transparently.
+        const q = `/v1/flights?access_key=${env.FLIGHT_API_KEY}&flight_iata=${f.iata}&limit=5`;
+        let d: { data?: AvFlight[]; error?: { code?: string } };
+        const r = await fetch(`https://api.aviationstack.com${q}`);
+        d = await r.json() as typeof d;
+        if (d.error || !r.ok) {
+          const r2 = await fetch(`http://api.aviationstack.com${q}`);
+          d = await r2.json() as typeof d;
+          if (d.error || !r2.ok) return null;
+        }
         const rows = d.data ?? [];
         const hit = rows.find(x => x.flight_date === f.date) ?? rows[0];
         if (!hit) return null;

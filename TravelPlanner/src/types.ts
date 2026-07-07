@@ -68,6 +68,10 @@ export interface Transport extends SyncMeta {
   provider: string;          // airline / rail company
   fromPlace: string;
   toPlace: string;
+  fromLat?: number | null;   // exact position when picked from search
+  fromLng?: number | null;
+  toLat?: number | null;
+  toLng?: number | null;
   departDate: ISODate;
   departTime: ISOTime | '';
   arriveDate: ISODate | '';

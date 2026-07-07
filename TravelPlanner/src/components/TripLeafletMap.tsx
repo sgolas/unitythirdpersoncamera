@@ -35,25 +35,42 @@ function esc(s: string): string {
   ));
 }
 
+async function lookupOnce(q: string, signal: AbortSignal): Promise<{ lat: number; lng: number } | null> {
+  const r = await fetch(
+    `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(q)}`,
+    { headers: { Accept: 'application/json' }, signal },
+  );
+  const d = await r.json();
+  if (Array.isArray(d) && d[0]) return { lat: parseFloat(d[0].lat), lng: parseFloat(d[0].lon) };
+  return null;
+}
+
 async function geocode(label: string): Promise<{ lat: number; lng: number } | null> {
-  const key = 'geo:' + label.toLowerCase().trim();
+  // 'geo2:' — v2 cache; v1 poisoned some labels with cached failures.
+  const key = 'geo2:' + label.toLowerCase().trim();
   const cached = localStorage.getItem(key);
   if (cached !== null) return cached === 'null' ? null : JSON.parse(cached);
+
+  // Full addresses ("Milan Malpensa Airport, Ferno, VA 21010, Italy") often
+  // fail as free-text — retry with simpler and simpler versions.
+  const parts = label.split(',').map(s => s.trim()).filter(Boolean);
+  const attempts = [label];
+  if (parts.length > 2) attempts.push(`${parts[0]}, ${parts[parts.length - 1]}`);
+  if (parts.length > 1) attempts.push(parts[0]);
+
   try {
     // Never hang forever on a flaky connection.
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 7000);
-    const r = await fetch(
-      `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(label)}`,
-      { headers: { Accept: 'application/json' }, signal: ctrl.signal },
-    );
-    clearTimeout(timer);
-    const d = await r.json();
-    if (Array.isArray(d) && d[0]) {
-      const v = { lat: parseFloat(d[0].lat), lng: parseFloat(d[0].lon) };
-      localStorage.setItem(key, JSON.stringify(v));
-      return v;
+    const timer = setTimeout(() => ctrl.abort(), 9000);
+    for (const q of attempts) {
+      const v = await lookupOnce(q, ctrl.signal).catch(() => null);
+      if (v) {
+        clearTimeout(timer);
+        localStorage.setItem(key, JSON.stringify(v));
+        return v;
+      }
     }
+    clearTimeout(timer);
   } catch { /* offline / blocked */ }
   localStorage.setItem(key, 'null');
   return null;
@@ -144,6 +161,9 @@ export function TripLeafletMap({ stops, onFallback, pins = [], me = null, onMapT
     (async () => {
       const pts: { stop: Stop; lat: number; lng: number }[] = [];
       for (const s of stops) {
+        // Exact position stored on the record (picked from search) wins;
+        // otherwise geocode the label text.
+        if (s.lat != null && s.lng != null) { pts.push({ stop: s, lat: s.lat, lng: s.lng }); continue; }
         const g = await geocode(s.label);
         if (g) pts.push({ stop: s, ...g });
       }

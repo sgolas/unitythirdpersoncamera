@@ -107,6 +107,11 @@ function TransportSheet({ leg, currency, onClose }: { leg: Transport | null; cur
   const [provider, setProvider] = useState(leg?.provider ?? '');
   const [fromPlace, setFrom] = useState(leg?.fromPlace ?? '');
   const [toPlace, setTo] = useState(leg?.toPlace ?? '');
+  // Exact positions from the search picker — lets the map pin hubs precisely.
+  const [fromCoord, setFromCoord] = useState<{ lat: number; lng: number } | null>(
+    leg?.fromLat != null && leg?.fromLng != null ? { lat: leg.fromLat, lng: leg.fromLng } : null);
+  const [toCoord, setToCoord] = useState<{ lat: number; lng: number } | null>(
+    leg?.toLat != null && leg?.toLng != null ? { lat: leg.toLat, lng: leg.toLng } : null);
   const [departDate, setDepartDate] = useState(leg?.departDate ?? todayStr());
   const [departTime, setDepartTime] = useState(leg?.departTime ?? '');
   const [arriveDate, setArriveDate] = useState(leg?.arriveDate ?? '');
@@ -123,6 +128,8 @@ function TransportSheet({ leg, currency, onClose }: { leg: Transport | null; cur
     await put<Transport>({
       kind: 'transport', id: leg?.id ?? crypto.randomUUID(),
       mode, provider: provider.trim(), fromPlace: fromPlace.trim(), toPlace: toPlace.trim(),
+      fromLat: fromCoord?.lat ?? null, fromLng: fromCoord?.lng ?? null,
+      toLat: toCoord?.lat ?? null, toLng: toCoord?.lng ?? null,
       departDate, departTime, arriveDate, arriveTime,
       confirmation: confirmation.trim(), seat: seat.trim(),
       cost: parseFloat(cost) || 0, costCurrency, notes: notes.trim(),
@@ -143,8 +150,14 @@ function TransportSheet({ leg, currency, onClose }: { leg: Transport | null; cur
         <Field label="Provider"><TextInput value={provider} onChange={e => setProvider(e.target.value)} placeholder="e.g. Delta" /></Field>
       </div>
       <div className="grid grid-cols-2 gap-3">
-        <Field label="From"><PlaceInput value={fromPlace} onChange={setFrom} placeholder={hubPlaceholder(mode)} osmTags={HUB_TAGS[mode] ?? DEFAULT_HUBS} /></Field>
-        <Field label="To"><PlaceInput value={toPlace} onChange={setTo} placeholder={hubPlaceholder(mode)} osmTags={HUB_TAGS[mode] ?? DEFAULT_HUBS} /></Field>
+        <Field label="From"><PlaceInput value={fromPlace}
+          onChange={v => { setFrom(v); setFromCoord(null); }}
+          onPick={c => setFromCoord(c)}
+          placeholder={hubPlaceholder(mode)} osmTags={HUB_TAGS[mode] ?? DEFAULT_HUBS} /></Field>
+        <Field label="To"><PlaceInput value={toPlace}
+          onChange={v => { setTo(v); setToCoord(null); }}
+          onPick={c => setToCoord(c)}
+          placeholder={hubPlaceholder(mode)} osmTags={HUB_TAGS[mode] ?? DEFAULT_HUBS} /></Field>
       </div>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Depart date"><TextInput type="date" value={departDate} onChange={e => setDepartDate(e.target.value)} /></Field>

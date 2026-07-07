@@ -6,18 +6,27 @@
 import type { Transport, Accommodation, ItineraryEvent } from '../types';
 import { fmtDate } from '../utils/format';
 
-export interface Stop { label: string; date: string; emoji: string; kind: string }
+export interface Stop {
+  label: string; date: string; emoji: string; kind: string;
+  lat?: number | null;  // exact position (picked from search) — skips geocoding
+  lng?: number | null;
+}
 
 export function computeStops(
   transport: Transport[], stays: Accommodation[], itinerary: ItineraryEvent[],
 ): Stop[] {
   const raw: Stop[] = [];
   stays.forEach(s => raw.push({ label: s.city || s.name, date: s.checkIn, emoji: '🏨', kind: 'stay' }));
-  transport.forEach(t => raw.push({
-    label: t.toPlace, date: t.departDate,
-    emoji: t.mode === 'flight' ? '✈️' : t.mode === 'train' ? '🚆' : t.mode === 'ferry' ? '⛴️' : '🚗',
-    kind: 'transport',
-  }));
+  transport.forEach(t => {
+    const emoji = t.mode === 'flight' ? '✈️' : t.mode === 'train' ? '🚆' : t.mode === 'ferry' ? '⛴️' : '🚗';
+    // Pin the departure too, so the first origin (e.g. home airport) shows.
+    if (t.fromPlace) raw.push({
+      label: t.fromPlace, date: t.departDate, emoji, kind: 'transport', lat: t.fromLat, lng: t.fromLng,
+    });
+    raw.push({
+      label: t.toPlace, date: t.arriveDate || t.departDate, emoji, kind: 'transport', lat: t.toLat, lng: t.toLng,
+    });
+  });
   itinerary.forEach(e => { if (e.place) raw.push({ label: e.place, date: e.date, emoji: '📍', kind: 'event' }); });
 
   const sorted = raw.filter(s => s.label).sort((a, b) => a.date.localeCompare(b.date));

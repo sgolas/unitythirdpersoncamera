@@ -183,6 +183,11 @@ input, textarea, select { font-size: 16px; font-family: inherit; }
 }
 .cmap-drop span { transform: rotate(45deg); font-size: 18px; line-height: 1; }
 
+/* Snappier zoom: Leaflet's default zoom animation is 0.25s — shorten it. */
+.leaflet-zoom-anim .leaflet-zoom-animated {
+  transition: transform 0.15s cubic-bezier(0, 0, 0.25, 1);
+}
+
 /* Direction arrow riding the yarn route between stops. */
 .cmap-arrow {
   width: 22px; height: 22px; display: flex; align-items: center; justify-content: center;

@@ -162,10 +162,26 @@ export function TripLeafletMap({ stops, onFallback, pins = [], me = null, onMapT
     else map.fitBounds(L.latLngBounds(all).pad(0.25));
   }
 
+  /** One tap: zoom out to show the whole trip (stops + pins + you). */
+  function fitEverything() {
+    const map = mapRef.current;
+    if (!map) return;
+    const all: [number, number][] = [...stopPts.current];
+    pins.forEach(p => all.push([p.lat, p.lng]));
+    if (me) all.push([me.lat, me.lng]);
+    if (all.length === 0) return;
+    didInitialView.current = true;
+    if (all.length === 1) map.setView(all[0], 12);
+    else map.fitBounds(L.latLngBounds(all).pad(0.2));
+  }
+
   // ── Create the map once ─────────────────────────────────────
   useEffect(() => {
     if (!ref.current) return;
-    const map = L.map(ref.current, { zoomControl: true, scrollWheelZoom: false, attributionControl: true });
+    const map = L.map(ref.current, {
+      zoomControl: true, scrollWheelZoom: false, attributionControl: true,
+      zoomDelta: 2, // each +/− tap moves two levels, so zooming out is quick
+    });
     L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
       maxZoom: 19, subdomains: 'abcd',
       attribution: '&copy; OpenStreetMap &copy; CARTO',
@@ -357,6 +373,11 @@ export function TripLeafletMap({ stops, onFallback, pins = [], me = null, onMapT
     <div className="px-3 py-4">
       <div className="cmap relative">
         <div ref={ref} className="cmap-canvas" />
+        {/* One-tap zoom-out to the whole trip. */}
+        <button onClick={fitEverything} aria-label="Show whole trip"
+          className="absolute left-3 bottom-3 z-[500] w-11 h-11 rounded-full bg-white shadow-lg border border-slate-200 flex items-center justify-center text-xl active:scale-90 transition">
+          🌍
+        </button>
         {loading && (
           <div className="absolute inset-0 flex items-center justify-center bg-slate-100 text-slate-400 z-[500]">
             Loading your map…

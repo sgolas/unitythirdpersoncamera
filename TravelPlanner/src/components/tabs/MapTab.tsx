@@ -7,6 +7,8 @@ import { getCurrentLocation, type LatLng } from '../../lib/geo';
 import { TabHeader, EmptyState, Sheet, Field, TextInput, TextArea, FormFooter, ConfirmDelete, Overlay } from '../ui';
 import { computeStops, StringMap } from '../tripMap';
 import { TripLeafletMap, type PlacedStop } from '../TripLeafletMap';
+import { CountryPicker } from '../CountryPicker';
+import type { Bounds } from '../../lib/countries';
 import { fmtDate } from '../../utils/format';
 
 const PIN_EMOJIS = ['📍', '🏨', '🍽️', '☕', '🏖️', '⛰️', '🎡', '🛍️', '✈️', '🚉', '⭐', '⚠️', '🅿️'];
@@ -57,6 +59,8 @@ export function MapTab() {
   const [filter, setFilter] = useState<'all' | PinCategory>('all');
   const [filterOpen, setFilterOpen] = useState(false);
   const [focus, setFocus] = useState<{ lat: number; lng: number; pin?: MapPin; label?: string; sub?: string; n: number } | null>(null);
+  const [region, setRegion] = useState<{ bounds: Bounds; n: number } | null>(null);
+  const [countryOpen, setCountryOpen] = useState(false);
   const [placedStops, setPlacedStops] = useState<PlacedStop[]>([]);
   const mapBoxRef = useRef<HTMLDivElement>(null);
 
@@ -115,7 +119,7 @@ export function MapTab() {
       ) : (
         <>
         <div className="relative" ref={mapBoxRef}>
-          <TripLeafletMap stops={visibleStops} pins={visiblePins} me={me} focus={focus}
+          <TripLeafletMap stops={visibleStops} pins={visiblePins} me={me} focus={focus} region={region}
             onFallback={() => setFallback(true)}
             onStopsPlaced={pts => setPlacedStops(prev =>
               // Keep the same state identity when nothing changed, so the
@@ -136,6 +140,13 @@ export function MapTab() {
               ? <SlidersHorizontal size={18} />
               : <><span className="text-base leading-none">{catOf(filter)?.emoji}</span>
                   <span className="text-sm font-bold">{catOf(filter)?.label}</span></>}
+          </button>
+
+          {/* Focus the map on a country. */}
+          <button onClick={() => setCountryOpen(true)}
+            className="absolute right-7 top-[5.25rem] z-[600] w-11 h-11 rounded-full bg-surface shadow-lg border border-line flex items-center justify-center text-lg active:scale-95 transition"
+            aria-label="Focus on a country">
+            🌐
           </button>
 
           {/* Drop-a-pin-at-my-location button, floating over the map. */}
@@ -163,6 +174,16 @@ export function MapTab() {
         <FilterModal current={filter}
           onPick={f => { setFilter(f); setFilterOpen(false); }}
           onClose={() => setFilterOpen(false)} />
+      )}
+
+      {countryOpen && (
+        <CountryPicker
+          onPick={bounds => {
+            setRegion({ bounds, n: Date.now() });
+            setCountryOpen(false);
+            mapBoxRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }}
+          onClose={() => setCountryOpen(false)} />
       )}
 
       {sheet && (

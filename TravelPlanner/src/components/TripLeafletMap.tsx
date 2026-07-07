@@ -132,9 +132,11 @@ interface Props {
   /** Fly to this spot (e.g. a point picked from the drawer list). `n` makes
    *  repeated picks of the same point re-trigger the flight. */
   focus?: { lat: number; lng: number; pin?: MapPin; label?: string; sub?: string; n: number } | null;
+  /** Fit the view to this region (e.g. a country picked from the list). */
+  region?: { bounds: [[number, number], [number, number]]; n: number } | null;
 }
 
-export function TripLeafletMap({ stops, onFallback, pins = [], me = null, onMapTap, onPinEdit, onStopsPlaced, focus = null }: Props) {
+export function TripLeafletMap({ stops, onFallback, pins = [], me = null, onMapTap, onPinEdit, onStopsPlaced, focus = null, region = null }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const stopLayer = useRef<L.LayerGroup | null>(null);
@@ -351,6 +353,16 @@ export function TripLeafletMap({ stops, onFallback, pins = [], me = null, onMapT
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [me]);
+
+  // ── Focus on a picked country/region ────────────────────────
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !region) return;
+    didInitialView.current = true;
+    map.closePopup();
+    map.fitBounds(region.bounds, { padding: [16, 16] });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [region]);
 
   // ── Fly to a picked pin (from the drawer list) ──────────────
   useEffect(() => {

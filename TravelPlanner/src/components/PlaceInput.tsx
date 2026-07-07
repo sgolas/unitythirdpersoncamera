@@ -13,6 +13,14 @@ const inputCls =
 
 interface Sug { label: string; lat?: number; lng?: number }
 
+/** Extra search keyword per hub tag, so a bare city name still finds its hubs. */
+const HUB_SUFFIX: Record<string, string> = {
+  'aeroway:aerodrome': 'airport',
+  'railway:station': 'station',
+  'amenity:bus_station': 'bus station',
+  'amenity:ferry_terminal': 'ferry terminal',
+};
+
 function label(p: Record<string, string>): string {
   const line1 = [p.housenumber, p.street].filter(Boolean).join(' ') || p.name;
   const parts = [line1, p.city || p.county, p.state, p.country].filter(Boolean);
@@ -39,12 +47,25 @@ export function PlaceInput({ value, onChange, placeholder, onPick, osmTags }: {
     const t = setTimeout(async () => {
       try {
         const tags = (osmTags ?? []).map(tg => `&osm_tag=${encodeURIComponent(tg)}`).join('');
-        const r = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(q)}&limit=6${tags}`, { signal: ctrl.signal });
-        const d = await r.json() as { features?: { properties: Record<string, string>; geometry?: { coordinates: [number, number] } }[] };
+        // Hub searches also try "<query> airport" etc. — a plain city name
+        // ("new york") often misses its airports without the keyword.
+        const queries: string[] = [];
+        for (const tg of osmTags ?? []) {
+          const sfx = HUB_SUFFIX[tg];
+          if (sfx && !q.toLowerCase().includes(sfx.split(' ').pop()!)) queries.push(`${q} ${sfx}`);
+        }
+        queries.push(q);
+        type Feat = { properties: Record<string, string>; geometry?: { coordinates: [number, number] } };
+        const results = await Promise.all(queries.map(qq =>
+          fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(qq)}&limit=6&lang=en${tags}`, { signal: ctrl.signal })
+            .then(r => r.json() as Promise<{ features?: Feat[] }>)
+            .catch(() => ({ features: [] as Feat[] }))
+        ));
         const seen = new Set<string>();
-        const items = (d.features ?? [])
+        const items = results.flatMap(d => d.features ?? [])
           .map(f => ({ label: label(f.properties), lng: f.geometry?.coordinates?.[0], lat: f.geometry?.coordinates?.[1] }))
-          .filter(s => s.label && !seen.has(s.label) && seen.add(s.label));
+          .filter(s => s.label && !seen.has(s.label) && seen.add(s.label))
+          .slice(0, 8);
         setSugs(items);
         setOpen(items.length > 0);
       } catch { /* offline / aborted */ }

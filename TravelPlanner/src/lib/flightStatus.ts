@@ -10,6 +10,7 @@ import { notifyNow } from './notify';
 
 const NATIVE_BASE = 'https://trip-planner-sgolas.pages.dev';
 const ENDPOINT = isNative ? `${NATIVE_BASE}/api/flightstatus` : '/api/flightstatus';
+const LOOKUP_ENDPOINT = isNative ? `${NATIVE_BASE}/api/flightlookup` : '/api/flightlookup';
 const CACHE_KEY = 'flight.status.v1';
 const TTL = 10 * 60_000;
 
@@ -83,6 +84,30 @@ export async function getFlightStatuses(flights: Transport[], force = false): Pr
     saveCache({ at: Date.now(), configured: true, statuses: next });
     return next;
   } catch { return cache.statuses; }
+}
+
+/* ── Flight lookup (auto-fill the transport form) ───────────── */
+export interface FlightInfo {
+  airline: string | null;
+  from: { name: string | null; iata: string | null };
+  to: { name: string | null; iata: string | null };
+  depTime: string | null;  // 'HH:MM' local at departure airport
+  arrTime: string | null;  // 'HH:MM' local at arrival airport
+  dayOffset: number;       // arrival is this many days after departure
+}
+
+/** Resolve a flight number into its schedule. 'not-configured' when no key. */
+export async function lookupFlight(iata: string): Promise<FlightInfo | 'not-configured' | null> {
+  try {
+    const r = await fetch(LOOKUP_ENDPOINT, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ iata }),
+    });
+    if (r.status === 503) return 'not-configured';
+    if (!r.ok) return null;
+    const d = await r.json() as { info?: FlightInfo | null };
+    return d.info ?? null;
+  } catch { return null; }
 }
 
 /** Short human label, e.g. "On time · Gate B12", "Delayed 45 min", "Landed". */

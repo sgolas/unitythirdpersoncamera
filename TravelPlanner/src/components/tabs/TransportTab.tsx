@@ -7,7 +7,9 @@ import { money } from '../../types';
 import { fmtDate, fmtTime, todayStr } from '../../utils/format';
 import { TabHeader, Sheet, Field, TextInput, TextArea, Select, FormFooter, Fab, EmptyState, ConfirmDelete, CostField } from '../ui';
 import { PlaceInput } from '../PlaceInput';
-import { watchableFlights, getFlightStatuses, statusKey, statusLabel, type FlightStatus } from '../../lib/flightStatus';
+import { watchableFlights, getFlightStatuses, statusKey, statusLabel, lookupFlight, type FlightStatus } from '../../lib/flightStatus';
+import { PLACES_ENDPOINT } from '../../lib/config';
+import { Search, Loader } from 'lucide-react';
 
 const MODES: { key: TransportMode; label: string; emoji: string }[] = [
   { key: 'flight',   label: 'Flight',   emoji: '✈️' },
@@ -118,6 +120,20 @@ const HUB_TAGS: Partial<Record<TransportMode, string[]>> = {
   ferry:  ['amenity:ferry_terminal'],
 };
 const DEFAULT_HUBS = ['aeroway:aerodrome', 'railway:station']; // car / transfer / other
+/** Exact map position for an airport label (best effort, via Google search). */
+async function resolveAirport(label: string): Promise<{ lat: number; lng: number } | null> {
+  try {
+    const r = await fetch(PLACES_ENDPOINT, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query: label, kind: 'airport' }),
+    });
+    if (!r.ok) return null;
+    const d = await r.json() as { items?: { lat?: number; lng?: number }[] };
+    const hit = d.items?.[0];
+    return hit && hit.lat != null && hit.lng != null ? { lat: hit.lat, lng: hit.lng } : null;
+  } catch { return null; }
+}
+
 const hubPlaceholder = (mode: TransportMode) =>
   mode === 'flight' ? 'Search airports…'
   : mode === 'train' ? 'Search train stations…'
@@ -145,6 +161,33 @@ function TransportSheet({ leg, currency, onClose }: { leg: Transport | null; cur
   const [cost, setCost] = useState(leg ? String(leg.cost || '') : '');
   const [costCurrency, setCostCurrency] = useState(leg?.costCurrency ?? currency);
   const [notes, setNotes] = useState(leg?.notes ?? '');
+  const [looking, setLooking] = useState(false);
+  const [lookupMsg, setLookupMsg] = useState('');
+
+  /** Fill the form from the flight number: airline, airports, times. */
+  async function findFlight() {
+    const iata = flightNumber.replace(/\s+/g, '').toUpperCase();
+    if (!/^[A-Z0-9]{2,3}\d{1,4}$/.test(iata)) { setLookupMsg('Type a flight number first, like AC848.'); return; }
+    setLooking(true); setLookupMsg('');
+    const info = await lookupFlight(iata);
+    setLooking(false);
+    if (info === 'not-configured') { setLookupMsg('Flight lookup isn’t set up yet.'); return; }
+    if (!info) { setLookupMsg(`Couldn't find ${iata} — check the number, or fill the details in manually.`); return; }
+
+    if (info.airline) setProvider(info.airline);
+    const fromLabel = info.from.name ? `${info.from.name}${info.from.iata ? ` (${info.from.iata})` : ''}` : '';
+    const toLabel = info.to.name ? `${info.to.name}${info.to.iata ? ` (${info.to.iata})` : ''}` : '';
+    if (fromLabel) { setFrom(fromLabel); setFromCoord(null); resolveAirport(fromLabel).then(c => c && setFromCoord(c)); }
+    if (toLabel)   { setTo(toLabel);     setToCoord(null);   resolveAirport(toLabel).then(c => c && setToCoord(c)); }
+    if (info.depTime) setDepartTime(info.depTime);
+    if (info.arrTime) setArriveTime(info.arrTime);
+    // Arrival date follows the chosen departure date (+1 for overnights).
+    const base = departDate || todayStr();
+    const d = new Date(base + 'T00:00:00');
+    d.setDate(d.getDate() + (info.dayOffset || 0));
+    setArriveDate(d.toISOString().slice(0, 10));
+    setLookupMsg(`Filled from ${iata}${info.airline ? ` · ${info.airline}` : ''} ✓ — set your travel date and save.`);
+  }
 
   async function save() {
     if (!fromPlace.trim() || !toPlace.trim()) return;
@@ -175,8 +218,15 @@ function TransportSheet({ leg, currency, onClose }: { leg: Transport | null; cur
         <Field label="Provider"><TextInput value={provider} onChange={e => setProvider(e.target.value)} placeholder="e.g. Delta" /></Field>
       </div>
       {mode === 'flight' && (
-        <Field label="Flight number (for live status)">
-          <TextInput value={flightNumber} onChange={e => setFlightNumber(e.target.value)} placeholder="e.g. AC848" />
+        <Field label="Flight number (auto-fill + live status)">
+          <div className="flex gap-2">
+            <div className="flex-1"><TextInput value={flightNumber} onChange={e => setFlightNumber(e.target.value)} placeholder="e.g. AC848" /></div>
+            <button onClick={findFlight} disabled={looking} aria-label="Find flight"
+              className="px-4 rounded-xl font-semibold text-white accent-gradient active:scale-95 disabled:opacity-50 transition flex items-center gap-1.5">
+              {looking ? <Loader size={15} className="animate-spin" /> : <Search size={15} />} Find
+            </button>
+          </div>
+          {lookupMsg && <p className="text-xs text-slate-500 mt-1.5">{lookupMsg}</p>}
         </Field>
       )}
       <div className="grid grid-cols-2 gap-3">

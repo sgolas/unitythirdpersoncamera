@@ -19,9 +19,12 @@ function label(p: Record<string, string>): string {
   return [...new Set(parts)].join(', ');
 }
 
-export function PlaceInput({ value, onChange, placeholder, onPick }: {
+export function PlaceInput({ value, onChange, placeholder, onPick, osmTags }: {
   value: string; onChange: (v: string) => void; placeholder?: string;
   onPick?: (coords: { lat: number; lng: number } | null, label: string) => void;
+  /** Restrict suggestions to these OSM tags (OR'd), e.g.
+   *  ['aeroway:aerodrome', 'railway:station'] for airports + train stations. */
+  osmTags?: string[];
 }) {
   const [sugs, setSugs] = useState<Sug[]>([]);
   const [open, setOpen] = useState(false);
@@ -35,7 +38,8 @@ export function PlaceInput({ value, onChange, placeholder, onPick }: {
     const ctrl = new AbortController();
     const t = setTimeout(async () => {
       try {
-        const r = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(q)}&limit=6`, { signal: ctrl.signal });
+        const tags = (osmTags ?? []).map(tg => `&osm_tag=${encodeURIComponent(tg)}`).join('');
+        const r = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(q)}&limit=6${tags}`, { signal: ctrl.signal });
         const d = await r.json() as { features?: { properties: Record<string, string>; geometry?: { coordinates: [number, number] } }[] };
         const seen = new Set<string>();
         const items = (d.features ?? [])
@@ -46,7 +50,8 @@ export function PlaceInput({ value, onChange, placeholder, onPick }: {
       } catch { /* offline / aborted */ }
     }, 300);
     return () => { clearTimeout(t); ctrl.abort(); };
-  }, [value]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value, osmTags?.join(',')]);
 
   function pick(s: Sug) {
     skip.current = true;

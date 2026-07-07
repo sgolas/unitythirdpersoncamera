@@ -86,6 +86,22 @@ export function TransportTab() {
   );
 }
 
+/** From/To suggestions are limited to real travel hubs, matched to the mode:
+ *  flights search airports, trains search train stations, and so on. */
+const HUB_TAGS: Partial<Record<TransportMode, string[]>> = {
+  flight: ['aeroway:aerodrome'],
+  train:  ['railway:station'],
+  bus:    ['amenity:bus_station', 'railway:station'],
+  ferry:  ['amenity:ferry_terminal'],
+};
+const DEFAULT_HUBS = ['aeroway:aerodrome', 'railway:station']; // car / transfer / other
+const hubPlaceholder = (mode: TransportMode) =>
+  mode === 'flight' ? 'Search airports…'
+  : mode === 'train' ? 'Search train stations…'
+  : mode === 'bus' ? 'Search bus/train stations…'
+  : mode === 'ferry' ? 'Search ferry terminals…'
+  : 'Search airports / stations…';
+
 function TransportSheet({ leg, currency, onClose }: { leg: Transport | null; currency: string; onClose: () => void }) {
   const [mode, setMode] = useState<TransportMode>(leg?.mode ?? 'flight');
   const [provider, setProvider] = useState(leg?.provider ?? '');
@@ -127,8 +143,8 @@ function TransportSheet({ leg, currency, onClose }: { leg: Transport | null; cur
         <Field label="Provider"><TextInput value={provider} onChange={e => setProvider(e.target.value)} placeholder="e.g. Delta" /></Field>
       </div>
       <div className="grid grid-cols-2 gap-3">
-        <Field label="From"><PlaceInput value={fromPlace} onChange={setFrom} placeholder="City / airport" /></Field>
-        <Field label="To"><PlaceInput value={toPlace} onChange={setTo} placeholder="City / airport" /></Field>
+        <Field label="From"><PlaceInput value={fromPlace} onChange={setFrom} placeholder={hubPlaceholder(mode)} osmTags={HUB_TAGS[mode] ?? DEFAULT_HUBS} /></Field>
+        <Field label="To"><PlaceInput value={toPlace} onChange={setTo} placeholder={hubPlaceholder(mode)} osmTags={HUB_TAGS[mode] ?? DEFAULT_HUBS} /></Field>
       </div>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Depart date"><TextInput type="date" value={departDate} onChange={e => setDepartDate(e.target.value)} /></Field>

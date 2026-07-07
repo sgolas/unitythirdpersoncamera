@@ -76,6 +76,41 @@ async function geocode(label: string): Promise<{ lat: number; lng: number } | nu
   return null;
 }
 
+/**
+ * Points along the great-circle arc between two coordinates — the path a
+ * plane actually flies, which draws as the classic curved flight-map line.
+ * Longitudes are kept continuous so the arc never wraps across the map.
+ */
+function greatCircle(a: [number, number], b: [number, number], n = 48): [number, number][] {
+  const rad = Math.PI / 180, deg = 180 / Math.PI;
+  const toVec = (lat: number, lon: number) => [
+    Math.cos(lat * rad) * Math.cos(lon * rad),
+    Math.cos(lat * rad) * Math.sin(lon * rad),
+    Math.sin(lat * rad),
+  ];
+  const v1 = toVec(a[0], a[1]);
+  const v2 = toVec(b[0], b[1]);
+  const dot = Math.min(1, Math.max(-1, v1[0] * v2[0] + v1[1] * v2[1] + v1[2] * v2[2]));
+  const w = Math.acos(dot);
+  if (w < 1e-6) return [a, b];
+  const pts: [number, number][] = [];
+  for (let i = 0; i <= n; i++) {
+    const t = i / n;
+    const s1 = Math.sin((1 - t) * w) / Math.sin(w);
+    const s2 = Math.sin(t * w) / Math.sin(w);
+    const x = s1 * v1[0] + s2 * v2[0];
+    const y = s1 * v1[1] + s2 * v2[1];
+    const z = s1 * v1[2] + s2 * v2[2];
+    const lat = Math.atan2(z, Math.hypot(x, y)) * deg;
+    let lon = Math.atan2(y, x) * deg;
+    // Stay continuous with the previous point (no antimeridian jump).
+    const prev = pts[pts.length - 1];
+    if (prev) { while (lon - prev[1] > 180) lon -= 360; while (lon - prev[1] < -180) lon += 360; }
+    pts.push([lat, lon]);
+  }
+  return pts;
+}
+
 /** The little info bubble shown for a dropped pin. */
 function pinPopupHtml(p: MapPin): string {
   const note = p.note ? `<br><span class="cmap-pop-note">${esc(p.note)}</span>` : '';
@@ -181,18 +216,21 @@ export function TripLeafletMap({ stops, onFallback, pins = [], me = null, onMapT
         latlngs.push([p.lat, p.lng]);
       });
       if (latlngs.length > 1) {
-        L.polyline(latlngs, { color: '#0f766e', weight: 4, opacity: 0.85, dashArray: '1 12', lineCap: 'round' })
-          .addTo(stopLayer.current!);
-        // Direction arrows: one at each segment's midpoint, rotated to point
-        // from the previous stop to the next. The angle is computed in
-        // projected (Mercator) space so it matches the drawn line at any zoom.
+        // Each leg is drawn as a great-circle arc (the way planes fly), with
+        // a direction arrow riding the middle of the curve. The arrow angle
+        // is computed in projected (Mercator) space so it matches the drawn
+        // line at any zoom.
         const mapNow = mapRef.current!;
         for (let i = 1; i < latlngs.length; i++) {
-          const a = mapNow.project(L.latLng(latlngs[i - 1]), 12);
-          const b = mapNow.project(L.latLng(latlngs[i]), 12);
+          const curve = greatCircle(latlngs[i - 1], latlngs[i]);
+          L.polyline(curve, { color: '#0f766e', weight: 4, opacity: 0.85, dashArray: '1 12', lineCap: 'round' })
+            .addTo(stopLayer.current!);
+          const m0 = curve[Math.floor(curve.length / 2) - 1];
+          const m1 = curve[Math.floor(curve.length / 2)];
+          const a = mapNow.project(L.latLng(m0), 12);
+          const b = mapNow.project(L.latLng(m1), 12);
           const ang = Math.atan2(b.y - a.y, b.x - a.x) * 180 / Math.PI;
-          const mid = mapNow.unproject(a.add(b).divideBy(2), 12);
-          L.marker(mid, {
+          L.marker(m1, {
             icon: L.divIcon({
               html: `<div class="cmap-arrow" style="transform:rotate(${ang}deg)">➤</div>`,
               className: 'cmap-icon', iconSize: [22, 22], iconAnchor: [11, 11],

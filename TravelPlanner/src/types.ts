@@ -66,6 +66,7 @@ export interface Transport extends SyncMeta {
   kind: 'transport';
   mode: TransportMode;
   provider: string;          // airline / rail company
+  flightNumber?: string;     // e.g. "AC848" — enables live flight status
   fromPlace: string;
   toPlace: string;
   fromLat?: number | null;   // exact position when picked from search

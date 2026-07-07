@@ -79,6 +79,8 @@ async function boot() {
     // Re-save the on-device backup whenever data changes (debounced), and
     // flush immediately when the app goes to the background.
     window.addEventListener('trip-data-changed', scheduleBackup);
+    // Trip-day reminders (flight check-ins, leave-for-airport, activities).
+    import('./lib/notify').then(({ initTripReminders }) => initTripReminders()).catch(() => {});
     if (isNative) {
       import('@capacitor/app').then(({ App: CapApp }) => {
         CapApp.addListener('appStateChange', s => { if (!s.isActive) void saveBackup(); });

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Smartphone, KeyRound, RefreshCw, Globe, Trash2, Check, Download, Palette, Sun, Moon, Monitor, Coins, AlertTriangle, Github, ShieldCheck, QrCode } from 'lucide-react';
+import { Smartphone, KeyRound, RefreshCw, Globe, Trash2, Check, Download, Palette, Sun, Moon, Monitor, Coins, AlertTriangle, Github, ShieldCheck, QrCode, CalendarPlus, Bell } from 'lucide-react';
 import { getOtaStatus, runOTA } from '../../lib/ota';
 import { isNative } from '../../lib/platform';
 import { getMode, setMode, getAccent, setAccent, ACCENTS, type ThemeMode, type Accent } from '../../lib/theme';
@@ -15,6 +15,9 @@ import { InvitePanel } from '../InvitePanel';
 import { getSyncCode, getSyncPass, setSyncCredentials, getLastSync, isSyncConfigured } from '../../lib/config';
 import { syncNow, wipeLocal, backupToGitHub } from '../../db/sync';
 import { saveBackup, restoreFromFile, backupExists } from '../../lib/persist';
+import { exportCalendar } from '../../lib/ics';
+import { remindersEnabled, setRemindersEnabled, ensureNotifyPermission, scheduleTripNotifications } from '../../lib/notify';
+import { useTransport, useAccommodation, useItinerary } from '../../hooks/useTrip';
 import { scanToJoin } from '../../lib/join';
 import { WelcomeSlides } from '../WelcomeSlides';
 import { fmtStamp } from '../../utils/format';
@@ -165,6 +168,10 @@ export function SettingsTab() {
 
         {/* Travellers — add/remove people + profile pictures */}
         <TravelersManager />
+
+        {/* Calendar export + trip reminders */}
+        <CalendarPanel />
+        {isNative && <RemindersPanel />}
 
         {/* Currencies — home + away, both always shown together */}
         <div className="bg-white rounded-2xl p-4 shadow-sm">
@@ -366,5 +373,73 @@ function WipeConfirm({ synced, onCancel, onConfirm }: {
       </div>
     </div>
     </Overlay>
+  );
+}
+
+/* ── Calendar export ────────────────────────────────────────── */
+function CalendarPanel() {
+  const trip = useTrip();
+  const transport = useTransport();
+  const stays = useAccommodation();
+  const itinerary = useItinerary();
+  const [msg, setMsg] = useState('');
+  const [busy, setBusy] = useState(false);
+  const count = transport.length + stays.length + itinerary.length;
+
+  async function doExport() {
+    setBusy(true); setMsg('');
+    try { setMsg(await exportCalendar(trip, transport, stays, itinerary)); }
+    catch (e) { setMsg(e instanceof Error ? e.message : 'Export failed — try again.'); }
+    setBusy(false);
+  }
+
+  return (
+    <div className="bg-white rounded-2xl p-4 shadow-sm">
+      <p className="flex items-center gap-2 font-semibold text-slate-800 mb-1"><CalendarPlus size={16} /> Calendar export</p>
+      <p className="text-xs text-slate-400 mb-3">
+        Put the whole trip in your phone's calendar — flights, stays and itinerary as events ({count} item{count === 1 ? '' : 's'}).
+      </p>
+      <button onClick={doExport} disabled={busy || count === 0}
+        className="w-full py-2.5 rounded-2xl font-semibold text-white accent-gradient active:scale-[0.98] disabled:opacity-40 transition">
+        {busy ? 'Exporting…' : 'Export trip to calendar (.ics)'}
+      </button>
+      {msg && <p className="text-xs text-slate-500 mt-2">{msg}</p>}
+    </div>
+  );
+}
+
+/* ── Trip reminders (local notifications) ───────────────────── */
+function RemindersPanel() {
+  const [on, setOn] = useState(remindersEnabled());
+  const [msg, setMsg] = useState('');
+
+  async function toggle() {
+    const next = !on;
+    if (next) {
+      const ok = await ensureNotifyPermission();
+      if (!ok) { setMsg('Notifications are blocked — allow them for Trip Planner in your phone Settings (needs app v1.4+).'); return; }
+    }
+    setOn(next);
+    setRemindersEnabled(next);
+    if (next) {
+      const n = await scheduleTripNotifications();
+      setMsg(`On — ${n} reminder${n === 1 ? '' : 's'} scheduled (flight check-ins, leave-for-airport, check-ins and activities).`);
+    } else setMsg('Off — all trip reminders cancelled.');
+  }
+
+  return (
+    <div className="bg-white rounded-2xl p-4 shadow-sm">
+      <div className="flex items-center gap-3">
+        <p className="flex items-center gap-2 font-semibold text-slate-800 flex-1"><Bell size={16} /> Trip reminders</p>
+        <button onClick={toggle} aria-label="Toggle trip reminders"
+          className={`w-12 h-7 rounded-full transition relative ${on ? 'bg-mint' : 'bg-slate-300'}`}>
+          <span className={`absolute top-1 w-5 h-5 rounded-full bg-white shadow transition-all ${on ? 'left-6' : 'left-1'}`} />
+        </button>
+      </div>
+      <p className="text-xs text-slate-400 mt-1">
+        Check-in nudges 24h before flights, "head to the airport" alerts, hotel check-in and activity reminders — all on your phone, nothing leaves the device.
+      </p>
+      {msg && <p className="text-xs text-slate-500 mt-2">{msg}</p>}
+    </div>
   );
 }

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Trash2, ArrowRight } from 'lucide-react';
 import { useTransport, useTrip } from '../../hooks/useTrip';
 import { put, remove } from '../../db/database';
@@ -7,6 +7,7 @@ import { money } from '../../types';
 import { fmtDate, fmtTime, todayStr } from '../../utils/format';
 import { TabHeader, Sheet, Field, TextInput, TextArea, Select, FormFooter, Fab, EmptyState, ConfirmDelete, CostField } from '../ui';
 import { PlaceInput } from '../PlaceInput';
+import { watchableFlights, getFlightStatuses, statusKey, statusLabel, type FlightStatus } from '../../lib/flightStatus';
 
 const MODES: { key: TransportMode; label: string; emoji: string }[] = [
   { key: 'flight',   label: 'Flight',   emoji: '✈️' },
@@ -19,6 +20,12 @@ const MODES: { key: TransportMode; label: string; emoji: string }[] = [
 ];
 const modeMeta = (k: TransportMode) => MODES.find(m => m.key === k)!;
 
+const TONE_CLS = {
+  ok:   'bg-emerald-50 text-emerald-700',
+  warn: 'bg-amber-50 text-amber-700',
+  bad:  'bg-rose-50 text-rose-700',
+};
+
 export function TransportTab() {
   const legs = useTransport();
   const trip = useTrip();
@@ -26,6 +33,17 @@ export function TransportTab() {
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<Transport | null>(null);
   const [pendingDelete, setPendingDelete] = useState<Transport | null>(null);
+  const [statuses, setStatuses] = useState<Record<string, FlightStatus>>({});
+
+  // Live status for flights departing soon (needs a flight number set).
+  const watchCount = watchableFlights(legs).length;
+  useEffect(() => {
+    if (watchCount === 0) return;
+    let alive = true;
+    getFlightStatuses(watchableFlights(legs)).then(s => { if (alive) setStatuses(s); });
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [watchCount]);
 
   return (
     <div className="animate-fadeUp">
@@ -38,11 +56,16 @@ export function TransportTab() {
         <div className="px-4 py-4 space-y-3">
           {legs.map(l => {
             const m = modeMeta(l.mode);
+            const st = l.mode === 'flight' && l.flightNumber ? statuses[statusKey(l)] : undefined;
+            const lab = st ? statusLabel(st) : null;
             return (
               <div key={l.id} onClick={() => setEditing(l)}
                 className="bg-white rounded-2xl p-4 shadow-sm group active:bg-slate-50">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-bold text-slate-400">{m.emoji} {m.label.toUpperCase()}{l.provider ? ` · ${l.provider}` : ''}</span>
+                  <span className="text-xs font-bold text-slate-400">
+                    {m.emoji} {m.label.toUpperCase()}{l.flightNumber ? ` ${l.flightNumber.toUpperCase()}` : ''}{l.provider ? ` · ${l.provider}` : ''}
+                    {lab && <span className={`ml-2 px-2 py-0.5 rounded-full font-bold ${TONE_CLS[lab.tone]}`}>{lab.text}</span>}
+                  </span>
                   <button onClick={ev => { ev.stopPropagation(); setPendingDelete(l); }}
                     className="p-1 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-red-50">
                     <Trash2 size={14} className="text-slate-300 hover:text-sunset" />
@@ -105,6 +128,7 @@ const hubPlaceholder = (mode: TransportMode) =>
 function TransportSheet({ leg, currency, onClose }: { leg: Transport | null; currency: string; onClose: () => void }) {
   const [mode, setMode] = useState<TransportMode>(leg?.mode ?? 'flight');
   const [provider, setProvider] = useState(leg?.provider ?? '');
+  const [flightNumber, setFlightNumber] = useState(leg?.flightNumber ?? '');
   const [fromPlace, setFrom] = useState(leg?.fromPlace ?? '');
   const [toPlace, setTo] = useState(leg?.toPlace ?? '');
   // Exact positions from the search picker — lets the map pin hubs precisely.
@@ -127,7 +151,8 @@ function TransportSheet({ leg, currency, onClose }: { leg: Transport | null; cur
     const isNew = !leg;
     await put<Transport>({
       kind: 'transport', id: leg?.id ?? crypto.randomUUID(),
-      mode, provider: provider.trim(), fromPlace: fromPlace.trim(), toPlace: toPlace.trim(),
+      mode, provider: provider.trim(), flightNumber: flightNumber.replace(/\s+/g, '').toUpperCase() || undefined,
+      fromPlace: fromPlace.trim(), toPlace: toPlace.trim(),
       fromLat: fromCoord?.lat ?? null, fromLng: fromCoord?.lng ?? null,
       toLat: toCoord?.lat ?? null, toLng: toCoord?.lng ?? null,
       departDate, departTime, arriveDate, arriveTime,
@@ -149,6 +174,11 @@ function TransportSheet({ leg, currency, onClose }: { leg: Transport | null; cur
         </Field>
         <Field label="Provider"><TextInput value={provider} onChange={e => setProvider(e.target.value)} placeholder="e.g. Delta" /></Field>
       </div>
+      {mode === 'flight' && (
+        <Field label="Flight number (for live status)">
+          <TextInput value={flightNumber} onChange={e => setFlightNumber(e.target.value)} placeholder="e.g. AC848" />
+        </Field>
+      )}
       <div className="grid grid-cols-2 gap-3">
         <Field label="From"><PlaceInput value={fromPlace}
           onChange={v => { setFrom(v); setFromCoord(null); }}

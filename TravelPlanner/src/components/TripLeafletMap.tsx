@@ -59,6 +59,12 @@ async function geocode(label: string): Promise<{ lat: number; lng: number } | nu
   return null;
 }
 
+/** The little info bubble shown for a dropped pin. */
+function pinPopupHtml(p: MapPin): string {
+  const note = p.note ? `<br><span class="cmap-pop-note">${esc(p.note)}</span>` : '';
+  return `<b>${esc(p.label || 'Pin')}</b>${note}`;
+}
+
 interface Props {
   stops: Stop[];
   onFallback: () => void;
@@ -66,9 +72,12 @@ interface Props {
   me?: LatLng | null;
   onMapTap?: (lat: number, lng: number) => void;
   onPinEdit?: (pin: MapPin) => void;
+  /** Fly to this spot (e.g. a pin picked from the drawer list). `n` makes
+   *  repeated picks of the same pin re-trigger the flight. */
+  focus?: { lat: number; lng: number; pin?: MapPin; n: number } | null;
 }
 
-export function TripLeafletMap({ stops, onFallback, pins = [], me = null, onMapTap, onPinEdit }: Props) {
+export function TripLeafletMap({ stops, onFallback, pins = [], me = null, onMapTap, onPinEdit, focus = null }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const stopLayer = useRef<L.LayerGroup | null>(null);
@@ -195,8 +204,7 @@ export function TripLeafletMap({ stops, onFallback, pins = [], me = null, onMapT
       }).addTo(layer);
 
       // Tap shows the info bubble; press-and-hold opens the editor.
-      const note = p.note ? `<br><span class="cmap-pop-note">${esc(p.note)}</span>` : '';
-      const popupHtml = `<b>${esc(p.label || 'Pin')}</b>${note}`;
+      const popupHtml = pinPopupHtml(p);
 
       const el = m.getElement();
       if (!el) {
@@ -262,6 +270,19 @@ export function TripLeafletMap({ stops, onFallback, pins = [], me = null, onMapT
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [me]);
+
+  // ── Fly to a picked pin (from the drawer list) ──────────────
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !focus) return;
+    didInitialView.current = true;
+    map.setView([focus.lat, focus.lng], 17, { animate: true });
+    if (focus.pin) {
+      L.popup({ offset: [0, -30], className: 'cmap-pop' })
+        .setLatLng([focus.lat, focus.lng]).setContent(pinPopupHtml(focus.pin)).openOn(map);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focus]);
 
   return (
     <div className="px-3 py-4">

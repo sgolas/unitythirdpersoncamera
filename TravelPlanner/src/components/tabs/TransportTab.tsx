@@ -199,7 +199,7 @@ function TransportSheet({ leg, currency, onClose }: { leg: Transport | null; cur
     setFlightOffset(info.dayOffset || 0);
     setArriveDate(shiftDate(departDate, info.dayOffset || 0));
     setLookupMsg(info.depTime
-      ? `Filled from ${iata}${info.airline ? ` · ${info.airline}` : ''} ✓ — pick your travel date and the arrival date follows.`
+      ? `✓ ${iata}${info.airline ? ` · ${info.airline}` : ''}: ${info.from.iata ?? 'dep'} ${info.depTime} → ${info.to.iata ?? 'arr'} ${info.arrTime ?? '?'}${info.dayOffset ? ` (next day)` : ' (same day)'}. Now pick YOUR depart date below — the arrival date follows it.`
       : `Found the route for ${iata}${info.airline ? ` · ${info.airline}` : ''}, but no times were available — fill those in from your booking.`);
   }
 

@@ -62,3 +62,4 @@ export const SYNC_ENDPOINT = isNative ? `${NATIVE_SYNC_BASE}/api/sync` : '/api/s
 export const PHOTO_ENDPOINT = isNative ? `${NATIVE_SYNC_BASE}/api/photo` : '/api/photo';
 export const BACKUP_ENDPOINT = isNative ? `${NATIVE_SYNC_BASE}/api/backup` : '/api/backup';
 export const PLACES_ENDPOINT = isNative ? `${NATIVE_SYNC_BASE}/api/places` : '/api/places';
+export const TRANSLATE_ENDPOINT = isNative ? `${NATIVE_SYNC_BASE}/api/translate` : '/api/translate';

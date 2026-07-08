@@ -13,8 +13,8 @@ android {
         applicationId "com.sgolas.tripplanner"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 8
-        versionName "1.7"
+        versionCode 9
+        versionName "1.8"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         // Ship only 64-bit ARM native libs (every modern phone). Drops three
         // unused architectures' copies of the ML Kit translate libs, roughly

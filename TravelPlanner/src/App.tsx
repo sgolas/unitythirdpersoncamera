@@ -1,17 +1,19 @@
-import { useState, useEffect, useReducer } from 'react';
+import { useState, useEffect, useReducer, useRef } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from './db/database';
 import { initCurrency } from './lib/currency';
 import { Onboarding } from './components/Onboarding';
 import { WelcomeSlides } from './components/WelcomeSlides';
 import {
-  LayoutDashboard, CalendarRange, Wallet, FileText, LayoutGrid,
-  ListChecks, Plane, BedDouble, Car, PiggyBank, Compass, Sparkles, History, Settings2,
-  Map as MapIcon, Images, ChevronLeft, Calculator, MessageCircle, Languages,
+  LayoutDashboard, CalendarRange, Wallet, LayoutGrid,
+  Map as MapIcon, ChevronLeft, MessageCircle, Pin, PinOff,
 } from 'lucide-react';
 import { SyncButton } from './components/SyncButton';
 import { StitchIcon } from './components/StitchIcon';
 import { isNative } from './lib/platform';
+import { SECTIONS } from './lib/sections';
+import { isPinned, toggleShortcut } from './lib/dashShortcuts';
+import { Overlay } from './components/ui';
 
 import { DashboardTab } from './components/tabs/DashboardTab';
 import { TripOverviewTab } from './components/tabs/TripOverviewTab';
@@ -37,28 +39,13 @@ type View =
   | 'accommodation' | 'carrental' | 'expenses' | 'itinerary' | 'budget' | 'helper'
   | 'changelog' | 'settings' | 'map' | 'photos' | 'converter' | 'chat' | 'translate';
 
-interface MenuItem { key: View; label: string; icon: React.ReactNode; color: string; }
-
-const MORE_ITEMS: MenuItem[] = [
-  { key: 'photos',        label: 'Photos',        icon: <Images size={22} />,    color: '#ec4899' },
-  { key: 'documents',     label: 'Documents',     icon: <FileText size={22} />,  color: '#64748b' },
-  { key: 'overview',      label: 'Trip Overview', icon: <Compass size={22} />,   color: '#38bdf8' },
-  { key: 'checklist',     label: 'Checklist',     icon: <ListChecks size={22} />, color: '#34d399' },
-  { key: 'transport',     label: 'Transport',     icon: <Plane size={22} />,     color: '#38bdf8' },
-  { key: 'accommodation', label: 'Stays',         icon: <BedDouble size={22} />, color: '#a78bfa' },
-  { key: 'carrental',     label: 'Car Rentals',   icon: <Car size={22} />,       color: '#22c55e' },
-  { key: 'budget',        label: 'Budget',        icon: <PiggyBank size={22} />, color: '#f59e0b' },
-  { key: 'converter',     label: 'Currency',      icon: <Calculator size={22} />, color: '#0ea5a3' },
-  { key: 'translate',     label: 'Translate',     icon: <Languages size={22} />, color: '#7c3aed' },
-  { key: 'helper',        label: 'Smart Helper',  icon: <Sparkles size={22} />,  color: '#fb7185' },
-  { key: 'changelog',     label: 'Change Log',    icon: <History size={22} />,   color: '#64748b' },
-  { key: 'settings',      label: 'Sync & Setup',  icon: <Settings2 size={22} />, color: '#334155' },
-];
+const MORE_ITEMS = SECTIONS; // shared registry (also used by the dashboard)
 
 export default function App() {
   const [view, setView] = useState<View>('dashboard');
   const [stack, setStack] = useState<View[]>([]);
   const [moreOpen, setMoreOpen] = useState(false);
+  const [pinTarget, setPinTarget] = useState<typeof MORE_ITEMS[number] | null>(null);
   const [, bump] = useReducer(x => x + 1, 0);
   const [welcomeSeen, setWelcomeSeen] = useState(() => localStorage.getItem('welcome.seen') === '1');
 
@@ -159,18 +146,38 @@ export default function App() {
             style={{ paddingBottom: 'calc(88px + env(safe-area-inset-bottom, 0px))' }} onClick={e => e.stopPropagation()}>
             <div className="w-10 h-1 rounded-full bg-slate-200 mx-auto mb-4" />
             <h2 className="font-bold text-slate-800 text-lg mb-4">All sections</h2>
+            <p className="text-xs text-slate-400 mb-3">Tap to open · press and hold any item to pin it to Home.</p>
             <div className="grid grid-cols-3 gap-3">
               {MORE_ITEMS.map(m => (
-                <button key={m.key} onClick={() => go(m.key)}
-                  className="flex flex-col items-center gap-2 py-4 rounded-2xl bg-slate-50 active:bg-slate-100 transition">
-                  <span className="w-11 h-11 rounded-2xl flex items-center justify-center text-white"
-                    style={{ backgroundColor: m.color }}>{m.icon}</span>
-                  <span className="text-xs font-semibold text-slate-600 text-center">{m.label}</span>
-                </button>
+                <MoreItem key={m.key} item={m} onOpen={() => go(m.key)} onHold={() => setPinTarget(m)} />
               ))}
             </div>
           </div>
         </div>
+      )}
+
+      {/* Pin/unpin action popup (from long-pressing a More item) */}
+      {pinTarget && (
+        <Overlay>
+          <div className="fixed inset-0 z-[200] bg-black/40 flex items-center justify-center p-8 animate-fadeIn" onClick={() => setPinTarget(null)}>
+            <div className="bg-white rounded-3xl p-5 w-full max-w-[16rem] shadow-2xl text-center" onClick={e => e.stopPropagation()}>
+              <span className="w-14 h-14 rounded-2xl flex items-center justify-center text-white mx-auto mb-3"
+                style={{ backgroundColor: pinTarget.color }}>{pinTarget.icon}</span>
+              <p className="font-bold text-slate-800">{pinTarget.label}</p>
+              <button
+                onClick={() => { toggleShortcut(pinTarget.key); setPinTarget(null); }}
+                className="mt-4 w-full py-3 rounded-2xl font-bold text-white accent-gradient active:scale-[0.98] transition flex items-center justify-center gap-2">
+                {isPinned(pinTarget.key)
+                  ? <><PinOff size={17} /> Remove from Home</>
+                  : <><Pin size={17} /> Add shortcut to Home</>}
+              </button>
+              <button onClick={() => setPinTarget(null)}
+                className="mt-2 w-full py-2.5 rounded-2xl font-semibold text-slate-500 active:bg-slate-50 transition">
+                Cancel
+              </button>
+            </div>
+          </div>
+        </Overlay>
       )}
 
       {/* Bottom nav — glassmorphism, padded above the system bar */}
@@ -183,6 +190,39 @@ export default function App() {
         <NavTab label="More"    active={moreOpen || MORE_ITEMS.some(m => m.key === view)} onClick={() => setMoreOpen(o => !o)} icon={<LayoutGrid size={22} />} />
       </nav>
     </div>
+  );
+}
+
+/** A More-menu tile: tap opens the section; press-and-hold (3s) offers to
+ *  pin/unpin it to the dashboard. */
+function MoreItem({ item, onOpen, onHold }: {
+  item: typeof MORE_ITEMS[number]; onOpen: () => void; onHold: () => void;
+}) {
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const held = useRef(false);
+  const [holding, setHolding] = useState(false);
+
+  const clear = () => { if (timer.current) { clearTimeout(timer.current); timer.current = null; } setHolding(false); };
+  const start = () => {
+    held.current = false;
+    setHolding(true);
+    timer.current = setTimeout(() => { held.current = true; setHolding(false); onHold(); }, 3000);
+  };
+
+  return (
+    <button
+      onPointerDown={start}
+      onPointerUp={clear}
+      onPointerLeave={clear}
+      onPointerCancel={clear}
+      onContextMenu={e => e.preventDefault()}
+      onClick={() => { if (held.current) { held.current = false; return; } onOpen(); }}
+      className={`relative flex flex-col items-center gap-2 py-4 rounded-2xl bg-slate-50 active:bg-slate-100 transition ${holding ? 'ring-2 ring-accent scale-95' : ''}`}>
+      <span className="w-11 h-11 rounded-2xl flex items-center justify-center text-white"
+        style={{ backgroundColor: item.color }}>{item.icon}</span>
+      <span className="text-xs font-semibold text-slate-600 text-center">{item.label}</span>
+      {isPinned(item.key) && <span className="absolute top-1.5 right-1.5"><Pin size={12} className="text-accent" /></span>}
+    </button>
   );
 }
 

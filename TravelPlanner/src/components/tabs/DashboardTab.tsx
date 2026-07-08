@@ -14,6 +14,8 @@ import { getLastSync } from '../../lib/config';
 import { computeStops } from '../tripMap';
 import { Monogram } from '../ui';
 import { WeatherWidget } from '../WeatherWidget';
+import { sectionByKey } from '../../lib/sections';
+import { useShortcuts } from '../../lib/dashShortcuts';
 
 const HERO_KEY = 'trip.heroOpen';
 
@@ -23,6 +25,7 @@ export function DashboardTab({ onNavigate }: { onNavigate: (v: any) => void }) {
   const [gridOpen, setGridOpen] = useState(() => localStorage.getItem('w:grid') !== '0');
   function toggleGrid() { setGridOpen(o => { localStorage.setItem('w:grid', o ? '0' : '1'); return !o; }); }
 
+  const pinned = useShortcuts();
   const trip = useTrip();
   const checklist = useChecklist();
   const expenses = useExpenses();
@@ -122,6 +125,24 @@ export function DashboardTab({ onNavigate }: { onNavigate: (v: any) => void }) {
       </div>
 
       <div className="px-4 -mt-5 relative space-y-4">
+        {/* Pinned shortcuts (long-press items in More to add/remove) */}
+        {pinned.length > 0 && (
+          <div className="grid grid-cols-4 gap-3">
+            {pinned.map(key => {
+              const s = sectionByKey(key);
+              if (!s) return null;
+              return (
+                <button key={key} onClick={() => onNavigate(key)}
+                  className="flex flex-col items-center gap-1.5 press">
+                  <span className="w-12 h-12 rounded-2xl flex items-center justify-center text-white shadow-lg"
+                    style={{ background: `linear-gradient(135deg, ${s.color}, ${s.color}cc)` }}>{s.icon}</span>
+                  <span className="text-[11px] font-semibold text-muted text-center leading-tight">{s.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+
         {/* Weather */}
         <WeatherWidget location={weatherLoc} />
 

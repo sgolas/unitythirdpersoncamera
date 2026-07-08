@@ -81,11 +81,21 @@ export function DashboardTab({ onNavigate }: { onNavigate: (v: any) => void }) {
               <CalendarClock size={13} /> {fmtDate(trip.startDate)} – {fmtDate(trip.endDate)}
             </p>
 
-            <div className="mt-5 flex items-end gap-3">
+            <div className="mt-5 flex items-stretch gap-3">
               <div className="glass rounded-2xl px-4 py-2.5 flex items-baseline gap-1.5">
                 <span className="text-3xl font-extrabold accent-text">{countdownLabel}</span>
                 <span className="text-white/70 text-sm font-medium">{countdownSub}</span>
               </div>
+
+              {/* Translator shortcut — sits beside the countdown. */}
+              <button onClick={() => onNavigate('translate')} aria-label="Open translator"
+                className="glass rounded-2xl px-4 flex items-center gap-2.5 active:scale-95 transition">
+                <img src="/translate-icon.png" alt="" className="w-10 h-10 rounded-xl flex-shrink-0 drop-shadow" />
+                <span className="text-left leading-tight">
+                  <span className="block text-white font-bold text-sm">Translate</span>
+                  <span className="block text-white/70 text-[11px]">EN · IT · PL</span>
+                </span>
+              </button>
             </div>
 
             <div className="flex gap-1.5 mt-4 flex-wrap">

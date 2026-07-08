@@ -1,9 +1,8 @@
 import { useState } from 'react';
-import { Trash2 } from 'lucide-react';
 import { useExpenses, useTravelers, useTrip, travelerName } from '../../hooks/useTrip';
 import { put, remove } from '../../db/database';
 import type { Expense, ExpenseCategory } from '../../types';
-import { money, sumExpenses, CURRENCY_SYMBOLS } from '../../types';
+import { money, moneyHome, moneyAway, sumExpenses, CURRENCY_SYMBOLS } from '../../types';
 import { fmtDate, todayStr } from '../../utils/format';
 import { TabHeader, Sheet, Field, TextInput, TextArea, Select, FormFooter, Fab, EmptyState, ConfirmDelete } from '../ui';
 import { PlaceInput } from '../PlaceInput';
@@ -41,9 +40,10 @@ export function ExpensesTab() {
       {byCat.length > 0 && (
         <div className="px-4 pt-4 flex gap-2 overflow-x-auto no-scrollbar">
           {byCat.map(c => (
-            <div key={c.key} className="flex-shrink-0 bg-white rounded-2xl px-3.5 py-2.5 shadow-sm">
-              <p className="text-xs text-slate-400">{c.emoji} {c.label}</p>
-              <p className="font-bold text-slate-800">{money(c.sum, cur)}</p>
+            <div key={c.key} className="flex-shrink-0 bg-white rounded-2xl px-3.5 py-2 shadow-sm">
+              <p className="text-[11px] text-slate-400 whitespace-nowrap">{c.emoji} {c.label}</p>
+              <p className="font-bold text-slate-800 text-sm whitespace-nowrap leading-tight">{moneyHome(c.sum, cur)}</p>
+              <p className="text-[11px] text-slate-400 whitespace-nowrap leading-tight">{moneyAway(c.sum, cur)}</p>
             </div>
           ))}
         </div>
@@ -55,22 +55,23 @@ export function ExpensesTab() {
         <div className="px-4 py-4 space-y-2">
           {expenses.map(e => {
             const m = catMeta(e.category);
+            const meta = [fmtDate(e.date), e.paidBy ? travelerName(travelers, e.paidBy) : '', e.place]
+              .filter(Boolean).join(' · ');
             return (
-              <div key={e.id} className="bg-white rounded-2xl px-4 py-3 shadow-sm flex items-center gap-3 group"
+              <div key={e.id} className="bg-white rounded-2xl px-3.5 py-3 shadow-sm flex items-center gap-3 active:bg-slate-50 transition"
                 onClick={() => setEditing(e)}>
                 <span className="w-10 h-10 rounded-xl flex items-center justify-center text-lg flex-shrink-0"
                   style={{ backgroundColor: m.color + '20' }}>{m.emoji}</span>
                 <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-slate-800 truncate">{e.title}</p>
-                  <p className="text-xs text-slate-400">
-                    {fmtDate(e.date)}{e.paidBy ? ` · ${travelerName(travelers, e.paidBy)}` : ''}{e.place ? ` · ${e.place}` : ''}
-                  </p>
+                  <div className="flex items-baseline gap-2">
+                    <p className="font-semibold text-slate-800 truncate flex-1 min-w-0">{e.title}</p>
+                    <p className="font-bold text-slate-900 whitespace-nowrap flex-shrink-0">{moneyHome(e.amount, e.currency)}</p>
+                  </div>
+                  <div className="flex items-baseline gap-2 mt-0.5">
+                    <p className="text-xs text-slate-400 truncate flex-1 min-w-0">{meta}</p>
+                    <p className="text-xs text-slate-500 whitespace-nowrap flex-shrink-0">{moneyAway(e.amount, e.currency)}</p>
+                  </div>
                 </div>
-                <p className="font-bold text-slate-800">{money(e.amount, e.currency)}</p>
-                <button onClick={ev => { ev.stopPropagation(); setPendingDelete(e); }}
-                  className="p-1.5 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-red-50">
-                  <Trash2 size={15} className="text-slate-300 hover:text-sunset" />
-                </button>
               </div>
             );
           })}
@@ -81,7 +82,8 @@ export function ExpensesTab() {
 
       {(adding || editing) && (
         <ExpenseSheet expense={editing} travelers={travelers} currency={cur}
-          onClose={() => { setAdding(false); setEditing(null); }} />
+          onClose={() => { setAdding(false); setEditing(null); }}
+          onDelete={editing ? () => { setPendingDelete(editing); setEditing(null); } : undefined} />
       )}
       {pendingDelete && (
         <ConfirmDelete label={`"${pendingDelete.title}"`}
@@ -92,8 +94,8 @@ export function ExpensesTab() {
   );
 }
 
-function ExpenseSheet({ expense, travelers, currency, onClose }: {
-  expense: Expense | null; travelers: any[]; currency: string; onClose: () => void;
+function ExpenseSheet({ expense, travelers, currency, onClose, onDelete }: {
+  expense: Expense | null; travelers: any[]; currency: string; onClose: () => void; onDelete?: () => void;
 }) {
   const [title, setTitle] = useState(expense?.title ?? '');
   const [amount, setAmount] = useState(expense ? String(expense.amount) : '');
@@ -146,6 +148,12 @@ function ExpenseSheet({ expense, travelers, currency, onClose }: {
       </Field>
       <Field label="Place"><PlaceInput value={place} onChange={setPlace} placeholder="Search a place…" /></Field>
       <Field label="Notes"><TextArea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Optional" /></Field>
+      {onDelete && (
+        <button onClick={onDelete}
+          className="mt-2 w-full py-2.5 rounded-2xl font-semibold text-sunset border-2 border-line active:bg-rose-50 transition">
+          Delete expense
+        </button>
+      )}
     </Sheet>
   );
 }

@@ -8,7 +8,7 @@
  */
 import Dexie, { type Table } from 'dexie';
 import type {
-  Traveler, TravelDocument, ChecklistItem, Transport, Accommodation,
+  Traveler, TravelDocument, ChecklistItem, Transport, Accommodation, CarRental,
   Expense, ItineraryEvent, BudgetLine, TripMeta, TripPhoto, MapPin, ChatMessage, ChangeLogEntry,
   AnyRecord, EntityKind, ChangeAction,
 } from '../types';
@@ -19,6 +19,7 @@ class TripDB extends Dexie {
   checklist!:      Table<ChecklistItem, string>;
   transport!:      Table<Transport, string>;
   accommodation!:  Table<Accommodation, string>;
+  carrentals!:     Table<CarRental, string>;
   expenses!:       Table<Expense, string>;
   itinerary!:      Table<ItineraryEvent, string>;
   budget!:         Table<BudgetLine, string>;
@@ -54,6 +55,10 @@ class TripDB extends Dexie {
     this.version(4).stores({
       chat:          'id, at, updatedAt',
     });
+    // v5 adds car rentals.
+    this.version(5).stores({
+      carrentals:    'id, pickupDate, updatedAt',
+    });
   }
 }
 
@@ -66,6 +71,7 @@ const TABLES: Record<EntityKind, Table<any, string>> = {
   checklist:     db.checklist,
   transport:     db.transport,
   accommodation: db.accommodation,
+  carrental:     db.carrentals,
   expense:       db.expenses,
   itinerary:     db.itinerary,
   budget:        db.budget,

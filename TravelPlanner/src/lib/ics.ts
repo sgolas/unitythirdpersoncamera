@@ -3,7 +3,7 @@
  * it to the phone: via the system share sheet when available, else saved to
  * Documents/TripPlanner/ so it can be opened with any calendar app.
  */
-import type { Transport, Accommodation, ItineraryEvent, TripMeta } from '../types';
+import type { Transport, Accommodation, CarRental, ItineraryEvent, TripMeta } from '../types';
 import { isNative } from './platform';
 
 const esc = (s: string) => String(s ?? '').replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n');
@@ -37,7 +37,8 @@ function vevent(e: Ev): string {
 }
 
 export function buildICS(
-  trip: TripMeta | undefined, transport: Transport[], stays: Accommodation[], itinerary: ItineraryEvent[],
+  trip: TripMeta | undefined, transport: Transport[], stays: Accommodation[],
+  itinerary: ItineraryEvent[], carRentals: CarRental[] = [],
 ): string {
   const events: string[] = [];
 
@@ -69,6 +70,20 @@ export function buildICS(
     }));
   });
 
+  carRentals.filter(r => r.pickupDate).forEach(r => {
+    events.push(vevent({
+      uid: r.id, date: r.pickupDate, time: r.pickupTime || undefined,
+      endDate: r.dropoffDate || undefined, endTime: r.dropoffTime || undefined,
+      summary: `Car rental: ${r.company || 'Reservation'}${r.carType ? ` (${r.carType})` : ''}`,
+      location: r.pickupLocation || undefined,
+      description: [
+        r.dropoffLocation && `Drop-off: ${r.dropoffLocation}`,
+        r.confirmation && `Reservation: ${r.confirmation}`,
+        r.driver && `Driver: ${r.driver}`, r.contact, r.notes,
+      ].filter(Boolean).join('\n'),
+    }));
+  });
+
   return [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
@@ -81,9 +96,10 @@ export function buildICS(
 
 /** Export the calendar; returns a human message saying where it went. */
 export async function exportCalendar(
-  trip: TripMeta | undefined, transport: Transport[], stays: Accommodation[], itinerary: ItineraryEvent[],
+  trip: TripMeta | undefined, transport: Transport[], stays: Accommodation[],
+  itinerary: ItineraryEvent[], carRentals: CarRental[] = [],
 ): Promise<string> {
-  const ics = buildICS(trip, transport, stays, itinerary);
+  const ics = buildICS(trip, transport, stays, itinerary, carRentals);
   const name = `${(trip?.name || 'trip').replace(/[^a-z0-9]+/gi, '-').toLowerCase()}.ics`;
 
   // Preferred: the system share sheet (open straight into a calendar app).

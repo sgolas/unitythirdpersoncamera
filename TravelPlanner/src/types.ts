@@ -99,6 +99,26 @@ export interface Accommodation extends SyncMeta {
   notes: string;
 }
 
+/* ── 4b. Car Rentals ────────────────────────────────────────── */
+export interface CarRental extends SyncMeta {
+  kind: 'carrental';
+  company: string;              // rental company (Hertz, Avis, Sixt…)
+  carType: string;              // vehicle / class (e.g. "SUV — VW Tiguan")
+  pickupLocation: string;
+  pickupDate: ISODate;
+  pickupTime: ISOTime | '';
+  dropoffLocation: string;
+  dropoffDate: ISODate | '';
+  dropoffTime: ISOTime | '';
+  confirmation: string;         // reservation / booking number
+  driver: string;               // main driver's name
+  contact: string;              // branch phone / email
+  cost: number;
+  costCurrency?: string;        // currency of `cost` (defaults to trip currency)
+  notes: string;
+  receipts: string[];           // receipt/document photos as data: URIs (local-first, synced)
+}
+
 /* ── 5. Expense Tracker ─────────────────────────────────────── */
 export type ExpenseCategory =
   | 'food' | 'transport' | 'lodging' | 'activities' | 'shopping' | 'other';
@@ -204,7 +224,7 @@ export interface ChangeLogEntry {
 /* ── Union of all synced records ────────────────────────────── */
 export type AnyRecord =
   | Traveler | TravelDocument | ChecklistItem | Transport
-  | Accommodation | Expense | ItineraryEvent | BudgetLine | TripMeta | TripPhoto | MapPin | ChatMessage;
+  | Accommodation | CarRental | Expense | ItineraryEvent | BudgetLine | TripMeta | TripPhoto | MapPin | ChatMessage;
 
 export type EntityKind = AnyRecord['kind'];
 

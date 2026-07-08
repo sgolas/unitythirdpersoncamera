@@ -17,7 +17,7 @@ import { syncNow, wipeLocal, backupToGitHub } from '../../db/sync';
 import { saveBackup, restoreFromFile, backupExists } from '../../lib/persist';
 import { exportCalendar } from '../../lib/ics';
 import { remindersEnabled, setRemindersEnabled, ensureNotifyPermission, scheduleTripNotifications } from '../../lib/notify';
-import { useTransport, useAccommodation, useItinerary } from '../../hooks/useTrip';
+import { useTransport, useAccommodation, useItinerary, useCarRentals } from '../../hooks/useTrip';
 import { scanToJoin } from '../../lib/join';
 import { WelcomeSlides } from '../WelcomeSlides';
 import { fmtStamp } from '../../utils/format';
@@ -382,13 +382,14 @@ function CalendarPanel() {
   const transport = useTransport();
   const stays = useAccommodation();
   const itinerary = useItinerary();
+  const cars = useCarRentals();
   const [msg, setMsg] = useState('');
   const [busy, setBusy] = useState(false);
-  const count = transport.length + stays.length + itinerary.length;
+  const count = transport.length + stays.length + itinerary.length + cars.length;
 
   async function doExport() {
     setBusy(true); setMsg('');
-    try { setMsg(await exportCalendar(trip, transport, stays, itinerary)); }
+    try { setMsg(await exportCalendar(trip, transport, stays, itinerary, cars)); }
     catch (e) { setMsg(e instanceof Error ? e.message : 'Export failed — try again.'); }
     setBusy(false);
   }

@@ -6,7 +6,7 @@ import { Onboarding } from './components/Onboarding';
 import { WelcomeSlides } from './components/WelcomeSlides';
 import {
   LayoutDashboard, CalendarRange, Wallet, FileText, LayoutGrid,
-  ListChecks, Plane, BedDouble, PiggyBank, Compass, Sparkles, History, Settings2,
+  ListChecks, Plane, BedDouble, Car, PiggyBank, Compass, Sparkles, History, Settings2,
   Map as MapIcon, Images, ChevronLeft, Calculator, MessageCircle, Languages,
 } from 'lucide-react';
 import { SyncButton } from './components/SyncButton';
@@ -19,6 +19,7 @@ import { DocumentsTab } from './components/tabs/DocumentsTab';
 import { ChecklistTab } from './components/tabs/ChecklistTab';
 import { TransportTab } from './components/tabs/TransportTab';
 import { AccommodationTab } from './components/tabs/AccommodationTab';
+import { CarRentalTab } from './components/tabs/CarRentalTab';
 import { ExpensesTab } from './components/tabs/ExpensesTab';
 import { ItineraryTab } from './components/tabs/ItineraryTab';
 import { BudgetTab } from './components/tabs/BudgetTab';
@@ -33,7 +34,7 @@ import { TranslateTab } from './components/tabs/TranslateTab';
 
 type View =
   | 'dashboard' | 'overview' | 'documents' | 'checklist' | 'transport'
-  | 'accommodation' | 'expenses' | 'itinerary' | 'budget' | 'helper'
+  | 'accommodation' | 'carrental' | 'expenses' | 'itinerary' | 'budget' | 'helper'
   | 'changelog' | 'settings' | 'map' | 'photos' | 'converter' | 'chat' | 'translate';
 
 interface MenuItem { key: View; label: string; icon: React.ReactNode; color: string; }
@@ -45,6 +46,7 @@ const MORE_ITEMS: MenuItem[] = [
   { key: 'checklist',     label: 'Checklist',     icon: <ListChecks size={22} />, color: '#34d399' },
   { key: 'transport',     label: 'Transport',     icon: <Plane size={22} />,     color: '#38bdf8' },
   { key: 'accommodation', label: 'Stays',         icon: <BedDouble size={22} />, color: '#a78bfa' },
+  { key: 'carrental',     label: 'Car Rentals',   icon: <Car size={22} />,       color: '#22c55e' },
   { key: 'budget',        label: 'Budget',        icon: <PiggyBank size={22} />, color: '#f59e0b' },
   { key: 'converter',     label: 'Currency',      icon: <Calculator size={22} />, color: '#0ea5a3' },
   { key: 'translate',     label: 'Translate',     icon: <Languages size={22} />, color: '#7c3aed' },
@@ -121,6 +123,7 @@ export default function App() {
         {view === 'checklist'     && <ChecklistTab />}
         {view === 'transport'     && <TransportTab />}
         {view === 'accommodation' && <AccommodationTab />}
+        {view === 'carrental'     && <CarRentalTab />}
         {view === 'expenses'      && <ExpensesTab />}
         {view === 'itinerary'     && <ItineraryTab />}
         {view === 'budget'        && <BudgetTab />}

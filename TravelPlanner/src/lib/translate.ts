@@ -44,6 +44,22 @@ export async function downloadLang(l: Lang): Promise<void> {
   await m.Translation.downloadModel({ language: await toEnum(l) });
 }
 
+/** Remove a downloaded language model to free space. */
+export async function removeLang(l: Lang): Promise<void> {
+  const m = await mod();
+  await m.Translation.deleteDownloadedModel({ language: await toEnum(l) });
+}
+
+/** Best-effort: open this app's page in Android Settings (troubleshooting). */
+export function openPhoneSettings() {
+  try {
+    window.open(
+      'intent://com.sgolas.tripplanner#Intent;scheme=package;action=android.settings.APPLICATION_DETAILS_SETTINGS;end',
+      '_system',
+    );
+  } catch { /* not on a device */ }
+}
+
 /** Translate text between two languages. Throws with a friendly message. */
 export async function translateText(text: string, from: Lang, to: Lang): Promise<string> {
   if (!translationAvailable()) throw new Error('The translator is only available in the app (v1.5+).');

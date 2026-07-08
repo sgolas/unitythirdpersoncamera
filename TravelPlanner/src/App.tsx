@@ -124,19 +124,23 @@ export default function App() {
         {view === 'translate'     && <TranslateTab />}
       </main>
 
-      {/* Back button (top-left) — shown whenever there's history */}
-      {canGoBack && (
-        <button onClick={back} aria-label="Back"
-          className="fixed left-3 z-50 w-10 h-10 rounded-full flex items-center justify-center text-white shadow-lg press animate-fadeIn"
-          style={{ top: 'calc(env(safe-area-inset-top, 0px) + 8px)', background: 'rgba(15,23,42,0.4)', backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)' }}>
-          <ChevronLeft size={24} />
-        </button>
-      )}
-
-      {/* Global sync button (floating, top-right, below status bar) */}
-      <div className="fixed right-3 z-50 flex items-start gap-1.5" style={{ top: 'calc(env(safe-area-inset-top, 0px) + 8px)' }}>
-        <StitchIcon />
-        <SyncButton />
+      {/* Floating top controls — anchored to the app column (not the viewport)
+          so they stay aligned with the header in landscape / on wide screens. */}
+      <div className="fixed left-1/2 -translate-x-1/2 w-full max-w-md z-50 px-3 flex items-start justify-between pointer-events-none"
+        style={{ top: 'calc(env(safe-area-inset-top, 0px) + 8px)' }}>
+        <div className="pointer-events-auto">
+          {canGoBack && (
+            <button onClick={back} aria-label="Back"
+              className="w-10 h-10 rounded-full flex items-center justify-center text-white shadow-lg press animate-fadeIn"
+              style={{ background: 'rgba(15,23,42,0.4)', backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)' }}>
+              <ChevronLeft size={24} />
+            </button>
+          )}
+        </div>
+        <div className="pointer-events-auto flex items-start gap-1.5">
+          <StitchIcon />
+          <SyncButton />
+        </div>
       </div>
 
       {/* More menu */}

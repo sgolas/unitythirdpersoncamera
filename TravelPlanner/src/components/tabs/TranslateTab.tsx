@@ -112,7 +112,7 @@ export function TranslateTab() {
       className="rounded-xl border border-line bg-surface-2 px-3 py-2 font-semibold text-content max-w-[42vw]">
       {VOICE_LANGS.map(l => (
         <option key={l.code} value={l.code}>
-          {l.flag} {l.name}{isOfflineCode(l.code) ? ' ⤓' : ''}
+          {l.flag} {l.name}{ready.includes(l.code) ? ' ✓' : ''}
         </option>
       ))}
     </select>
@@ -198,7 +198,7 @@ export function TranslateTab() {
         {err && <p className="text-sunset text-sm px-1">{err}</p>}
 
         <p className="text-center text-xs text-muted px-6 flex items-center justify-center gap-1.5">
-          <Languages size={13} /> English · Italian · Polish work offline once downloaded. Other languages use the internet.
+          <Languages size={13} /> {VOICE_LANGS.length} languages · download any to translate it offline (✓), otherwise it uses the internet.
         </p>
       </div>
 
@@ -232,16 +232,16 @@ function LanguageManager({ available, ready, onChanged, onClose }: {
   return (
     <Overlay>
       <div className="fixed inset-0 z-[700] bg-black/40 flex items-center justify-center p-6 animate-fadeIn" onClick={onClose}>
-        <div className="bg-surface rounded-3xl p-5 w-full max-w-xs shadow-2xl" onClick={e => e.stopPropagation()}>
+        <div className="bg-surface rounded-3xl p-5 w-full max-w-xs shadow-2xl flex flex-col max-h-[80vh]" onClick={e => e.stopPropagation()}>
           <p className="font-bold text-content text-lg">Offline languages</p>
-          <p className="text-xs text-muted mb-4">Download a language once (~30 MB, use wifi) and it translates with no internet. Other languages always use the internet.</p>
+          <p className="text-xs text-muted mb-4">Download a language once (~30 MB, use wifi) and it translates with no internet. Anything not downloaded uses the internet.</p>
 
           {!available ? (
             <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5">
-              Offline downloads need the Trip Planner app (v1.5+). Other languages still translate online here.
+              Offline downloads need the Trip Planner app (v1.5+). Every language still translates online here.
             </p>
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-2 overflow-y-auto -mx-1 px-1 flex-1 min-h-0">
               {OFFLINE_LANGS.map(l => {
                 const have = ready.includes(l.code);
                 const busy = working === l.code;
@@ -290,14 +290,14 @@ function HelpModal({ onClose }: { onClose: () => void }) {
           <div className="text-sm text-content space-y-3 mt-3">
             <p><b>Speak or type.</b> Tap the 🎤 mic and talk in your language — it listens, translates, and reads the answer back out loud in theirs. The 🔊 button replays any translation.</p>
             <div>
-              <p className="font-semibold text-content mb-1">Offline (English · Italian · Polish):</p>
+              <p className="font-semibold text-content mb-1">To use a language offline:</p>
               <ol className="list-decimal pl-5 space-y-1 text-muted">
                 <li>Tap <b className="text-content">Offline languages</b>.</li>
-                <li>Tap <b className="text-content">Get</b> next to Italian and Polish (~30 MB each, on wifi).</li>
-                <li>After that those three translate <b>anywhere — even in airplane mode</b>.</li>
+                <li>Tap <b className="text-content">Get</b> next to the ones you want (~30 MB each, on wifi).</li>
+                <li>After that they translate <b>anywhere — even in airplane mode</b>, and show a ✓ in the language list.</li>
               </ol>
             </div>
-            <p><b>Every other language</b> translates over the internet. Common travel phrases still work offline from a built-in phrasebook.</p>
+            <p>Anything you haven't downloaded translates over the internet instead. Common travel phrases also work offline from a built-in phrasebook.</p>
             <p className="text-muted">Speaking and listening happen on your phone; offline translation never leaves the device.</p>
           </div>
           <button onClick={onClose}

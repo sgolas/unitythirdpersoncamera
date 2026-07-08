@@ -87,14 +87,11 @@ export function DashboardTab({ onNavigate }: { onNavigate: (v: any) => void }) {
                 <span className="text-white/70 text-sm font-medium">{countdownSub}</span>
               </div>
 
-              {/* Translator shortcut — sits beside the countdown. */}
+              {/* Translator shortcut — icon only, gently pulsing for attention. */}
               <button onClick={() => onNavigate('translate')} aria-label="Open translator"
-                className="glass rounded-2xl px-4 flex items-center gap-2.5 active:scale-95 transition">
-                <img src="/translate-icon.png" alt="" className="w-10 h-10 rounded-xl flex-shrink-0 drop-shadow" />
-                <span className="text-left leading-tight">
-                  <span className="block text-white font-bold text-sm">Translate</span>
-                  <span className="block text-white/70 text-[11px]">EN · IT · PL</span>
-                </span>
+                className="flex items-center justify-center active:scale-90 transition">
+                <img src="/translate-icon.png" alt="Translate"
+                  className="h-full max-h-14 aspect-square rounded-2xl drop-shadow-lg animate-soft-pulse" />
               </button>
             </div>
 

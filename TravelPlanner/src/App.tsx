@@ -7,7 +7,7 @@ import { WelcomeSlides } from './components/WelcomeSlides';
 import {
   LayoutDashboard, CalendarRange, Wallet, FileText, LayoutGrid,
   ListChecks, Plane, BedDouble, PiggyBank, Compass, Sparkles, History, Settings2,
-  Map as MapIcon, Images, ChevronLeft, Calculator, MessageCircle,
+  Map as MapIcon, Images, ChevronLeft, Calculator, MessageCircle, Languages,
 } from 'lucide-react';
 import { SyncButton } from './components/SyncButton';
 import { StitchIcon } from './components/StitchIcon';
@@ -29,11 +29,12 @@ import { MapTab } from './components/tabs/MapTab';
 import { PhotosTab } from './components/tabs/PhotosTab';
 import { ConverterTab } from './components/tabs/ConverterTab';
 import { ChatTab } from './components/tabs/ChatTab';
+import { TranslateTab } from './components/tabs/TranslateTab';
 
 type View =
   | 'dashboard' | 'overview' | 'documents' | 'checklist' | 'transport'
   | 'accommodation' | 'expenses' | 'itinerary' | 'budget' | 'helper'
-  | 'changelog' | 'settings' | 'map' | 'photos' | 'converter' | 'chat';
+  | 'changelog' | 'settings' | 'map' | 'photos' | 'converter' | 'chat' | 'translate';
 
 interface MenuItem { key: View; label: string; icon: React.ReactNode; color: string; }
 
@@ -46,6 +47,7 @@ const MORE_ITEMS: MenuItem[] = [
   { key: 'accommodation', label: 'Stays',         icon: <BedDouble size={22} />, color: '#a78bfa' },
   { key: 'budget',        label: 'Budget',        icon: <PiggyBank size={22} />, color: '#f59e0b' },
   { key: 'converter',     label: 'Currency',      icon: <Calculator size={22} />, color: '#0ea5a3' },
+  { key: 'translate',     label: 'Translate',     icon: <Languages size={22} />, color: '#7c3aed' },
   { key: 'helper',        label: 'Smart Helper',  icon: <Sparkles size={22} />,  color: '#fb7185' },
   { key: 'changelog',     label: 'Change Log',    icon: <History size={22} />,   color: '#64748b' },
   { key: 'settings',      label: 'Sync & Setup',  icon: <Settings2 size={22} />, color: '#334155' },
@@ -129,6 +131,7 @@ export default function App() {
         {view === 'photos'        && <PhotosTab />}
         {view === 'converter'     && <ConverterTab />}
         {view === 'chat'          && <ChatTab />}
+        {view === 'translate'     && <TranslateTab />}
       </main>
 
       {/* Back button (top-left) — shown whenever there's history */}

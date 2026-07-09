@@ -10,6 +10,8 @@
     <uses-permission android:name="android.permission.CAMERA" />
     <!-- Voice translator: capture speech for translation. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- Show incoming family-chat push notifications (Android 13+). -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <queries>
         <intent>
             <action android:name="android.speech.RecognitionService" />
@@ -58,6 +60,12 @@
         <meta-data
             android:name="com.google.mlkit.vision.DEPENDENCIES"
             android:value="barcode_ui" />
+
+        <!-- Default channel for background FCM chat pushes (matches the one
+             created at launch in lib/push.ts). -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="chat" />
     </application>
 
     <!-- Permissions -->

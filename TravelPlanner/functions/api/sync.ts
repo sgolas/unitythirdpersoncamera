@@ -10,12 +10,49 @@
  *   SUPABASE_URL, SUPABASE_SERVICE_KEY, AUTH_SALT
  */
 import { createClient } from '@supabase/supabase-js';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { cors, verifyAccess, clientIp, overRequestLimit, overFailLimit } from './_shared';
+import { sendPush } from './_fcm';
 
 interface Env {
   SUPABASE_URL: string;
   SUPABASE_SERVICE_KEY: string;
   AUTH_SALT: string;
+  FCM_SERVICE_ACCOUNT?: string; // Firebase service-account JSON (enables push)
+}
+
+interface ChatPayload { text?: string; author?: string; emoji?: string; deviceId?: string }
+
+/**
+ * Push a notification to the trip's *other* devices when brand-new chat
+ * messages arrive. Best-effort and fire-and-forget (runs in ctx.waitUntil):
+ * looks up registered FCM tokens, skips the sender(s), sends, and prunes any
+ * tokens FCM reports as dead.
+ */
+async function pushNewChat(
+  supabase: SupabaseClient, serviceAccount: string, tripCode: string,
+  chats: ChatPayload[],
+) {
+  const senderIds = new Set(chats.map(c => c.deviceId).filter(Boolean) as string[]);
+  const { data: rows } = await supabase
+    .from('push_tokens').select('device_id, token').eq('trip_code', tripCode);
+  const targets = (rows ?? []).filter(r => !senderIds.has(r.device_id));
+  if (!targets.length) return;
+
+  let title: string, body: string;
+  if (chats.length === 1) {
+    const c = chats[0];
+    title = `${c.emoji || '💬'} ${c.author || 'New message'}`;
+    body = (c.text || '').slice(0, 140) || 'sent a message';
+  } else {
+    title = '💬 New messages';
+    body = `${chats.length} new messages in the family chat.`;
+  }
+
+  const { dead } = await sendPush(serviceAccount, targets.map(t => t.token), { title, body }, { kind: 'chat' });
+  if (dead.length) {
+    await supabase.from('push_tokens').delete().eq('trip_code', tripCode).in('token', dead);
+  }
 }
 
 export const onRequestOptions: PagesFunction = (ctx) =>
@@ -72,6 +109,15 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
       if (winners.length) {
         await supabase.from('trip_sync').upsert(winners, { onConflict: 'trip_code,entity,record_id' });
         accepted = winners.length;
+
+        // Push a notification to the family for brand-new chat messages
+        // (winners are strictly-newer records, so edits/re-sends don't re-ping).
+        const newChat = winners
+          .filter(w => w.entity === 'chatmsg' && !stored.has(`chatmsg:${w.record_id}`))
+          .map(w => w.payload as ChatPayload);
+        if (newChat.length && env.FCM_SERVICE_ACCOUNT) {
+          ctx.waitUntil(pushNewChat(supabase, env.FCM_SERVICE_ACCOUNT, tripCode, newChat).catch(() => {}));
+        }
       }
     }
 

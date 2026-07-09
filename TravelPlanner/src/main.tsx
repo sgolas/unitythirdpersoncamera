@@ -81,6 +81,8 @@ async function boot() {
     window.addEventListener('trip-data-changed', scheduleBackup);
     // Trip-day reminders (flight check-ins, leave-for-airport, activities).
     import('./lib/notify').then(({ initTripReminders }) => initTripReminders()).catch(() => {});
+    // Push notifications for incoming family chat (native only; no-ops otherwise).
+    if (isNative) import('./lib/push').then(({ initPush }) => initPush()).catch(() => {});
     if (isNative) {
       import('@capacitor/app').then(({ App: CapApp }) => {
         CapApp.addListener('appStateChange', s => { if (!s.isActive) void saveBackup(); });

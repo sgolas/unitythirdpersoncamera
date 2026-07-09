@@ -14,6 +14,8 @@ export function isSyncConfigured(): boolean { return !!getSyncCode() && !!getSyn
 export function setSyncCredentials(code: string, pass: string) {
   localStorage.setItem(CODE_KEY, code.trim());
   localStorage.setItem(PASS_KEY, pass);
+  // Let push registration (and anything else) know a trip is now configured.
+  window.dispatchEvent(new Event('sync-config-changed'));
 }
 
 /** Random token from an unambiguous alphabet (no 0/O/1/l/I). */
@@ -63,3 +65,4 @@ export const PHOTO_ENDPOINT = isNative ? `${NATIVE_SYNC_BASE}/api/photo` : '/api
 export const BACKUP_ENDPOINT = isNative ? `${NATIVE_SYNC_BASE}/api/backup` : '/api/backup';
 export const PLACES_ENDPOINT = isNative ? `${NATIVE_SYNC_BASE}/api/places` : '/api/places';
 export const TRANSLATE_ENDPOINT = isNative ? `${NATIVE_SYNC_BASE}/api/translate` : '/api/translate';
+export const PUSHREGISTER_ENDPOINT = isNative ? `${NATIVE_SYNC_BASE}/api/pushregister` : '/api/pushregister';

@@ -63,6 +63,13 @@ export default function App() {
     return () => window.removeEventListener('cur-change', on);
   }, []);
 
+  // A tapped chat push (see lib/push) asks us to open the Chat tab.
+  useEffect(() => {
+    const openChat = () => { setStack([]); setMoreOpen(false); setView('chat'); };
+    window.addEventListener('open-chat', openChat);
+    return () => window.removeEventListener('open-chat', openChat);
+  }, []);
+
   function go(v: View) {
     setMoreOpen(false);
     if (v !== view) setStack(s => [...s, view]);

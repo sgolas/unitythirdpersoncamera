@@ -13,6 +13,7 @@ import { StitchIcon } from './components/StitchIcon';
 import { isNative } from './lib/platform';
 import { SECTIONS } from './lib/sections';
 import { isPinned, toggleShortcut } from './lib/dashShortcuts';
+import { useUnreadChat } from './lib/chatUnread';
 import { Overlay } from './components/ui';
 
 import { DashboardTab } from './components/tabs/DashboardTab';
@@ -48,6 +49,7 @@ export default function App() {
   const [pinTarget, setPinTarget] = useState<typeof MORE_ITEMS[number] | null>(null);
   const [, bump] = useReducer(x => x + 1, 0);
   const [welcomeSeen, setWelcomeSeen] = useState(() => localStorage.getItem('welcome.seen') === '1');
+  const unreadChat = useUnreadChat();
 
   // undefined = still loading, null = no trip yet (show onboarding), object = ready.
   const tripState = useLiveQuery(() => db.trip.get('trip').then(t => t ?? null), [], undefined);
@@ -190,7 +192,7 @@ export default function App() {
         <NavTab label="Plan"    active={view === 'itinerary'} onClick={() => go('itinerary')} icon={<CalendarRange size={22} />} />
         <NavTab label="Money"   active={view === 'expenses'}  onClick={() => go('expenses')}  icon={<Wallet size={22} />} />
         <NavTab label="Map"     active={view === 'map'}       onClick={() => go('map')}       icon={<MapIcon size={22} />} />
-        <NavTab label="Chat"    active={view === 'chat'}      onClick={() => go('chat')}      icon={<MessageCircle size={22} />} />
+        <NavTab label="Chat"    active={view === 'chat'}      onClick={() => go('chat')}      icon={<MessageCircle size={22} />} badge={unreadChat} />
         <NavTab label="More"    active={moreOpen || MORE_ITEMS.some(m => m.key === view)} onClick={() => setMoreOpen(o => !o)} icon={<LayoutGrid size={22} />} />
       </nav>
     </div>
@@ -230,14 +232,21 @@ function MoreItem({ item, onOpen, onHold }: {
   );
 }
 
-function NavTab({ label, icon, active, onClick }: {
-  label: string; icon: React.ReactNode; active: boolean; onClick: () => void;
+function NavTab({ label, icon, active, onClick, badge = 0 }: {
+  label: string; icon: React.ReactNode; active: boolean; onClick: () => void; badge?: number;
 }) {
   return (
     <button onClick={onClick}
       className="flex-1 flex flex-col items-center justify-center py-2.5 gap-0.5 transition-colors press relative"
       style={{ color: active ? 'var(--accent)' : 'var(--muted)' }}>
-      <span className={active ? 'animate-pop' : ''}>{icon}</span>
+      <span className={`relative ${active ? 'animate-pop' : ''}`}>
+        {icon}
+        {badge > 0 && (
+          <span className="absolute -top-1.5 -right-2 min-w-[16px] h-4 px-1 rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center shadow">
+            {badge > 9 ? '9+' : badge}
+          </span>
+        )}
+      </span>
       <span className="text-[11px] font-semibold">{label}</span>
       {active && <span className="absolute -top-px h-0.5 w-8 rounded-full accent-gradient" />}
     </button>

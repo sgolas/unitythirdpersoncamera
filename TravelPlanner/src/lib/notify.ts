@@ -71,6 +71,22 @@ export async function notifyNow(title: string, body: string, id = Date.now() % 2
   } catch { /* permission missing */ }
 }
 
+/**
+ * Immediate notification for an incoming chat message. Unlike notifyNow this
+ * is NOT gated by the trip-reminders toggle — a new family message should ping
+ * regardless of whether trip-day reminders are on. Ensures permission first.
+ */
+export async function notifyMessage(title: string, body: string) {
+  const LN = await plugin();
+  if (!LN) return;
+  if (!(await ensureNotifyPermission())) return;
+  try {
+    await LN.schedule({
+      notifications: [{ id: Date.now() % 2_000_000_000, title, body, schedule: { at: new Date(Date.now() + 500) } }],
+    });
+  } catch { /* permission missing */ }
+}
+
 let timer: ReturnType<typeof setTimeout> | null = null;
 
 /** Debounced full re-schedule — call whenever trip data may have changed. */

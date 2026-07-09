@@ -16,6 +16,8 @@ import { Monogram } from '../ui';
 import { WeatherWidget } from '../WeatherWidget';
 import { sectionByKey } from '../../lib/sections';
 import { useShortcuts } from '../../lib/dashShortcuts';
+import { useUnreadChat } from '../../lib/chatUnread';
+import { MessageCircle } from 'lucide-react';
 
 const HERO_KEY = 'trip.heroOpen';
 
@@ -26,6 +28,7 @@ export function DashboardTab({ onNavigate }: { onNavigate: (v: any) => void }) {
   function toggleGrid() { setGridOpen(o => { localStorage.setItem('w:grid', o ? '0' : '1'); return !o; }); }
 
   const pinned = useShortcuts();
+  const unreadChat = useUnreadChat();
   const trip = useTrip();
   const checklist = useChecklist();
   const expenses = useExpenses();
@@ -125,6 +128,21 @@ export function DashboardTab({ onNavigate }: { onNavigate: (v: any) => void }) {
       </div>
 
       <div className="px-4 -mt-5 relative space-y-4">
+        {/* New-message alert — appears when the family chat has unread messages */}
+        {unreadChat > 0 && (
+          <button onClick={() => onNavigate('chat')}
+            className="w-full flex items-center gap-3 bg-rose-500 text-white rounded-3xl px-4 py-3 shadow-lg press animate-fadeUp">
+            <span className="relative flex-shrink-0">
+              <MessageCircle size={22} />
+              <span className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-white text-rose-500 text-[11px] font-extrabold flex items-center justify-center">!</span>
+            </span>
+            <span className="flex-1 text-left font-bold text-sm">
+              {unreadChat === 1 ? 'New message in family chat' : `${unreadChat} new messages in family chat`}
+            </span>
+            <span className="text-white/80 text-xs font-semibold">Open ›</span>
+          </button>
+        )}
+
         {/* Pinned shortcuts (long-press items in More to add/remove) */}
         {pinned.length > 0 && (
           <div className="grid grid-cols-4 gap-3">

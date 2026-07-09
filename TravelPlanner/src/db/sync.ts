@@ -8,7 +8,7 @@
  */
 import { db, tableFor, getDeviceName, logChange } from './database';
 import { scheduleBackup, deleteBackup, cancelScheduledBackup } from '../lib/persist';
-import type { AnyRecord, EntityKind } from '../types';
+import type { AnyRecord, EntityKind, ChatMessage } from '../types';
 import {
   getSyncCode, getSyncPass, isSyncConfigured, setLastSync, SYNC_ENDPOINT, BACKUP_ENDPOINT,
 } from '../lib/config';
@@ -45,6 +45,7 @@ async function collectLocal(): Promise<RelayRecord[]> {
 
 async function applyRemote(remote: RelayRecord[]): Promise<number> {
   let applied = 0;
+  const newChat: ChatMessage[] = [];
   for (const rr of remote) {
     const table = tableFor(rr.entity);
     const local = (await table.get(rr.record_id)) as AnyRecord | undefined;
@@ -52,9 +53,12 @@ async function applyRemote(remote: RelayRecord[]): Promise<number> {
     if (!local || rr.updated_at > local.updatedAt) {
       await table.put(rr.payload);
       applied++;
+      if (rr.entity === 'chatmsg' && !local) newChat.push(rr.payload as ChatMessage);
     }
   }
   if (applied) scheduleBackup(); // persist pulled-in changes to the device file too
+  // Ping the family when a brand-new message arrives (fire-and-forget).
+  if (newChat.length) import('../lib/chatUnread').then(m => m.notifyIncomingChat(newChat)).catch(() => {});
   return applied;
 }
 

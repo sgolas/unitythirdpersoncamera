@@ -6,6 +6,7 @@ import type { ChatMessage } from '../../types';
 import { TabHeader } from '../ui';
 import { syncNow } from '../../db/sync';
 import { isSyncConfigured } from '../../lib/config';
+import { chatDeviceId, setChatOpen, markChatSeen } from '../../lib/chatUnread';
 
 /**
  * Family chat — messages are ordinary synced records (kind 'chatmsg'), so
@@ -16,15 +17,6 @@ import { isSyncConfigured } from '../../lib/config';
  */
 
 const ME_KEY = 'chat.me';
-const DEVICE_ID_KEY = 'chat.deviceId';
-
-/** Random per-install id for own-message detection (device *names* collide —
- *  every Android phone defaults to "Android phone"). */
-function chatDeviceId(): string {
-  let id = localStorage.getItem(DEVICE_ID_KEY);
-  if (!id) { id = crypto.randomUUID(); localStorage.setItem(DEVICE_ID_KEY, id); }
-  return id;
-}
 
 function timeOf(iso: string): string { return iso.slice(11, 16); }
 function dayOf(iso: string): string { return iso.slice(0, 10); }
@@ -68,6 +60,11 @@ export function ChatTab() {
 
   // Keep the newest message in view.
   useEffect(() => { endRef.current?.scrollIntoView({ block: 'end' }); }, [msgs.length]);
+
+  // While this tab is open, suppress notification popups and mark everything
+  // read as it comes in (clears the unread badge + dashboard banner).
+  useEffect(() => { setChatOpen(true); return () => setChatOpen(false); }, []);
+  useEffect(() => { if (msgs.length) markChatSeen(msgs[msgs.length - 1].at); }, [msgs]);
 
   async function send() {
     const body = text.trim();

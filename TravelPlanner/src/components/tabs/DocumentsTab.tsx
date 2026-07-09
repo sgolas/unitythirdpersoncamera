@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { Trash2, Camera, AlertTriangle } from 'lucide-react';
+import { Trash2, Camera, AlertTriangle, ImagePlus, X } from 'lucide-react';
 import { useDocuments, useTravelers, travelerName } from '../../hooks/useTrip';
 import { put, remove } from '../../db/database';
 import type { TravelDocument, DocType } from '../../types';
@@ -111,11 +111,18 @@ function DocSheet({ doc, travelers, onClose }: { doc: TravelDocument | null; tra
   const [expiryDate, setExpiryDate] = useState(doc?.expiryDate ?? '');
   const [notes, setNotes] = useState(doc?.notes ?? '');
   const [photoData, setPhotoData] = useState(doc?.photoData ?? '');
-  const fileRef = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState(false);
+  const cameraRef = useRef<HTMLInputElement>(null); // opens the camera
+  const fileRef = useRef<HTMLInputElement>(null);   // picks from gallery/files
 
   async function onPhoto(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
-    if (f) setPhotoData(await fileToCompressedDataUrl(f));
+    e.target.value = ''; // allow re-selecting the same file
+    if (!f) return;
+    setBusy(true);
+    const data = await fileToCompressedDataUrl(f);
+    if (data) setPhotoData(data);
+    setBusy(false);
   }
 
   async function save() {
@@ -134,12 +141,42 @@ function DocSheet({ doc, travelers, onClose }: { doc: TravelDocument | null; tra
   return (
     <Sheet title={doc ? 'Edit document' : 'Add document'} onClose={onClose}
       footer={<FormFooter onCancel={onClose} onSubmit={save} disabled={!title.trim()} submitLabel={doc ? 'Save' : 'Add document'} />}>
-      <button onClick={() => fileRef.current?.click()}
-        className="w-full mb-4 rounded-2xl border-2 border-dashed border-slate-200 overflow-hidden active:bg-slate-50">
-        {photoData
-          ? <img src={photoData} alt="" className="w-full max-h-52 object-contain bg-slate-50" />
-          : <div className="py-8 flex flex-col items-center text-slate-400"><Camera size={26} /><span className="text-sm mt-1 font-medium">Add a photo / scan</span></div>}
-      </button>
+      {/* Document photo — take with the camera or pick an existing image. */}
+      <div className="mb-4">
+        {photoData ? (
+          <div className="relative rounded-2xl overflow-hidden border-2 border-slate-200">
+            <img src={photoData} alt="" className="w-full max-h-52 object-contain bg-slate-50" />
+            <button onClick={() => setPhotoData('')} aria-label="Remove photo"
+              className="absolute top-2 right-2 w-8 h-8 rounded-full bg-black/55 text-white flex items-center justify-center">
+              <X size={16} />
+            </button>
+            <div className="flex divide-x divide-slate-200 border-t border-slate-200">
+              <button onClick={() => cameraRef.current?.click()} disabled={busy}
+                className="flex-1 py-2.5 flex items-center justify-center gap-1.5 text-sm font-semibold text-slate-600 active:bg-slate-50 disabled:opacity-50">
+                <Camera size={15} /> Retake
+              </button>
+              <button onClick={() => fileRef.current?.click()} disabled={busy}
+                className="flex-1 py-2.5 flex items-center justify-center gap-1.5 text-sm font-semibold text-slate-600 active:bg-slate-50 disabled:opacity-50">
+                <ImagePlus size={15} /> Replace
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-3">
+            <button onClick={() => cameraRef.current?.click()} disabled={busy}
+              className="rounded-2xl border-2 border-dashed border-slate-200 py-7 flex flex-col items-center text-slate-500 active:bg-slate-50 disabled:opacity-50">
+              <Camera size={26} /><span className="text-sm mt-1.5 font-semibold">Take photo</span>
+            </button>
+            <button onClick={() => fileRef.current?.click()} disabled={busy}
+              className="rounded-2xl border-2 border-dashed border-slate-200 py-7 flex flex-col items-center text-slate-500 active:bg-slate-50 disabled:opacity-50">
+              <ImagePlus size={26} /><span className="text-sm mt-1.5 font-semibold">Choose file</span>
+            </button>
+          </div>
+        )}
+        {busy && <p className="text-xs text-slate-400 text-center mt-2">Processing photo…</p>}
+      </div>
+      {/* capture="environment" opens the rear camera straight away. */}
+      <input ref={cameraRef} type="file" accept="image/*" capture="environment" hidden onChange={onPhoto} />
       <input ref={fileRef} type="file" accept="image/*" hidden onChange={onPhoto} />
 
       <Field label="Title"><TextInput autoFocus value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. John’s Passport" /></Field>

@@ -184,9 +184,18 @@ export function TripLeafletMap({ stops, onFallback, pins = [], me = null, onMapT
       zoomControl: true, scrollWheelZoom: false, attributionControl: true,
       zoomDelta: 2, // each +/− tap moves two levels, so zooming out is quick
     });
+    // "Mulan scroll" look: a warm parchment base (Carto, which also acts as the
+    // fallback wherever an artistic tile fails) with hand-painted watercolor
+    // tiles layered on top. A sepia/ink CSS wash + vignette frame (see the
+    // .mulan-map rules in index.css) push it toward an aged ink-and-wash map.
+    ref.current.classList.add('mulan-map');
     L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
       maxZoom: 19, subdomains: 'abcd',
       attribution: '&copy; OpenStreetMap &copy; CARTO',
+    }).addTo(map);
+    L.tileLayer('https://watercolormaps.collection.cooperhewitt.org/tile/watercolor/{z}/{x}/{y}.jpg', {
+      maxNativeZoom: 16, maxZoom: 19,
+      attribution: 'Watercolor tiles by Stamen Design',
     }).addTo(map);
     stopLayer.current = L.layerGroup().addTo(map);
     pinLayer.current = L.layerGroup().addTo(map);

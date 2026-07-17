@@ -43,6 +43,10 @@ export interface TravelDocument extends SyncMeta {
   expiryDate: ISODate | '';  // triggers expiry warnings
   notes: string;
   photoData: string;         // base64 data URL of a scan/photo (stored locally)
+  // Optional attachment (PDF or image) that can be viewed + saved to the phone.
+  fileData?: string;         // base64 data URL of the original file
+  fileName?: string;         // original filename, used when saving/downloading
+  fileMime?: string;         // e.g. 'application/pdf' or 'image/jpeg'
 }
 
 /* ── 2. Checklist ───────────────────────────────────────────── */

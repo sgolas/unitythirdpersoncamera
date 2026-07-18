@@ -8,7 +8,7 @@ import {
   LayoutDashboard, CalendarRange, Wallet, LayoutGrid,
   Map as MapIcon, ChevronLeft, MessageCircle, Pin, PinOff,
 } from 'lucide-react';
-import { SyncButton } from './components/SyncButton';
+import { SyncStatus } from './components/SyncStatus';
 import { StitchIcon } from './components/StitchIcon';
 import { isNative } from './lib/platform';
 import { SECTIONS } from './lib/sections';
@@ -148,7 +148,7 @@ export default function App() {
         </div>
         <div className="pointer-events-auto flex items-start gap-1.5">
           <StitchIcon />
-          <SyncButton />
+          <SyncStatus onSetup={() => go('settings')} />
         </div>
       </div>
 

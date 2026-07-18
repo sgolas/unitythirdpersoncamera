@@ -79,6 +79,9 @@ async function boot() {
     // Re-save the on-device backup whenever data changes (debounced), and
     // flush immediately when the app goes to the background.
     window.addEventListener('trip-data-changed', scheduleBackup);
+    // Auto-sync: push local changes to the family relay after every edit and
+    // pull others' changes periodically (replaces the manual Sync button).
+    import('./lib/autosync').then(({ initAutoSync }) => initAutoSync()).catch(() => {});
     // Trip-day reminders (flight check-ins, leave-for-airport, activities).
     import('./lib/notify').then(({ initTripReminders }) => initTripReminders()).catch(() => {});
     // Push notifications for incoming family chat (native only; no-ops otherwise).

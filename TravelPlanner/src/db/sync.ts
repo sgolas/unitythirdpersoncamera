@@ -6,7 +6,7 @@
  * tombstones so they propagate too. Nothing runs automatically — only when the
  * user taps Sync.
  */
-import { db, tableFor, getDeviceName, logChange } from './database';
+import { db, tableFor, getDeviceName } from './database';
 import { scheduleBackup, deleteBackup, cancelScheduledBackup } from '../lib/persist';
 import type { AnyRecord, EntityKind, ChatMessage } from '../types';
 import {
@@ -95,17 +95,16 @@ export async function syncNow(): Promise<SyncResult> {
   const data = await res.json() as { records: RelayRecord[]; accepted: number };
   const pulled = await applyRemote(data.records ?? []);
 
-  // Fire-and-forget an immutable GitHub backup. Never blocks or fails the sync.
-  backupToGitHub();
+  // With auto-sync running after every change, throttle the immutable GitHub
+  // backup so it happens at most every couple of minutes (not on every edit).
+  const nowMs = Date.now();
+  if (nowMs - lastGitHubBackup > 120_000) { lastGitHubBackup = nowMs; backupToGitHub(); }
 
-  const now = new Date().toISOString();
-  setLastSync(now);
-  await logChange({
-    action: 'sync',
-    entity: 'trip',
-    recordId: 'sync',
-    summary: `Synced with other devices — sent ${data.accepted ?? local.length}, received ${pulled} update${pulled === 1 ? '' : 's'}`,
-  });
+  setLastSync(new Date().toISOString());
+  // Note: we deliberately do NOT write a Change Log entry here — auto-sync runs
+  // constantly, so a per-sync log line would flood the log (and re-dispatching
+  // 'trip-data-changed' via logChange would loop auto-sync). The dashboard's
+  // "last synced" time (setLastSync above) is the sync indicator instead.
 
   return {
     ok: true,
@@ -114,6 +113,9 @@ export async function syncNow(): Promise<SyncResult> {
     message: pulled === 0 ? 'Everyone is up to date ✓' : `Pulled ${pulled} update${pulled === 1 ? '' : 's'} from other devices`,
   };
 }
+
+// Throttle for the fire-and-forget GitHub backup triggered from syncNow.
+let lastGitHubBackup = 0;
 
 export interface BackupResult { ok: boolean; message: string; }
 

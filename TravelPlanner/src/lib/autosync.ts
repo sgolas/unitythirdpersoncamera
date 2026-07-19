@@ -11,19 +11,30 @@ import { syncNow } from '../db/sync';
 import { isSyncConfigured } from './config';
 import { isNative, isPortal } from './platform';
 
-export type SyncState = 'unconfigured' | 'syncing' | 'ok' | 'offline';
+// 'error' = a problem the user must fix (wrong trip code / password); distinct
+// from 'offline' (transient network) so the indicator can tell them apart.
+export type SyncState = 'unconfigured' | 'syncing' | 'ok' | 'offline' | 'error';
 
 let state: SyncState = 'unconfigured';
+let lastMessage = '';
 let running = false;
 let pending = false;
 let debounce: ReturnType<typeof setTimeout> | null = null;
+let wakeTimer: ReturnType<typeof setTimeout> | null = null;
 let started = false;
 
 export function getSyncState(): SyncState { return state; }
+export function getSyncMessage(): string { return lastMessage; }
 
-function setState(s: SyncState, msg?: string) {
+function setState(s: SyncState, msg = '') {
   state = s;
+  lastMessage = msg;
   window.dispatchEvent(new CustomEvent('sync-state', { detail: { state: s, msg } }));
+}
+
+/** A failure message that means the user must fix something (not just network). */
+function isConfigError(msg: string): boolean {
+  return /wrong trip code|not set up/i.test(msg);
 }
 
 /** Run a sync now (coalescing concurrent requests into one follow-up run). */
@@ -32,14 +43,12 @@ export async function runSync(): Promise<void> {
   if (running) { pending = true; return; }
   running = true;
   setState('syncing');
-  let ok = false;
   try {
     const res = await syncNow();
-    ok = res.ok;
-    // A 401/"wrong code" or config problem shouldn't spin forever as "syncing".
-    setState(ok ? 'ok' : 'offline', res.message);
+    if (res.ok) setState('ok', res.message);
+    else setState(isConfigError(res.message) ? 'error' : 'offline', res.message);
   } catch {
-    setState('offline');
+    setState('offline', 'No connection.');
   } finally {
     running = false;
     if (pending) { pending = false; void runSync(); }
@@ -52,6 +61,13 @@ function scheduleSoon() {
   debounce = setTimeout(() => { void runSync(); }, 1200);
 }
 
+/** Debounced foreground wake — focus, visibility and appState events on the
+ *  same transition collapse into a single sync instead of 2-3. */
+function wake() {
+  if (wakeTimer) clearTimeout(wakeTimer);
+  wakeTimer = setTimeout(() => { void runSync(); }, 400);
+}
+
 export function initAutoSync() {
   if (isPortal || started) return;
   started = true;
@@ -62,12 +78,12 @@ export function initAutoSync() {
   window.addEventListener('sync-config-changed', () => { void runSync(); });
   // Pull periodically while the app is visible, to receive others' changes.
   setInterval(() => { if (document.visibilityState === 'visible') void runSync(); }, 20_000);
-  // Sync when the app/tab regains focus.
-  window.addEventListener('focus', () => { void runSync(); });
-  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') void runSync(); });
+  // Sync when the app/tab regains foreground (all three collapse via wake()).
+  window.addEventListener('focus', wake);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') wake(); });
   if (isNative) {
     import('@capacitor/app').then(({ App }) => {
-      App.addListener('appStateChange', s => { if (s.isActive) void runSync(); });
+      App.addListener('appStateChange', s => { if (s.isActive) wake(); });
     }).catch(() => { /* plugin unavailable */ });
   }
 

@@ -4,7 +4,7 @@ import { useChat, useTravelers } from '../../hooks/useTrip';
 import { db, getDeviceName } from '../../db/database';
 import type { ChatMessage } from '../../types';
 import { TabHeader } from '../ui';
-import { syncNow } from '../../db/sync';
+import { runSync } from '../../lib/autosync';
 import { isSyncConfigured } from '../../lib/config';
 import { chatDeviceId, setChatOpen, markChatSeen } from '../../lib/chatUnread';
 
@@ -47,14 +47,13 @@ export function ChatTab() {
     localStorage.setItem(ME_KEY, name);
   }
 
-  // Pull messages when the chat opens, then every 25s while it's open.
+  // Pull once when the chat opens; the global auto-sync (20s interval + focus)
+  // keeps it fresh after that, so no second poller here.
   useEffect(() => {
     if (!configured) return;
     let alive = true;
-    const pull = async () => { if (!alive) return; setPulling(true); await syncNow(); if (alive) setPulling(false); };
-    pull();
-    const t = setInterval(pull, 25_000);
-    return () => { alive = false; clearInterval(t); };
+    (async () => { setPulling(true); await runSync(); if (alive) setPulling(false); })();
+    return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -79,7 +78,7 @@ export function ChatTab() {
       updatedAt: now, updatedBy: device,
     } as ChatMessage);
     window.dispatchEvent(new Event('trip-data-changed'));
-    if (configured) void syncNow(); // deliver right away
+    if (configured) void runSync(); // deliver right away (coalesced with auto-sync)
   }
 
   let lastDay = '';
@@ -159,7 +158,7 @@ export function ChatTab() {
 
       {/* Manual refresh, tucked into the header row. */}
       {configured && (
-        <button onClick={() => { setPulling(true); syncNow().finally(() => setPulling(false)); }}
+        <button onClick={() => { setPulling(true); runSync().finally(() => setPulling(false)); }}
           aria-label="Refresh messages"
           className="fixed right-4 z-40 w-10 h-10 rounded-full bg-white/90 shadow border border-slate-200 flex items-center justify-center"
           style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 190px + var(--kb, 0px))' }}>

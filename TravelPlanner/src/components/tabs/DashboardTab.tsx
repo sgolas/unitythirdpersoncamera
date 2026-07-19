@@ -217,7 +217,7 @@ export function DashboardTab({ onNavigate }: { onNavigate: (v: any) => void }) {
 
         <button onClick={() => onNavigate('changelog')}
           className="w-full flex items-center justify-center gap-2 text-muted text-xs py-2 press">
-          <History size={13} /> {lastSync ? `Last synced ${fmtStamp(lastSync)}` : 'Not synced yet — tap Sync'}
+          <History size={13} /> {lastSync ? `Last synced ${fmtStamp(lastSync)}` : 'Syncs automatically when online'}
         </button>
       </div>
     </div>

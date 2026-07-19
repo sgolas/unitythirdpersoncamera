@@ -12,8 +12,12 @@ export function getSyncPass(): string { return localStorage.getItem(PASS_KEY) ??
 export function isSyncConfigured(): boolean { return !!getSyncCode() && !!getSyncPass(); }
 
 export function setSyncCredentials(code: string, pass: string) {
+  const changed = code.trim() !== getSyncCode();
   localStorage.setItem(CODE_KEY, code.trim());
   localStorage.setItem(PASS_KEY, pass);
+  // A different trip code means a different relay that may hold nothing yet —
+  // force the next sync to push the full record set, not just recent changes.
+  if (changed) localStorage.removeItem('trip.lastPushAt');
   // Let push registration (and anything else) know a trip is now configured.
   window.dispatchEvent(new Event('sync-config-changed'));
 }

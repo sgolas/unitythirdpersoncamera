@@ -12,7 +12,7 @@
  */
 import { isNative } from './platform';
 import { getSyncCode, getSyncPass, isSyncConfigured, PUSHREGISTER_ENDPOINT } from './config';
-import { chatDeviceId } from './chatUnread';
+import { chatDeviceId, setPushActive } from './chatUnread';
 import { syncNow } from '../db/sync';
 
 let lastToken = '';
@@ -53,6 +53,10 @@ export async function initPush() {
       perm = await PushNotifications.requestPermissions();
     }
     if (perm.receive !== 'granted') return;
+
+    // FCM will deliver system notifications for incoming chat, so the in-app
+    // fallback local notification must stand down to avoid double-notifying.
+    setPushActive(true);
 
     PushNotifications.addListener('registration', t => { lastToken = t.value; void registerToken(t.value); });
     PushNotifications.addListener('registrationError', () => { /* no token this run */ });

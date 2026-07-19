@@ -79,6 +79,9 @@ async function boot() {
     // Re-save the on-device backup whenever data changes (debounced), and
     // flush immediately when the app goes to the background.
     window.addEventListener('trip-data-changed', scheduleBackup);
+    // On a fresh install, treat any chat history pulled on first sync as already
+    // seen (so joining a trip doesn't blast old-message notifications/badges).
+    import('./lib/chatUnread').then(({ initChatWatermarks }) => initChatWatermarks()).catch(() => {});
     // Auto-sync: push local changes to the family relay after every edit and
     // pull others' changes periodically (replaces the manual Sync button).
     import('./lib/autosync').then(({ initAutoSync }) => initAutoSync()).catch(() => {});

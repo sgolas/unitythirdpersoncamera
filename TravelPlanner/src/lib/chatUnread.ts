@@ -39,6 +39,24 @@ export function isOthersMessage(m: ChatMessage): boolean {
 
 function getLastSeen(): string { return localStorage.getItem(LAST_SEEN_KEY) || ''; }
 
+/**
+ * On a brand-new install, mark all messages that already exist as seen/notified
+ * so joining a trip with history doesn't blast a "N new messages" notification
+ * or light up the unread badge for old chat. Existing installs (keys already
+ * set) are left untouched. Call once at startup.
+ */
+export function initChatWatermarks() {
+  const now = new Date().toISOString();
+  if (localStorage.getItem(NOTIFIED_KEY) === null) localStorage.setItem(NOTIFIED_KEY, now);
+  if (localStorage.getItem(LAST_SEEN_KEY) === null) localStorage.setItem(LAST_SEEN_KEY, now);
+}
+
+// Whether FCM push is active on this device (set by lib/push after a successful
+// registration). When it is, the server already delivers a system notification
+// for incoming chat, so we must NOT also pop a local one (that's a duplicate).
+let pushActive = false;
+export function setPushActive(on: boolean) { pushActive = on; }
+
 /** Mark everything up to `latestAt` as read. Called while the Chat tab is open. */
 export function markChatSeen(latestAt: string) {
   if (!latestAt) return;
@@ -75,6 +93,9 @@ export function notifyIncomingChat(incoming: ChatMessage[]) {
   window.dispatchEvent(new Event(SEEN_EVENT)); // refresh the badge count
 
   if (chatOpen) { markChatSeen(newest); return; } // already looking at it
+  // If FCM push is active the server already showed a system notification for
+  // this message — keep the unread badge, but don't pop a duplicate local one.
+  if (pushActive) return;
 
   if (fresh.length === 1) {
     const m = fresh[0];
@@ -84,15 +105,20 @@ export function notifyIncomingChat(incoming: ChatMessage[]) {
   }
 }
 
-/** Reactive count of unread messages from others (for badges/banners). */
+/** Reactive count of unread messages from others (for badges/banners). Queries
+ *  only messages newer than the seen watermark (indexed) rather than scanning
+ *  the whole chat table on every change. */
 export function useUnreadChat(): number {
-  const msgs = useLiveQuery(() => db.chat.toArray(), []) as ChatMessage[] | undefined;
   const [seen, setSeen] = useState(getLastSeen);
   useEffect(() => {
     const on = () => setSeen(getLastSeen());
     window.addEventListener(SEEN_EVENT, on);
     return () => window.removeEventListener(SEEN_EVENT, on);
   }, []);
+  const msgs = useLiveQuery(
+    () => db.chat.where('at').above(seen).toArray(),
+    [seen],
+  ) as ChatMessage[] | undefined;
   if (!msgs) return 0;
-  return msgs.filter(m => !m.deleted && isOthersMessage(m) && m.at > seen).length;
+  return msgs.filter(m => !m.deleted && isOthersMessage(m)).length;
 }

@@ -71,6 +71,7 @@ function PdfPages({ dataUrl }: { dataUrl: string }) {
 
   useEffect(() => {
     let cancelled = false;
+    let observer: IntersectionObserver | null = null;
     (async () => {
       try {
         const pdfjs = await import('pdfjs-dist');
@@ -85,25 +86,60 @@ function PdfPages({ dataUrl }: { dataUrl: string }) {
         if (!host) return;
         host.innerHTML = '';
         const width = Math.min(host.clientWidth || 360, 1000);
+        const dpr = Math.min(window.devicePixelRatio || 1, 1.5); // cap to bound memory
+
+        // Lay out a right-sized placeholder per page first, then render each
+        // page only while it's near the viewport (and drop its canvas when it
+        // scrolls far away). This keeps a big PDF from allocating every page's
+        // backing store at once, which would OOM the WebView.
+        const rendered = new Set<number>();
         for (let n = 1; n <= doc.numPages; n++) {
           const page = await doc.getPage(n);
           if (cancelled) return;
           const base = page.getViewport({ scale: 1 });
-          const scale = (width / base.width) * Math.min(window.devicePixelRatio || 1, 2);
-          const vp = page.getViewport({ scale });
-          const canvas = document.createElement('canvas');
-          canvas.width = vp.width; canvas.height = vp.height;
-          canvas.className = 'w-full rounded-lg shadow-lg mb-3 bg-white';
-          canvas.style.width = '100%'; canvas.style.height = 'auto';
-          host.appendChild(canvas);
-          await page.render({ canvasContext: canvas.getContext('2d')!, viewport: vp }).promise;
+          const el = document.createElement('div');
+          el.className = 'w-full rounded-lg shadow-lg mb-3 bg-white overflow-hidden';
+          el.style.height = `${width * (base.height / base.width)}px`;
+          el.dataset.page = String(n);
+          host.appendChild(el);
         }
         if (!cancelled) setStatus('ok');
+
+        const renderPage = async (n: number, el: HTMLDivElement) => {
+          if (rendered.has(n) || cancelled) return;
+          rendered.add(n);
+          const page = await doc.getPage(n);
+          const base = page.getViewport({ scale: 1 });
+          const vp = page.getViewport({ scale: (width / base.width) * dpr });
+          const canvas = document.createElement('canvas');
+          canvas.width = vp.width; canvas.height = vp.height;
+          canvas.style.width = '100%'; canvas.style.height = 'auto';
+          el.style.height = '';
+          el.appendChild(canvas);
+          try { await page.render({ canvasContext: canvas.getContext('2d')!, viewport: vp }).promise; }
+          catch { rendered.delete(n); }
+        };
+        const releasePage = (n: number, el: HTMLDivElement) => {
+          if (!rendered.has(n)) return;
+          const base = el.getBoundingClientRect();
+          el.style.height = `${base.height}px`;
+          el.innerHTML = '';
+          rendered.delete(n);
+        };
+        observer = new IntersectionObserver(entries => {
+          for (const e of entries) {
+            const el = e.target as HTMLDivElement;
+            const n = Number(el.dataset.page);
+            if (e.isIntersecting) void renderPage(n, el);
+            else releasePage(n, el);
+          }
+        }, { root: host.parentElement, rootMargin: '600px 0px' });
+        host.querySelectorAll<HTMLDivElement>('[data-page]').forEach(el => observer!.observe(el));
       } catch {
         if (!cancelled) setStatus('error');
       }
     })();
-    return () => { cancelled = true; };
+    return () => { cancelled = true; observer?.disconnect(); };
   }, [dataUrl]);
 
   return (

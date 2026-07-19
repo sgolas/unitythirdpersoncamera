@@ -145,8 +145,11 @@ function DocSheet({ doc, travelers, onClose }: { doc: TravelDocument | null; tra
         setFileData(dataUrl); setPhotoData('');
         setFileName(f.name); setFileMime(f.type || 'application/pdf');
       } else {
-        const thumb = await compressImageToDataUrl(f);
+        // Documents need to stay legible, so keep more resolution/quality than
+        // a gallery thumbnail.
+        const thumb = await compressImageToDataUrl(f, 2200, 0.85);
         if (thumb) { setPhotoData(thumb); setFileData(''); setFileName(f.name || `${(title || 'document').trim()}.jpg`); setFileMime('image/jpeg'); }
+        else alert('Couldn’t read that image. Try a JPG or PNG photo, or attach the document as a PDF.');
       }
     } finally { setBusy(false); }
   }

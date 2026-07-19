@@ -32,10 +32,23 @@ export interface SyncResult {
   message: string;
 }
 
-async function collectLocal(): Promise<RelayRecord[]> {
+// High-watermark (this device's clock) of the last records we successfully
+// pushed. On the next sync we only upload records changed since then, so an
+// idle or lightly-edited app never re-uploads the whole database (incl. large
+// photo/PDF attachments) every cycle. Safe because the relay is last-write-wins
+// and already holds everything pushed earlier; re-pushing is only ever skipped
+// for records the server already has.
+const LAST_PUSH_KEY = 'trip.lastPushAt';
+
+async function collectLocal(since?: string): Promise<RelayRecord[]> {
   const out: RelayRecord[] = [];
   for (const kind of ENTITY_KINDS) {
-    const rows = (await tableFor(kind).toArray()) as AnyRecord[];
+    const table = tableFor(kind);
+    // Every synced table indexes updatedAt, so the delta query is cheap and
+    // avoids even loading unchanged blobs into memory.
+    const rows = (since
+      ? await table.where('updatedAt').aboveOrEqual(since).toArray()
+      : await table.toArray()) as AnyRecord[];
     for (const r of rows) {
       out.push({ entity: kind, record_id: r.id, updated_at: r.updatedAt, payload: r });
     }
@@ -67,7 +80,12 @@ export async function syncNow(): Promise<SyncResult> {
     return { ok: false, pushed: 0, pulled: 0, message: 'Sync not set up yet. Add a trip code first.' };
   }
 
-  const local = await collectLocal();
+  // Only upload records changed since our last successful push (everything on
+  // the very first push). Captured before collecting so edits made mid-sync are
+  // caught next time.
+  const pushMark = new Date().toISOString();
+  const lastPush = localStorage.getItem(LAST_PUSH_KEY) || '';
+  const local = await collectLocal(lastPush || undefined);
 
   let res: Response;
   try {
@@ -95,6 +113,10 @@ export async function syncNow(): Promise<SyncResult> {
   const data = await res.json() as { records: RelayRecord[]; accepted: number };
   const pulled = await applyRemote(data.records ?? []);
 
+  // Push succeeded — advance the delta watermark so the next sync only sends
+  // records changed after this point.
+  localStorage.setItem(LAST_PUSH_KEY, pushMark);
+
   // With auto-sync running after every change, throttle the immutable GitHub
   // backup so it happens at most every couple of minutes (not on every edit).
   const nowMs = Date.now();
@@ -113,6 +135,10 @@ export async function syncNow(): Promise<SyncResult> {
     message: pulled === 0 ? 'Everyone is up to date ✓' : `Pulled ${pulled} update${pulled === 1 ? '' : 's'} from other devices`,
   };
 }
+
+/** Force the next sync to push the full record set again (used when the trip
+ *  code changes or local data is wiped, so a fresh relay gets everything). */
+export function resetPushWatermark() { localStorage.removeItem(LAST_PUSH_KEY); }
 
 // Throttle for the fire-and-forget GitHub backup triggered from syncNow.
 let lastGitHubBackup = 0;
@@ -134,7 +160,7 @@ export async function backupToGitHub(): Promise<BackupResult> {
     });
     if (res.status === 503) return { ok: false, message: 'GitHub backup isn’t switched on yet.' };
     if (res.status === 401) return { ok: false, message: 'Wrong trip code or password.' };
-    if (res.status === 404) return { ok: false, message: 'Tap Sync once before backing up.' };
+    if (res.status === 404) return { ok: false, message: 'Open the app while online so it can sync once, then back up.' };
     if (!res.ok) return { ok: false, message: 'Backup server error. Try again shortly.' };
     const d = await res.json() as { changed: boolean; records: number; newPhotos: number };
     return {
@@ -165,7 +191,7 @@ export async function pullOnly(tripCode: string, password: string): Promise<Sync
     return { ok: false, pushed: 0, pulled: 0, message: 'No connection.' };
   }
   if (res.status === 401) return { ok: false, pushed: 0, pulled: 0, message: 'Wrong trip code or password.' };
-  if (res.status === 404) return { ok: false, pushed: 0, pulled: 0, message: 'No trip found with that code yet. Open the app, use the same trip code in Sync & Setup, and tap Sync first.' };
+  if (res.status === 404) return { ok: false, pushed: 0, pulled: 0, message: 'No trip found with that code yet. Open the app with the same trip code while online so it can sync first.' };
   if (!res.ok) return { ok: false, pushed: 0, pulled: 0, message: 'Portal server error.' };
 
   const data = await res.json() as { records: RelayRecord[] };
@@ -176,6 +202,7 @@ export async function pullOnly(tripCode: string, password: string): Promise<Sync
 /** Wipe local data AND the on-device backup file. Used by "Clear data". */
 export async function wipeLocal() {
   cancelScheduledBackup();
+  resetPushWatermark();
   await Promise.all(ENTITY_KINDS.map(k => tableFor(k).clear()));
   await db.changelog.clear();
   await deleteBackup();

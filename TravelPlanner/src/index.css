@@ -169,11 +169,14 @@ input, textarea, select { font-size: 16px; font-family: inherit; }
    Watercolor tiles (with Carto underneath as fallback) get a warm sepia
    wash + a parchment vignette frame so the map reads like an old scroll. */
 .mulan-map.leaflet-container { background: #e9dbb8; position: relative; }
+.dark .mulan-map.leaflet-container { background: #3a2f1c; }
 .mulan-map .leaflet-tile-pane {
   filter: sepia(0.42) saturate(1.25) hue-rotate(-8deg) contrast(1.03) brightness(1.02);
 }
+/* Dark mode: keep the warm aged tone but darken it well down so the map isn't a
+   glaring bright panel inside an otherwise dark UI. */
 .dark .mulan-map .leaflet-tile-pane {
-  filter: sepia(0.5) saturate(1.1) hue-rotate(-8deg) contrast(1) brightness(0.9);
+  filter: sepia(0.55) saturate(0.9) hue-rotate(-8deg) contrast(0.95) brightness(0.5);
 }
 /* Parchment vignette + aged frame — above tiles/routes, below the pins. */
 .mulan-map::after {

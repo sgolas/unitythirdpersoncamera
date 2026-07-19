@@ -258,7 +258,7 @@ export function SettingsTab() {
           </p>
           {isSyncConfigured() && (
             <p className="text-xs text-slate-400 mt-2">
-              {lastSync ? `Last synced ${fmtStamp(lastSync)}` : 'Tap Sync to publish your data to the portal.'}
+              {lastSync ? `Last synced ${fmtStamp(lastSync)}` : 'Your data syncs to the portal automatically when online.'}
             </p>
           )}
         </div>

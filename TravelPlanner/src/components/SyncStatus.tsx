@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { RefreshCw, Check, CloudOff, Cloud } from 'lucide-react';
-import { getSyncState, runSync, type SyncState } from '../lib/autosync';
+import { RefreshCw, Check, CloudOff, Cloud, AlertCircle } from 'lucide-react';
+import { getSyncState, getSyncMessage, runSync, type SyncState } from '../lib/autosync';
 
 /**
  * Passive auto-sync indicator (replaces the manual Sync button). It reflects
@@ -22,7 +22,9 @@ export function SyncStatus({ onSetup }: { onSetup?: () => void }) {
   }, []);
 
   function onTap() {
-    if (state === 'unconfigured') onSetup?.();
+    // 'unconfigured' and 'error' (wrong code/password) both need the user in
+    // Settings to fix credentials; otherwise just force a sync.
+    if (state === 'unconfigured' || state === 'error') onSetup?.();
     else void runSync();
   }
 
@@ -31,6 +33,15 @@ export function SyncStatus({ onSetup }: { onSetup?: () => void }) {
       <button onClick={onTap}
         className="flex items-center gap-1.5 pl-2.5 pr-3 py-2 rounded-full text-sm font-bold shadow-lg backdrop-blur bg-white/90 text-slate-500 border border-slate-200 active:scale-95 transition">
         <Cloud size={15} /> Set up sync
+      </button>
+    );
+  }
+
+  if (state === 'error') {
+    return (
+      <button onClick={onTap} aria-label={getSyncMessage() || 'Sync error'} title={getSyncMessage()}
+        className="flex items-center gap-1.5 pl-2.5 pr-3 py-2 rounded-full text-sm font-bold shadow-lg backdrop-blur bg-sunset text-white active:scale-95 transition">
+        <AlertCircle size={15} /> Fix sync
       </button>
     );
   }

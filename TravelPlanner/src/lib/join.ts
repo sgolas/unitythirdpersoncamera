@@ -55,6 +55,6 @@ export async function scanToJoin(): Promise<JoinResult> {
 
   setSyncCredentials(creds.code, creds.pass);
   const res = await syncNow();
-  if (!res.ok) return { ok: false, message: res.message || 'Joined, but couldn’t sync yet — tap Sync when online.' };
+  if (!res.ok) return { ok: false, message: res.message || 'Joined, but couldn’t sync yet — it will sync automatically once you’re online.' };
   return { ok: true, message: 'Joined the trip ✓ Pulling everyone’s data…' };
 }

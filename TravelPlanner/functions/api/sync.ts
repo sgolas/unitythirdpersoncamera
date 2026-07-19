@@ -75,10 +75,13 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
   if (await overRequestLimit(supabase, ip)) return json({ error: 'Too many requests' }, 429);
 
   try {
-    const { tripCode, password, device, records, readOnly } = await request.json() as {
+    const { tripCode, password, device, records, readOnly, since } = await request.json() as {
       tripCode: string; password: string; device?: string;
       records?: Array<{ entity: string; record_id: string; updated_at: string; payload: unknown }>;
       readOnly?: boolean;
+      // Download cursor: only return records synced after this server-side
+      // timestamp. Omitted → full set (first sync, older clients, portal).
+      since?: string;
     };
 
     if (!tripCode || !password) return json({ error: 'Missing trip code or password' }, 400);
@@ -104,6 +107,9 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
       }).map(r => ({
         trip_code: tripCode, entity: r.entity, record_id: r.record_id,
         updated_at: r.updated_at, updated_by: device ?? 'unknown', payload: r.payload,
+        // Server-side change stamp — the download cursor is driven by this
+        // (single writer fleet, so one consistent clock for ordering).
+        synced_at: new Date().toISOString(),
       }));
 
       if (winners.length) {
@@ -121,10 +127,33 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
       }
     }
 
-    const { data: all } = await supabase
+    // Delta download: with a `since` cursor return only rows synced after it;
+    // without one (first sync / older clients / portal) return the full set.
+    let query = supabase
       .from('trip_sync').select('entity, record_id, updated_at, payload').eq('trip_code', tripCode);
+    if (since) query = query.gt('synced_at', since);
+    const { data: rows } = await query;
 
-    return json({ accepted, records: all ?? [] });
+    // Don't echo back the records this request just pushed — the client already
+    // has them, and with attachments they can be many MB. Only skip an exact
+    // (entity, record_id, updated_at) match, so a concurrent newer edit from
+    // another device still flows through. Timestamps compare as epoch millis
+    // because Postgres reformats the ISO string (e.g. ".430Z" → ".43+00:00").
+    const key = (e: string, id: string, at: string) => `${e}:${id}:${Date.parse(at)}`;
+    const pushedKeys = new Set(
+      (Array.isArray(records) ? records : []).map(r => key(r.entity, r.record_id, r.updated_at)),
+    );
+    const out = (rows ?? []).filter(r => !pushedKeys.has(key(r.entity, r.record_id, r.updated_at)));
+
+    // Next cursor = the trip's max synced_at (never "now": a concurrently
+    // committing row can't be skipped past, and re-delivery is harmless because
+    // the client merge is idempotent last-write-wins).
+    const { data: maxRow } = await supabase
+      .from('trip_sync').select('synced_at').eq('trip_code', tripCode)
+      .order('synced_at', { ascending: false }).limit(1).maybeSingle();
+    const cursor = maxRow?.synced_at ?? since ?? null;
+
+    return json({ accepted, records: out, cursor });
   } catch (err) {
     return json({ error: 'Sync failed', detail: String(err) }, 500);
   }

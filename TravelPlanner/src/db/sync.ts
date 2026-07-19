@@ -40,6 +40,11 @@ export interface SyncResult {
 // for records the server already has.
 const LAST_PUSH_KEY = 'trip.lastPushAt';
 
+// Download cursor — the server-side `synced_at` high-watermark of records we've
+// already pulled. Sent as `since` so the relay only returns rows synced after
+// it, instead of the full record set (incl. big attachments) on every sync.
+const CURSOR_KEY = 'trip.syncCursor';
+
 async function collectLocal(since?: string): Promise<RelayRecord[]> {
   const out: RelayRecord[] = [];
   for (const kind of ENTITY_KINDS) {
@@ -86,6 +91,7 @@ export async function syncNow(): Promise<SyncResult> {
   const pushMark = new Date().toISOString();
   const lastPush = localStorage.getItem(LAST_PUSH_KEY) || '';
   const local = await collectLocal(lastPush || undefined);
+  const cursor = localStorage.getItem(CURSOR_KEY) || '';
 
   let res: Response;
   try {
@@ -97,6 +103,9 @@ export async function syncNow(): Promise<SyncResult> {
         password: getSyncPass(),
         device: getDeviceName(),
         records: local,
+        // Delta download: only records synced after this come back. Omitted on
+        // the first sync so we pull the full set once.
+        ...(cursor ? { since: cursor } : {}),
       }),
     });
   } catch {
@@ -110,12 +119,15 @@ export async function syncNow(): Promise<SyncResult> {
     return { ok: false, pushed: 0, pulled: 0, message: 'Sync server error. Try again shortly.' };
   }
 
-  const data = await res.json() as { records: RelayRecord[]; accepted: number };
+  const data = await res.json() as { records: RelayRecord[]; accepted: number; cursor?: string | null };
   const pulled = await applyRemote(data.records ?? []);
 
   // Push succeeded — advance the delta watermark so the next sync only sends
   // records changed after this point.
   localStorage.setItem(LAST_PUSH_KEY, pushMark);
+  // Advance the download cursor only after the pulled records were applied, so
+  // a crash mid-apply re-pulls them next time (the merge is idempotent).
+  if (data.cursor) localStorage.setItem(CURSOR_KEY, data.cursor);
 
   // With auto-sync running after every change, throttle the immutable GitHub
   // backup so it happens at most every couple of minutes (not on every edit).
@@ -136,9 +148,12 @@ export async function syncNow(): Promise<SyncResult> {
   };
 }
 
-/** Force the next sync to push the full record set again (used when the trip
- *  code changes or local data is wiped, so a fresh relay gets everything). */
-export function resetPushWatermark() { localStorage.removeItem(LAST_PUSH_KEY); }
+/** Force the next sync to push AND pull the full record set again (used when
+ *  the trip code changes or local data is wiped, so nothing is missed). */
+export function resetPushWatermark() {
+  localStorage.removeItem(LAST_PUSH_KEY);
+  localStorage.removeItem(CURSOR_KEY);
+}
 
 // Throttle for the fire-and-forget GitHub backup triggered from syncNow.
 let lastGitHubBackup = 0;

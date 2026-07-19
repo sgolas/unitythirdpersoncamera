@@ -16,8 +16,8 @@ export function setSyncCredentials(code: string, pass: string) {
   localStorage.setItem(CODE_KEY, code.trim());
   localStorage.setItem(PASS_KEY, pass);
   // A different trip code means a different relay that may hold nothing yet —
-  // force the next sync to push the full record set, not just recent changes.
-  if (changed) localStorage.removeItem('trip.lastPushAt');
+  // force the next sync to push AND pull the full record set, not just deltas.
+  if (changed) { localStorage.removeItem('trip.lastPushAt'); localStorage.removeItem('trip.syncCursor'); }
   // Let push registration (and anything else) know a trip is now configured.
   window.dispatchEvent(new Event('sync-config-changed'));
 }

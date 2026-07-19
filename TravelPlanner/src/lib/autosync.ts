@@ -23,6 +23,14 @@ let debounce: ReturnType<typeof setTimeout> | null = null;
 let wakeTimer: ReturnType<typeof setTimeout> | null = null;
 let started = false;
 
+// Adaptive poll: sync often right after activity, then back off while idle so an
+// app left open doesn't keep pulling the full record set every 20s forever.
+const POLL_MIN = 20_000;
+const POLL_MAX = 120_000;
+const IDLE_AFTER = 90_000;
+let lastActivityAt = Date.now();
+function markActivity() { lastActivityAt = Date.now(); }
+
 export function getSyncState(): SyncState { return state; }
 export function getSyncMessage(): string { return lastMessage; }
 
@@ -45,8 +53,10 @@ export async function runSync(): Promise<void> {
   setState('syncing');
   try {
     const res = await syncNow();
-    if (res.ok) setState('ok', res.message);
-    else setState(isConfigError(res.message) ? 'error' : 'offline', res.message);
+    if (res.ok) {
+      setState('ok', res.message);
+      if (res.pulled > 0 || res.pushed > 0) markActivity(); // stay responsive while things are moving
+    } else setState(isConfigError(res.message) ? 'error' : 'offline', res.message);
   } catch {
     setState('offline', 'No connection.');
   } finally {
@@ -57,6 +67,7 @@ export async function runSync(): Promise<void> {
 
 /** Debounced push after an edit — coalesces rapid changes into one sync. */
 function scheduleSoon() {
+  markActivity();
   if (debounce) clearTimeout(debounce);
   debounce = setTimeout(() => { void runSync(); }, 1200);
 }
@@ -64,8 +75,19 @@ function scheduleSoon() {
 /** Debounced foreground wake — focus, visibility and appState events on the
  *  same transition collapse into a single sync instead of 2-3. */
 function wake() {
+  markActivity();
   if (wakeTimer) clearTimeout(wakeTimer);
   wakeTimer = setTimeout(() => { void runSync(); }, 400);
+}
+
+/** Self-scheduling poll that pulls others' changes, fast right after activity
+ *  and slower while idle. */
+function schedulePoll() {
+  const idle = Date.now() - lastActivityAt > IDLE_AFTER;
+  setTimeout(() => {
+    if (document.visibilityState === 'visible') void runSync();
+    schedulePoll();
+  }, idle ? POLL_MAX : POLL_MIN);
 }
 
 export function initAutoSync() {
@@ -76,8 +98,9 @@ export function initAutoSync() {
   window.addEventListener('trip-data-changed', scheduleSoon);
   // Sync as soon as sharing is configured.
   window.addEventListener('sync-config-changed', () => { void runSync(); });
-  // Pull periodically while the app is visible, to receive others' changes.
-  setInterval(() => { if (document.visibilityState === 'visible') void runSync(); }, 20_000);
+  // Pull periodically while the app is visible (adaptive: fast after activity,
+  // slower while idle) to receive others' changes.
+  schedulePoll();
   // Sync when the app/tab regains foreground (all three collapse via wake()).
   window.addEventListener('focus', wake);
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') wake(); });

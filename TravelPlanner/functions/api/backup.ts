@@ -92,6 +92,15 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
       },
     });
 
+  // Like gh() but throws on any non-2xx so a failed step can't be mistaken for
+  // success (e.g. an oversized tree/commit) — the caller's try/catch turns it
+  // into a real error response instead of a false "backed up" message.
+  const ghJson = async (path: string, init: RequestInit = {}) => {
+    const r = await gh(path, init);
+    if (!r.ok) throw new Error(`GitHub ${r.status} on ${path}: ${(await r.text()).slice(0, 300)}`);
+    return r.json() as Promise<any>;
+  };
+
   try {
     const { tripCode, password } = await request.json() as { tripCode: string; password: string };
     if (!tripCode || !password) return json({ error: 'Missing trip code or password' }, 400);
@@ -132,14 +141,21 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
     }
     const refJson = await ref.json() as any;
     const baseCommitSha = refJson.object.sha;
-    const baseCommit = await gh(`/repos/${repo}/git/commits/${baseCommitSha}`).then(r => r.json()) as any;
+    const baseCommit = await ghJson(`/repos/${repo}/git/commits/${baseCommitSha}`);
     const baseTreeSha = baseCommit.tree.sha;
 
     // Existing file paths (so photos already committed are never re-uploaded).
-    const existing = await gh(`/repos/${repo}/git/trees/${baseTreeSha}?recursive=1`).then(r => r.json()) as any;
+    const existing = await ghJson(`/repos/${repo}/git/trees/${baseTreeSha}?recursive=1`);
     const havePaths = new Set<string>((existing.tree ?? []).map((t: any) => t.path));
 
-    const treeEntries: any[] = [{ path: `${dir}/data.json`, mode: '100644', type: 'blob', content: dataJson }];
+    // Upload the records JSON as a proper blob (not inline tree `content`),
+    // which handles large snapshots — inline content has a tight size limit and
+    // would silently fail once documents carry big PDF attachments.
+    const dataBlob = await ghJson(`/repos/${repo}/git/blobs`, {
+      method: 'POST',
+      body: JSON.stringify({ encoding: 'base64', content: toBase64(new TextEncoder().encode(dataJson)) }),
+    });
+    const treeEntries: any[] = [{ path: `${dir}/data.json`, mode: '100644', type: 'blob', sha: dataBlob.sha }];
 
     // Back up photo image files that aren't already stored. New photos are
     // local-first (`data:` URIs); older ones are Storage `url`s (now private).
@@ -163,35 +179,35 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
 
       const path = `${dir}/photos/${r.record_id}.${ext}`;
       if (havePaths.has(path)) continue;
-      const blob = await gh(`/repos/${repo}/git/blobs`, {
+      const blob = await ghJson(`/repos/${repo}/git/blobs`, {
         method: 'POST',
         body: JSON.stringify({ encoding: 'base64', content: toBase64(bytes) }),
-      }).then(res => res.json()) as any;
+      });
       treeEntries.push({ path, mode: '100644', type: 'blob', sha: blob.sha });
       newPhotos++;
     }
 
     // Build the new tree on top of the existing one.
-    const newTree = await gh(`/repos/${repo}/git/trees`, {
+    const newTree = await ghJson(`/repos/${repo}/git/trees`, {
       method: 'POST',
       body: JSON.stringify({ base_tree: baseTreeSha, tree: treeEntries }),
-    }).then(r => r.json()) as any;
+    });
 
     // Nothing changed → don't create an empty commit.
     if (newTree.sha === baseTreeSha) {
       return json({ ok: true, changed: false, records: records.length, newPhotos: 0 });
     }
 
-    const commit = await gh(`/repos/${repo}/git/commits`, {
+    const commit = await ghJson(`/repos/${repo}/git/commits`, {
       method: 'POST',
       body: JSON.stringify({
         message: `Backup ${tripCode}: ${records.length} records${newPhotos ? `, +${newPhotos} photos` : ''}`,
         tree: newTree.sha,
         parents: [baseCommitSha],
       }),
-    }).then(r => r.json()) as any;
+    });
 
-    await gh(`/repos/${repo}/git/refs/heads/${branch}`, {
+    await ghJson(`/repos/${repo}/git/refs/heads/${branch}`, {
       method: 'PATCH',
       body: JSON.stringify({ sha: commit.sha, force: false }),
     });

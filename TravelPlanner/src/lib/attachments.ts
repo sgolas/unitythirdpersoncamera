@@ -60,8 +60,10 @@ function sanitizeName(name: string): string {
 
 /**
  * Save an attachment to the phone (or download it in a browser).
- *  • Native  → writes into the device's Documents/TripPlanner folder so any
- *    Files app / PDF viewer can open it.
+ *  • Native  → tries the phone's public Download folder first (what users
+ *    expect from a "download"); some Android versions block direct writes
+ *    there, in which case it falls back to Documents/TripPlanner. Either way
+ *    any Files app / PDF viewer can open it, and the message says where it went.
  *  • Web/portal → triggers a normal browser download.
  */
 export async function saveToPhone(dataUrl: string, fileName: string): Promise<{ ok: boolean; message: string }> {
@@ -69,9 +71,16 @@ export async function saveToPhone(dataUrl: string, fileName: string): Promise<{ 
   if (isNative) {
     try {
       const { Filesystem, Directory } = await import('@capacitor/filesystem');
+      const data = dataUrlToBase64(dataUrl);
+      try {
+        await Filesystem.writeFile({
+          path: `Download/${name}`, directory: Directory.ExternalStorage, data, recursive: true,
+        });
+        return { ok: true, message: `Saved to your Download folder (Download/${name})` };
+      } catch { /* scoped-storage variations — fall back to Documents */ }
       const dir = 'TripPlanner';
       await Filesystem.mkdir({ path: dir, directory: Directory.Documents, recursive: true }).catch(() => {});
-      await Filesystem.writeFile({ path: `${dir}/${name}`, directory: Directory.Documents, data: dataUrlToBase64(dataUrl) });
+      await Filesystem.writeFile({ path: `${dir}/${name}`, directory: Directory.Documents, data });
       return { ok: true, message: `Saved to Documents/${dir}/${name}` };
     } catch (e) {
       return { ok: false, message: 'Could not save the file: ' + String(e) };

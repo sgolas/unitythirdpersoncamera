@@ -64,6 +64,13 @@ export function ArtilleryTab() {
       (el?.requestFullscreen?.() ?? el?.webkitRequestFullscreen?.())?.catch?.(() => {});
     }
   }
+  // Enter immersive fullscreen to hide the Android system bars. Called from the
+  // Start buttons so it runs inside a user gesture (required to go fullscreen).
+  function goImmersive() {
+    if (document.fullscreenElement) return;
+    const el: any = document.documentElement;
+    try { (el.requestFullscreen?.() ?? el.webkitRequestFullscreen?.())?.catch?.(() => {}); } catch { /* unsupported */ }
+  }
   useEffect(() => {
     const onChange = () => setNativeFs(!!document.fullscreenElement);
     document.addEventListener('fullscreenchange', onChange);
@@ -120,11 +127,13 @@ export function ArtilleryTab() {
     const room = roomRef.current; if (!room) return;
     const players: PlayerSeed[] = room.peers().map(p => ({ id: String(p.id), name: String(p.name || 'Player') }));
     if (players.length < 2) { setError('Need at least 2 players in the room to start.'); return; }
+    goImmersive();
     sendStart(players, 1, Object.fromEntries(players.map(p => [p.id, 0])));
   }
 
   /** Start a local pass-and-play match with the configured player count. */
   function startLocal() {
+    goImmersive();
     online.current = false; roomRef.current?.leave(); roomRef.current = null;
     const n = Math.min(4, Math.max(2, settings.players));
     const players: PlayerSeed[] = Array.from({ length: n }, (_, i) => ({ id: `p${i + 1}`, name: `Player ${i + 1}` }));
@@ -512,12 +521,12 @@ export function ArtilleryTab() {
             {/* ── Top HUD ── corner buttons flank a centered info stack ── */}
             <button onClick={quitGame} aria-label="Quit game"
               className="absolute z-10 w-9 h-9 rounded-full bg-black/45 text-white/90 active:bg-black/70 flex items-center justify-center backdrop-blur"
-              style={{ top: 'calc(env(safe-area-inset-top, 0px) + 8px)', left: '12px' }}>
+              style={{ top: 'calc(env(safe-area-inset-top, 0px) + 8px)', left: 'calc(env(safe-area-inset-left, 0px) + 12px)' }}>
               <X size={18} />
             </button>
             <button onClick={toggleNativeFs} aria-label={nativeFs ? 'Exit full screen' : 'Full screen'}
               className="absolute z-10 w-9 h-9 rounded-full bg-black/45 text-white/90 active:bg-black/70 flex items-center justify-center backdrop-blur"
-              style={{ top: 'calc(env(safe-area-inset-top, 0px) + 8px)', right: '12px' }}>
+              style={{ top: 'calc(env(safe-area-inset-top, 0px) + 8px)', right: 'calc(env(safe-area-inset-right, 0px) + 12px)' }}>
               {nativeFs ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
             </button>
 
@@ -550,8 +559,8 @@ export function ArtilleryTab() {
             </div>
 
             {/* ── Bottom RTS battle bar ── */}
-            <div className="absolute left-0 right-0 bottom-0 px-2 pointer-events-none"
-              style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 8px)' }}>
+            <div className="absolute left-0 right-0 bottom-0 pointer-events-none"
+              style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 8px)', paddingLeft: 'calc(env(safe-area-inset-left, 0px) + 8px)', paddingRight: 'calc(env(safe-area-inset-right, 0px) + 8px)' }}>
               <div className="flex justify-center mb-1">
                 <button onClick={() => setBarOpen(o => !o)} aria-label={barOpen ? 'Hide controls' : 'Show controls'}
                   className="pointer-events-auto px-5 h-6 rounded-t-lg bg-slate-900/85 backdrop-blur border border-white/10 border-b-0 text-white/70 flex items-center">
@@ -560,7 +569,7 @@ export function ArtilleryTab() {
               </div>
 
               {barOpen && (
-                <div className="pointer-events-auto mx-auto max-w-3xl bg-slate-900/85 backdrop-blur border border-white/10 rounded-2xl p-3 shadow-2xl">
+                <div className="pointer-events-auto mx-auto max-w-4xl bg-slate-900/85 backdrop-blur border border-white/10 rounded-2xl p-2 shadow-2xl">
                   {g.phase === 'over' ? (
                     <div className="space-y-2 text-center">
                       {champ
@@ -578,30 +587,29 @@ export function ArtilleryTab() {
                       )}
                     </div>
                   ) : myTurn && active ? (
-                    <div className="space-y-2.5">
-                      <div className="grid grid-cols-2 gap-3">
-                        <label className="text-[11px] font-semibold text-white/60">Angle <span className="text-white">{active.angle}°</span>
-                          <input type="range" min={0} max={180} value={active.angle} onChange={e => setAim({ angle: +e.target.value })} className="w-full accent-orange-500" />
-                        </label>
-                        <label className="text-[11px] font-semibold text-white/60">Power <span className="text-white">{active.power}</span>
-                          <input type="range" min={5} max={100} value={active.power} onChange={e => setAim({ power: +e.target.value })} className="w-full accent-orange-500" />
-                        </label>
+                    // Compact single-row command strip so it stays out of the field.
+                    <div className="flex items-center gap-2">
+                      <label className="w-16 shrink-0 text-[10px] font-semibold text-white/60 leading-tight">
+                        Angle <span className="text-white">{active.angle}°</span>
+                        <input type="range" min={0} max={180} value={active.angle} onChange={e => setAim({ angle: +e.target.value })} className="w-full accent-orange-500" />
+                      </label>
+                      <label className="w-16 shrink-0 text-[10px] font-semibold text-white/60 leading-tight">
+                        Power <span className="text-white">{active.power}</span>
+                        <input type="range" min={5} max={100} value={active.power} onChange={e => setAim({ power: +e.target.value })} className="w-full accent-orange-500" />
+                      </label>
+                      <div className="flex-1 flex gap-1 overflow-x-auto no-scrollbar">
+                        {WEAPONS.map(w => (
+                          <button key={w.id} onClick={() => setAim({ weapon: w.id })}
+                            className={`flex-shrink-0 w-11 flex flex-col items-center justify-center gap-0.5 py-1 rounded-lg border text-white ${active.weapon === w.id ? 'bg-orange-500/25 border-orange-400' : 'bg-white/5 border-white/10'}`}>
+                            <span className="text-base leading-none">{w.emoji}</span>
+                            <span className="text-[8px] font-semibold text-white/70 leading-none text-center truncate w-full">{w.name}</span>
+                          </button>
+                        ))}
                       </div>
-                      <div className="flex items-stretch gap-2">
-                        <div className="flex-1 flex gap-1.5 overflow-x-auto no-scrollbar">
-                          {WEAPONS.map(w => (
-                            <button key={w.id} onClick={() => setAim({ weapon: w.id })}
-                              className={`flex-shrink-0 w-14 flex flex-col items-center justify-center gap-0.5 py-1.5 rounded-xl border text-white ${active.weapon === w.id ? 'bg-orange-500/25 border-orange-400' : 'bg-white/5 border-white/10'}`}>
-                              <span className="text-lg leading-none">{w.emoji}</span>
-                              <span className="text-[9px] font-semibold text-white/70 leading-tight text-center">{w.name}</span>
-                            </button>
-                          ))}
-                        </div>
-                        <button onClick={fire} aria-label="Fire"
-                          className="flex-shrink-0 w-24 accent-gradient text-white font-extrabold rounded-xl flex flex-col items-center justify-center gap-0.5 press">
-                          <Crosshair size={20} /> FIRE
-                        </button>
-                      </div>
+                      <button onClick={fire} aria-label="Fire"
+                        className="shrink-0 w-16 self-stretch accent-gradient text-white font-extrabold rounded-xl flex flex-col items-center justify-center gap-0.5 press">
+                        <Crosshair size={18} /> <span className="text-xs">FIRE</span>
+                      </button>
                     </div>
                   ) : (
                     <p className="text-center text-sm text-white/70 py-2 flex items-center justify-center gap-2">

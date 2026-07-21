@@ -1,13 +1,13 @@
 import {
   Images, FileText, Compass, ListChecks, Plane, BedDouble, Car,
-  PiggyBank, Calculator, Languages, Sparkles, History, Settings2,
+  PiggyBank, Calculator, Languages, Sparkles, History, Settings2, Gamepad2,
 } from 'lucide-react';
 
 /** The sections shown in the More menu — and pinnable to the dashboard. */
 export type SectionKey =
   | 'photos' | 'documents' | 'overview' | 'checklist' | 'transport'
   | 'accommodation' | 'carrental' | 'budget' | 'converter' | 'translate'
-  | 'helper' | 'changelog' | 'settings';
+  | 'helper' | 'artillery' | 'changelog' | 'settings';
 
 export interface Section { key: SectionKey; label: string; icon: React.ReactNode; color: string }
 
@@ -23,6 +23,7 @@ export const SECTIONS: Section[] = [
   { key: 'converter',     label: 'Currency',      icon: <Calculator size={22} />, color: '#0ea5a3' },
   { key: 'translate',     label: 'Translate',     icon: <Languages size={22} />,  color: '#7c3aed' },
   { key: 'helper',        label: 'Smart Helper',  icon: <Sparkles size={22} />,   color: '#fb7185' },
+  { key: 'artillery',     label: 'Trip Artillery',icon: <Gamepad2 size={22} />,   color: '#ea580c' },
   { key: 'changelog',     label: 'Change Log',    icon: <History size={22} />,    color: '#64748b' },
   { key: 'settings',      label: 'Sync & Setup',  icon: <Settings2 size={22} />,  color: '#334155' },
 ];

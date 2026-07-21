@@ -34,11 +34,12 @@ import { PhotosTab } from './components/tabs/PhotosTab';
 import { ConverterTab } from './components/tabs/ConverterTab';
 import { ChatTab } from './components/tabs/ChatTab';
 import { TranslateTab } from './components/tabs/TranslateTab';
+import { ArtilleryTab } from './components/tabs/ArtilleryTab';
 
 type View =
   | 'dashboard' | 'overview' | 'documents' | 'checklist' | 'transport'
   | 'accommodation' | 'carrental' | 'expenses' | 'itinerary' | 'budget' | 'helper'
-  | 'changelog' | 'settings' | 'map' | 'photos' | 'converter' | 'chat' | 'translate';
+  | 'changelog' | 'settings' | 'map' | 'photos' | 'converter' | 'chat' | 'translate' | 'artillery';
 
 const MORE_ITEMS = SECTIONS; // shared registry (also used by the dashboard)
 
@@ -131,6 +132,7 @@ export default function App() {
         {view === 'converter'     && <ConverterTab />}
         {view === 'chat'          && <ChatTab />}
         {view === 'translate'     && <TranslateTab />}
+        {view === 'artillery'     && <ArtilleryTab />}
       </main>
 
       {/* Floating top controls — anchored to the app column (not the viewport)

@@ -6,6 +6,7 @@ import { getSyncCode, isSyncConfigured } from '../../lib/config';
 import { chatDeviceId } from '../../lib/chatUnread';
 import { getDeviceName } from '../../db/database';
 import { useTravelers } from '../../hooks/useTrip';
+import { lockLandscape, unlockOrientation } from '../../lib/orientation';
 import type { Room, Peer } from '../../lib/realtime';
 import {
   WORLD, WIND_ACCEL, WEAPONS, weaponById, newGame, launch, explode,
@@ -71,6 +72,14 @@ export function ArtilleryTab() {
 
   // Collapse the battle bar to reclaim the whole screen for the field.
   const [barOpen, setBarOpen] = useState(true);
+
+  // Lock the game to landscape while it's on screen (enters fullscreen first,
+  // which the Web Orientation API requires), and release it on the way out.
+  useEffect(() => {
+    if (screen !== 'game') return;
+    lockLandscape(wrapRef.current);
+    return () => unlockOrientation();
+  }, [screen]);
 
   // ── Realtime lobby ────────────────────────────────────────────────
   async function goOnline() {

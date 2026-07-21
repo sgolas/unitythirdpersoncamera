@@ -9,14 +9,14 @@ import { useTravelers } from '../../hooks/useTrip';
 import { lockLandscape, unlockOrientation } from '../../lib/orientation';
 import type { Room, Peer } from '../../lib/realtime';
 import {
-  WORLD, WIND_ACCEL, WEAPONS, weaponById, newGame, launch, explode,
+  WORLD, WIND_ACCEL, PICKABLE_WEAPONS, weaponById, newGame, launch, explode,
   nextTurn, checkOver, terrainAt, structureAt, snapshot, applySnapshot,
   awardRound, matchOver, matchChampion, DEFAULT_SETTINGS,
   type GameState, type PlayerSeed, type Snapshot, type GameSettings, type Structure,
 } from '../../game/artillery';
 
 type Trail = { x: number; y: number }[];
-type Proj = { x: number; y: number; vx: number; vy: number; weapon: string; rolling?: boolean; rollDist?: number; split?: boolean; dead?: boolean; life?: number; trail?: Trail };
+type Proj = { x: number; y: number; vx: number; vy: number; weapon: string; rolling?: boolean; rollDist?: number; split?: boolean; dead?: boolean; life?: number; trail?: Trail; bounces?: number };
 type Flash = { x: number; y: number; r: number; t: number; color: string };
 
 const SETTINGS_KEY = 'trip.artillery.settings';
@@ -193,8 +193,22 @@ export function ArtilleryTab() {
     const g = gameRef.current; if (!g) return;
     const t = g.tanks.find(tk => tk.id === tankId); if (!t) return;
     g.phase = 'flying';
-    const l = launch(t);
-    simRef.current = { projs: [{ ...l, weapon: t.weapon, trail: [] }], flashes: simRef.current?.flashes ?? [], authority };
+    const w = weaponById(t.weapon);
+    let projs: Proj[];
+    if (w.kind === 'airstrike') {
+      // A flight of bombs rains down around the aimed spot (angle+power aim it).
+      const a = (t.angle * Math.PI) / 180;
+      const tx = Math.max(50, Math.min(WORLD.w - 50, t.x + Math.cos(a) * (20 + t.power * 4.5)));
+      projs = [];
+      for (let i = 0; i < 5; i++) {
+        const ox = (i - 2) * 36;
+        projs.push({ x: tx + ox, y: -24 - Math.abs(ox) * 0.2, vx: 0, vy: 2.2, weapon: t.weapon, split: true, trail: [] });
+      }
+    } else {
+      const l = launch(t);
+      projs = [{ ...l, weapon: t.weapon, trail: [], bounces: w.bounces }];
+    }
+    simRef.current = { projs, flashes: simRef.current?.flashes ?? [], authority };
     rerender();
     // Always (re)start the loop — a lingering, already-consumed frame id must
     // not block the next shot's animation (that was the "freezes after firing"
@@ -208,6 +222,7 @@ export function ArtilleryTab() {
     if (!g || !sim) { rafRef.current = null; return; }
     const wind = g.wind;
     const gravity = g.gravity;
+    const shooter = g.tanks[g.turn];
     // Iterate a fixed count so projectiles spawned THIS frame (e.g. MIRV
     // children) are only simulated from the next frame — never in a same-frame
     // cascade (that exponential cascade was the MIRV freeze).
@@ -220,29 +235,62 @@ export function ArtilleryTab() {
       p.life = (p.life ?? 0) + 1;
       if (p.life > 2400) { p.dead = true; continue; }
       if (p.rolling) {
+        // Sheep / roller: walk along the ground until it settles, then blow up.
         const dir = terrainAt(g, p.x + 3) <= terrainAt(g, p.x - 3) ? 1 : -1;
         p.x += dir * 2.4; p.y = terrainAt(g, p.x); p.rollDist = (p.rollDist ?? 0) + 2.4;
         const settled = terrainAt(g, p.x - 3) >= p.y && terrainAt(g, p.x + 3) >= p.y;
-        if (settled || (p.rollDist ?? 0) > 340 || p.x < 4 || p.x > WORLD.w - 4) impact(p, sim);
+        if (settled || (p.rollDist ?? 0) > 340 || p.x < 4 || p.x > WORLD.w - 4 || hitTank(g, p.x, p.y)) impact(p, sim);
         continue;
       }
+      const bouncy = w.kind === 'bounce' || w.kind === 'banana' || w.kind === 'holy';
+      // Grenade-family: detonate when the fuse burns out, wherever it is.
+      if (bouncy && w.fuse && p.life > w.fuse) { impact(p, sim); continue; }
       // record a short flight trail for the smoke ribbon
       (p.trail ??= []).push({ x: p.x, y: p.y });
       if (p.trail.length > 16) p.trail.shift();
-      p.vy += gravity; p.vx += wind * WIND_ACCEL; p.x += p.vx; p.y += p.vy;
-      // MIRV splits into three on the way down — children are 'split' so they
-      // don't re-split, and we cap the total to be safe.
+      if (w.kind === 'homing') {
+        // Steer toward the nearest enemy tank, with only light gravity.
+        let tgt: typeof g.tanks[number] | null = null, best = 1e9;
+        for (const tk of g.tanks) {
+          if (!tk.alive || tk.id === shooter?.id) continue;
+          const d = Math.hypot(tk.x - p.x, tk.y - p.y);
+          if (d < best) { best = d; tgt = tk; }
+        }
+        if (tgt) {
+          const dx = tgt.x - p.x, dy = (tgt.y - 8) - p.y, d = Math.hypot(dx, dy) || 1;
+          p.vx += (dx / d) * 0.5; p.vy += (dy / d) * 0.5;
+          const sp = Math.hypot(p.vx, p.vy), max = 6.5;
+          if (sp > max) { p.vx = p.vx / sp * max; p.vy = p.vy / sp * max; }
+        }
+        p.vy += gravity * 0.25; p.vx += wind * WIND_ACCEL * 0.3;
+      } else {
+        p.vy += gravity; p.vx += wind * WIND_ACCEL;
+      }
+      p.x += p.vx; p.y += p.vy;
+      // Mortar: splits into three on the way down (children marked so they
+      // don't re-split), capped for safety.
       if (w.kind === 'mirv' && !p.split && p.vy > 1.3 && sim.projs.length < 24) {
         p.split = true; p.dead = true;
-        for (const dvx of [-1.6, 0, 1.6]) sim.projs.push({ x: p.x, y: p.y, vx: p.vx + dvx, vy: p.vy, weapon: 'mirv', split: true, trail: [] });
+        for (const dvx of [-1.6, 0, 1.6]) sim.projs.push({ x: p.x, y: p.y, vx: p.vx + dvx, vy: p.vy, weapon: p.weapon, split: true, trail: [] });
         continue;
       }
-      const hitStructure = !!structureAt(g, p.x, p.y);
-      if (p.y >= terrainAt(g, p.x) || hitTank(g, p.x, p.y) || hitStructure) {
-        if (w.kind === 'roller' && !p.rolling && !hitStructure) { p.rolling = true; p.y = terrainAt(g, p.x); continue; }
+      const tankHit = hitTank(g, p.x, p.y);
+      const structHit = !!structureAt(g, p.x, p.y);
+      const terrHit = p.y >= terrainAt(g, p.x);
+      if (terrHit || tankHit || structHit) {
+        if (w.kind === 'roller' && !p.rolling && !structHit && !tankHit) { p.rolling = true; p.y = terrainAt(g, p.x); continue; }
+        // Bouncy weapons rebound off the terrain until their bounces/fuse run out.
+        if (bouncy && terrHit && !tankHit && !structHit && (p.bounces ?? 0) > 0) {
+          const s = (terrainAt(g, p.x + 3) - terrainAt(g, p.x - 3)) / 6; // slope dy/dx
+          const nl = Math.hypot(s, 1), nx = -s / nl, ny = -1 / nl;        // upward normal
+          const dot = p.vx * nx + p.vy * ny;
+          p.vx = (p.vx - 2 * dot * nx) * 0.55; p.vy = (p.vy - 2 * dot * ny) * 0.55;
+          p.y = terrainAt(g, p.x) - 3; p.bounces = (p.bounces ?? 0) - 1;
+          continue;
+        }
         impact(p, sim);
-      } else if (p.x < -20 || p.x > WORLD.w + 20 || p.y > WORLD.h + 40) {
-        p.dead = true; // dud — flew off the world
+      } else if (p.y >= 0 && (p.x < -30 || p.x > WORLD.w + 30 || p.y > WORLD.h + 40)) {
+        p.dead = true; // dud — flew off the world (airstrike bombs start above y=0)
       }
     }
     // fade flashes
@@ -257,6 +305,15 @@ export function ArtilleryTab() {
     p.dead = true;
     sim.flashes.push({ x: p.x, y: p.y, r: Math.max(14, w.radius), t: 0, color: w.kind === 'dirt' ? '#a16207' : '#fb923c' });
     if (sim.authority) explode(g, p.x, p.y, w);
+    // Cluster & banana bombs burst into a scatter of bomblets on detonation.
+    if ((w.kind === 'cluster' || w.kind === 'banana') && !p.split && sim.projs.length < 22) {
+      const n = 5;
+      for (let i = 0; i < n; i++) {
+        const ang = -Math.PI / 2 + (i - (n - 1) / 2) * 0.42;
+        const sp = 2.6 + Math.random() * 2.2;
+        sim.projs.push({ x: p.x, y: p.y - 4, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp, weapon: 'bomblet', split: true, trail: [] });
+      }
+    }
   }
 
   function resolve(sim: { projs: Proj[]; flashes: Flash[]; authority: boolean }) {
@@ -598,7 +655,7 @@ export function ArtilleryTab() {
                         <input type="range" min={5} max={100} value={active.power} onChange={e => setAim({ power: +e.target.value })} className="w-full accent-orange-500" />
                       </label>
                       <div className="flex-1 flex gap-1 overflow-x-auto no-scrollbar">
-                        {WEAPONS.map(w => (
+                        {PICKABLE_WEAPONS.map(w => (
                           <button key={w.id} onClick={() => setAim({ weapon: w.id })}
                             className={`flex-shrink-0 w-11 flex flex-col items-center justify-center gap-0.5 py-1 rounded-lg border text-white ${active.weapon === w.id ? 'bg-orange-500/25 border-orange-400' : 'bg-white/5 border-white/10'}`}>
                             <span className="text-base leading-none">{w.emoji}</span>

@@ -28,23 +28,40 @@ export interface Structure {
   hue: number; // base colour hue so each looks distinct
 }
 
-export type WeaponKind = 'normal' | 'mirv' | 'roller' | 'dirt' | 'tracer';
+export type WeaponKind =
+  | 'normal' | 'mirv' | 'roller' | 'dirt'
+  | 'bounce' | 'cluster' | 'banana' | 'holy' | 'airstrike' | 'homing';
 export interface Weapon {
   id: string; name: string; emoji: string;
   radius: number; damage: number; kind: WeaponKind;
+  fuse?: number;    // frames before a bouncy weapon self-detonates
+  bounces?: number; // how many times a bouncy weapon rebounds off terrain
+  hidden?: boolean; // helper projectiles (cluster bomblets) — not shown in the toolbar
 }
 
+/**
+ * A Worms-Armageddon-flavoured arsenal. The character is in the *mechanics*,
+ * not just the names: grenades bounce on a fuse, cluster/banana bombs burst
+ * into bomblets, the air strike rains bombs from the sky, the sheep walks the
+ * ground before blowing up, and the homing missile chases the nearest enemy.
+ */
 export const WEAPONS: Weapon[] = [
-  { id: 'baby',    name: 'Baby Missile', emoji: '🚀', radius: 24, damage: 28, kind: 'normal' },
-  { id: 'missile', name: 'Missile',      emoji: '🎯', radius: 36, damage: 45, kind: 'normal' },
-  { id: 'babynuke',name: 'Baby Nuke',    emoji: '☢️', radius: 52, damage: 65, kind: 'normal' },
-  { id: 'nuke',    name: 'Nuke',         emoji: '💥', radius: 78, damage: 95, kind: 'normal' },
-  { id: 'mirv',    name: 'MIRV (×3)',    emoji: '✳️', radius: 30, damage: 38, kind: 'mirv' },
-  { id: 'roller',  name: 'Roller',       emoji: '🎳', radius: 34, damage: 48, kind: 'roller' },
-  { id: 'dirt',    name: 'Dirt Clod',    emoji: '🟫', radius: 40, damage: 0,  kind: 'dirt' },
-  { id: 'tracer',  name: 'Tracer',       emoji: '➰', radius: 0,  damage: 0,  kind: 'tracer' },
+  { id: 'bazooka', name: 'Bazooka',      emoji: '🚀', radius: 34, damage: 42, kind: 'normal' },
+  { id: 'grenade', name: 'Grenade',      emoji: '💣', radius: 32, damage: 44, kind: 'bounce', fuse: 150, bounces: 8 },
+  { id: 'cluster', name: 'Cluster Bomb', emoji: '🧨', radius: 22, damage: 26, kind: 'cluster' },
+  { id: 'banana',  name: 'Banana Bomb',  emoji: '🍌', radius: 30, damage: 40, kind: 'banana', fuse: 170, bounces: 6 },
+  { id: 'holy',    name: 'Holy Grenade',  emoji: '🙏', radius: 72, damage: 96, kind: 'holy', fuse: 130, bounces: 3 },
+  { id: 'mortar',  name: 'Mortar',       emoji: '☄️', radius: 26, damage: 32, kind: 'mirv' },
+  { id: 'airstrike', name: 'Air Strike', emoji: '✈️', radius: 30, damage: 38, kind: 'airstrike' },
+  { id: 'homing',  name: 'Homing',       emoji: '🎯', radius: 34, damage: 46, kind: 'homing' },
+  { id: 'sheep',   name: 'Sheep',        emoji: '🐑', radius: 34, damage: 52, kind: 'roller' },
+  { id: 'girder',  name: 'Girder',       emoji: '🧱', radius: 42, damage: 0,  kind: 'dirt' },
+  // Cluster/banana bomblets — spawned in play, never selectable.
+  { id: 'bomblet', name: 'Bomblet',      emoji: '•',  radius: 20, damage: 22, kind: 'normal', hidden: true },
 ];
 export const weaponById = (id: string) => WEAPONS.find(w => w.id === id) ?? WEAPONS[0];
+/** Weapons shown in the toolbar (excludes helper projectiles). */
+export const PICKABLE_WEAPONS = WEAPONS.filter(w => !w.hidden);
 
 /* ── Match settings (mirrors the original game's options screen) ─────── */
 export type WindSetting = 'off' | 'low' | 'high';
@@ -183,7 +200,7 @@ export function newGame(
     return {
       id: p.id, name: p.name, color: TANK_COLORS[i % TANK_COLORS.length],
       x, y: terrain[x], health: 100, alive: true,
-      angle: x < WORLD.w / 2 ? 55 : 125, power: 58, weapon: 'baby',
+      angle: x < WORLD.w / 2 ? 55 : 125, power: 58, weapon: 'bazooka',
     };
   });
   const structures = settings.structures ? genStructures(seed, terrain, tanks) : [];
@@ -256,7 +273,7 @@ export function damageStructures(s: GameState, cx: number, cy: number, w: Weapon
 /** Carve (or, for dirt, raise) a circular crater and damage nearby tanks +
  *  structures. Mutates the state's terrain + tanks + structures. */
 export function explode(s: GameState, cx: number, cy: number, w: Weapon): void {
-  if (w.kind === 'tracer' || w.radius <= 0) return;
+  if (w.radius <= 0) return;
   const r = w.radius;
   for (let x = Math.max(0, Math.floor(cx - r)); x <= Math.min(WORLD.w - 1, Math.ceil(cx + r)); x++) {
     const dx = x - cx;

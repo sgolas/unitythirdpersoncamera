@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { Users, Loader2, Crosshair, Wind, Maximize2, Minimize2 } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { Users, Loader2, Crosshair, Wind, Maximize2, Minimize2, X, ChevronUp, ChevronDown } from 'lucide-react';
 import { TabHeader } from '../ui';
 import { getSyncCode, isSyncConfigured } from '../../lib/config';
 import { chatDeviceId } from '../../lib/chatUnread';
@@ -32,26 +33,27 @@ export function ArtilleryTab() {
   const [, force] = useState(0);
   const rerender = useCallback(() => force(v => v + 1), []);
 
-  // Fullscreen: a fixed overlay covers the whole app (nav + header), and we
-  // also request native fullscreen when the platform supports it (hides the
-  // system bars too). `fs` is the source of truth; exiting native fullscreen
-  // via a system gesture drops the overlay too.
-  const [fs, setFs] = useState(false);
+  // The game screen is ALWAYS a full-screen field (fixed overlay above the app
+  // chrome). On top of that we can also request *native* fullscreen where the
+  // platform supports it, which additionally hides the browser/system bars.
   const wrapRef = useRef<HTMLDivElement>(null);
-  function enterFs() {
-    setFs(true);
-    const el: any = wrapRef.current;
-    (el?.requestFullscreen?.() ?? el?.webkitRequestFullscreen?.())?.catch?.(() => {});
-  }
-  function exitFs() {
-    setFs(false);
-    if (document.fullscreenElement) (document.exitFullscreen?.() as any)?.catch?.(() => {});
+  const [nativeFs, setNativeFs] = useState(false);
+  function toggleNativeFs() {
+    if (document.fullscreenElement) {
+      (document.exitFullscreen?.() as any)?.catch?.(() => {});
+    } else {
+      const el: any = wrapRef.current;
+      (el?.requestFullscreen?.() ?? el?.webkitRequestFullscreen?.())?.catch?.(() => {});
+    }
   }
   useEffect(() => {
-    const onChange = () => { if (!document.fullscreenElement) setFs(false); };
+    const onChange = () => setNativeFs(!!document.fullscreenElement);
     document.addEventListener('fullscreenchange', onChange);
     return () => document.removeEventListener('fullscreenchange', onChange);
   }, []);
+
+  // Collapse the battle bar to reclaim the whole screen for the field.
+  const [barOpen, setBarOpen] = useState(true);
 
   // ── Realtime lobby ────────────────────────────────────────────────
   async function goOnline() {
@@ -95,6 +97,13 @@ export function ArtilleryTab() {
     const players: PlayerSeed[] = [{ id: 'p1', name: 'Player 1' }, { id: 'p2', name: 'Player 2' }];
     gameRef.current = newGame((Math.random() * 2 ** 31) | 0, players);
     setScreen('game'); rerender();
+  }
+
+  function quitGame() {
+    cancelAnim();
+    if (document.fullscreenElement) (document.exitFullscreen?.() as any)?.catch?.(() => {});
+    if (online.current) { setScreen('lobby'); }
+    else { gameRef.current = null; setScreen('menu'); }
   }
 
   useEffect(() => () => { roomRef.current?.leave(); cancelAnim(); }, []); // eslint-disable-line
@@ -210,22 +219,59 @@ export function ArtilleryTab() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   useEffect(() => { draw(); });
 
+  // Keep the canvas backing store matched to its on-screen size (× dpr) so the
+  // battlefield fills the whole screen crisply. Re-fits on mount, window
+  // resize, orientation change, and entering/leaving native fullscreen.
+  useEffect(() => {
+    if (screen !== 'game') return;
+    function fit() {
+      const cv = canvasRef.current; if (!cv) return;
+      const r = cv.getBoundingClientRect();
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const w = Math.max(1, Math.round(r.width * dpr));
+      const h = Math.max(1, Math.round(r.height * dpr));
+      if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
+      draw();
+    }
+    fit();
+    const t = setTimeout(fit, 60); // after layout settles
+    window.addEventListener('resize', fit);
+    window.addEventListener('orientationchange', fit);
+    document.addEventListener('fullscreenchange', fit);
+    return () => {
+      clearTimeout(t);
+      window.removeEventListener('resize', fit);
+      window.removeEventListener('orientationchange', fit);
+      document.removeEventListener('fullscreenchange', fit);
+    };
+  }, [screen, barOpen, nativeFs]); // eslint-disable-line
+
   function draw() {
     const cv = canvasRef.current; const g = gameRef.current; if (!cv || !g) return;
     const ctx = cv.getContext('2d')!;
-    const scale = cv.width / WORLD.w;
-    ctx.save(); ctx.scale(scale, scale);
-    // sky
-    const sky = ctx.createLinearGradient(0, 0, 0, WORLD.h);
+    const cw = cv.width, ch = cv.height;
+    // Fit the fixed 960×540 world into the canvas, centred (letterbox), and
+    // paint the whole canvas so there are no bare edges.
+    const scale = Math.min(cw / WORLD.w, ch / WORLD.h);
+    const ox = (cw - WORLD.w * scale) / 2;
+    const oy = (ch - WORLD.h * scale) / 2;
+    // sky fills the entire canvas (including any letterbox margin)
+    const sky = ctx.createLinearGradient(0, 0, 0, ch);
     sky.addColorStop(0, '#0b1220'); sky.addColorStop(1, '#1e293b');
-    ctx.fillStyle = sky; ctx.fillRect(0, 0, WORLD.w, WORLD.h);
-    // terrain
-    ctx.beginPath(); ctx.moveTo(0, WORLD.h);
-    for (let x = 0; x < WORLD.w; x++) ctx.lineTo(x, g.terrain[x]);
-    ctx.lineTo(WORLD.w, WORLD.h); ctx.closePath();
+    ctx.fillStyle = sky; ctx.fillRect(0, 0, cw, ch);
+    ctx.save(); ctx.translate(ox, oy); ctx.scale(scale, scale);
+    // terrain — extended down past the world floor so the ground meets the
+    // bottom screen edge even when the field is letterboxed.
+    const floor = WORLD.h + oy / scale + 4;
+    ctx.beginPath(); ctx.moveTo(0, floor);
+    ctx.lineTo(0, g.terrain[0]);
+    for (let x = 1; x < WORLD.w; x++) ctx.lineTo(x, g.terrain[x]);
+    ctx.lineTo(WORLD.w, floor); ctx.closePath();
     const grd = ctx.createLinearGradient(0, WORLD.h * 0.3, 0, WORLD.h);
     grd.addColorStop(0, '#3f6212'); grd.addColorStop(1, '#1a2e05');
     ctx.fillStyle = grd; ctx.fill();
+    ctx.beginPath(); ctx.moveTo(0, g.terrain[0]);
+    for (let x = 1; x < WORLD.w; x++) ctx.lineTo(x, g.terrain[x]);
     ctx.strokeStyle = '#65a30d'; ctx.lineWidth = 2; ctx.stroke();
     // tanks
     for (const t of g.tanks) {
@@ -314,77 +360,103 @@ export function ArtilleryTab() {
           </div>
         )}
 
-        {screen === 'game' && g && (
-          <div ref={wrapRef} className={fs ? 'fixed inset-0 z-[300] bg-slate-950 overflow-auto p-3 space-y-2 safe-top' : 'space-y-3'}>
-            {/* Exit-fullscreen button, top-right, only while full screen. */}
-            {fs && (
-              <button onClick={exitFs} aria-label="Exit full screen"
-                className="fixed z-[310] w-10 h-10 rounded-full bg-black/50 text-white/90 active:bg-black/70 flex items-center justify-center backdrop-blur"
-                style={{ top: 'calc(env(safe-area-inset-top, 0px) + 10px)', right: '12px' }}>
-                <Minimize2 size={18} />
-              </button>
-            )}
+        {screen === 'game' && g && createPortal(
+          // Portal to <body> so the fixed overlay is viewport-relative (the tab's
+          // own `animate-fadeUp` transform would otherwise become its containing
+          // block and shrink the field to the tab's content height).
+          <div ref={wrapRef} className="fixed inset-0 z-[300] bg-slate-950 overflow-hidden select-none">
+            {/* Full-bleed battlefield */}
+            <canvas ref={canvasRef} className="absolute inset-0 block w-full h-full" />
 
-            {/* Turn / wind banner */}
-            <div className="flex items-center justify-between text-sm">
-              <span className="font-bold" style={{ color: active?.color }}>
-                {g.phase === 'over'
-                  ? (g.winnerId ? `${g.tanks.find(t => t.id === g.winnerId)?.name} wins! 🏆` : 'Draw')
-                  : myTurn ? 'Your turn' : `${active?.name}'s turn`}
-              </span>
-              <div className="flex items-center gap-3">
-                <span className="flex items-center gap-1.5 text-muted">
+            {/* ── Top HUD: quit · turn/wind · fullscreen ── */}
+            <div className="absolute top-0 left-0 right-0 flex items-start justify-between gap-2 px-3 pointer-events-none"
+              style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 8px)' }}>
+              <button onClick={quitGame} aria-label="Quit game"
+                className="pointer-events-auto w-9 h-9 rounded-full bg-black/45 text-white/90 active:bg-black/70 flex items-center justify-center backdrop-blur">
+                <X size={18} />
+              </button>
+
+              <div className="flex flex-wrap items-center justify-center gap-2 max-w-[60%]">
+                <span className="px-3 py-1.5 rounded-full bg-black/45 backdrop-blur text-sm font-bold whitespace-nowrap" style={{ color: active?.color }}>
+                  {g.phase === 'over'
+                    ? (g.winnerId ? `${g.tanks.find(t => t.id === g.winnerId)?.name} wins! 🏆` : 'Draw')
+                    : myTurn ? 'Your turn' : `${active?.name}’s turn`}
+                </span>
+                <span className="px-3 py-1.5 rounded-full bg-black/45 backdrop-blur text-sm text-white/85 flex items-center gap-1.5 whitespace-nowrap">
                   <Wind size={14} /> {g.wind === 0 ? 'calm' : `${Math.abs(g.wind * 100) | 0} ${g.wind > 0 ? '→' : '←'}`}
                 </span>
-                {!fs && (
-                  <button onClick={enterFs} aria-label="Full screen" className="text-muted active:text-content">
-                    <Maximize2 size={18} />
-                  </button>
-                )}
               </div>
+
+              <button onClick={toggleNativeFs} aria-label={nativeFs ? 'Exit full screen' : 'Full screen'}
+                className="pointer-events-auto w-9 h-9 rounded-full bg-black/45 text-white/90 active:bg-black/70 flex items-center justify-center backdrop-blur">
+                {nativeFs ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
+              </button>
             </div>
 
-            <canvas ref={canvasRef} width={960} height={540}
-              className="w-full rounded-2xl border border-line bg-slate-900" style={{ aspectRatio: '960 / 540' }} />
-
-            {g.phase === 'over' ? (
-              <button onClick={() => (online.current ? startOnlineGame() : startHotseat())}
-                className="w-full accent-gradient text-white font-bold rounded-2xl py-3 press">Rematch</button>
-            ) : myTurn && active ? (
-              <div className="bg-surface rounded-2xl border border-line p-3 space-y-3">
-                <div className="grid grid-cols-2 gap-3">
-                  <label className="text-xs font-semibold text-muted">Angle <span className="text-content">{active.angle}°</span>
-                    <input type="range" min={0} max={180} value={active.angle} onChange={e => setAim({ angle: +e.target.value })} className="w-full" />
-                  </label>
-                  <label className="text-xs font-semibold text-muted">Power <span className="text-content">{active.power}</span>
-                    <input type="range" min={5} max={100} value={active.power} onChange={e => setAim({ power: +e.target.value })} className="w-full" />
-                  </label>
-                </div>
-                <div className="flex gap-1.5 overflow-x-auto no-scrollbar">
-                  {WEAPONS.map(w => (
-                    <button key={w.id} onClick={() => setAim({ weapon: w.id })}
-                      className={`flex-shrink-0 px-2.5 py-1.5 rounded-xl text-xs font-semibold border ${active.weapon === w.id ? 'bg-accent/10 border-accent text-accent' : 'border-line text-muted'}`}>
-                      {w.emoji} {w.name}
-                    </button>
-                  ))}
-                </div>
-                <button onClick={fire} className="w-full accent-gradient text-white font-bold rounded-xl py-3 flex items-center justify-center gap-2 press">
-                  <Crosshair size={18} /> Fire!
-                </button>
-              </div>
-            ) : (
-              <p className="text-center text-sm text-muted py-3">
-                {g.phase === 'flying' ? 'Incoming…' : `Waiting for ${active?.name}…`}
-              </p>
-            )}
-
-            <div className="flex flex-wrap gap-2 justify-center">
+            {/* Player health chips */}
+            <div className="absolute left-0 right-0 flex flex-wrap gap-1.5 justify-center px-3 pointer-events-none"
+              style={{ top: 'calc(env(safe-area-inset-top, 0px) + 54px)' }}>
               {g.tanks.map(t => (
-                <span key={t.id} className={`text-xs font-semibold px-2 py-1 rounded-full ${t.alive ? '' : 'opacity-40 line-through'}`}
-                  style={{ background: `${t.color}22`, color: t.color }}>{t.name} · {t.health}</span>
+                <span key={t.id} className={`text-[11px] font-bold px-2 py-0.5 rounded-full backdrop-blur ${t.alive ? '' : 'opacity-40 line-through'}`}
+                  style={{ background: `${t.color}33`, color: t.color, boxShadow: t.id === active?.id && g.phase !== 'over' ? `0 0 0 1.5px ${t.color}` : 'none' }}>
+                  {t.name} · {t.health}
+                </span>
               ))}
             </div>
-          </div>
+
+            {/* ── Bottom RTS battle bar ── */}
+            <div className="absolute left-0 right-0 bottom-0 px-2 pointer-events-none"
+              style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 8px)' }}>
+              <div className="flex justify-center mb-1">
+                <button onClick={() => setBarOpen(o => !o)} aria-label={barOpen ? 'Hide controls' : 'Show controls'}
+                  className="pointer-events-auto px-5 h-6 rounded-t-lg bg-slate-900/85 backdrop-blur border border-white/10 border-b-0 text-white/70 flex items-center">
+                  {barOpen ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
+                </button>
+              </div>
+
+              {barOpen && (
+                <div className="pointer-events-auto mx-auto max-w-3xl bg-slate-900/85 backdrop-blur border border-white/10 rounded-2xl p-3 shadow-2xl">
+                  {g.phase === 'over' ? (
+                    <button onClick={() => (online.current ? startOnlineGame() : startHotseat())}
+                      className="w-full accent-gradient text-white font-bold rounded-xl py-3 press">Rematch</button>
+                  ) : myTurn && active ? (
+                    <div className="space-y-2.5">
+                      <div className="grid grid-cols-2 gap-3">
+                        <label className="text-[11px] font-semibold text-white/60">Angle <span className="text-white">{active.angle}°</span>
+                          <input type="range" min={0} max={180} value={active.angle} onChange={e => setAim({ angle: +e.target.value })} className="w-full accent-orange-500" />
+                        </label>
+                        <label className="text-[11px] font-semibold text-white/60">Power <span className="text-white">{active.power}</span>
+                          <input type="range" min={5} max={100} value={active.power} onChange={e => setAim({ power: +e.target.value })} className="w-full accent-orange-500" />
+                        </label>
+                      </div>
+                      <div className="flex items-stretch gap-2">
+                        <div className="flex-1 flex gap-1.5 overflow-x-auto no-scrollbar">
+                          {WEAPONS.map(w => (
+                            <button key={w.id} onClick={() => setAim({ weapon: w.id })}
+                              className={`flex-shrink-0 w-14 flex flex-col items-center justify-center gap-0.5 py-1.5 rounded-xl border text-white ${active.weapon === w.id ? 'bg-orange-500/25 border-orange-400' : 'bg-white/5 border-white/10'}`}>
+                              <span className="text-lg leading-none">{w.emoji}</span>
+                              <span className="text-[9px] font-semibold text-white/70 leading-tight text-center">{w.name}</span>
+                            </button>
+                          ))}
+                        </div>
+                        <button onClick={fire} aria-label="Fire"
+                          className="flex-shrink-0 w-24 accent-gradient text-white font-extrabold rounded-xl flex flex-col items-center justify-center gap-0.5 press">
+                          <Crosshair size={20} /> FIRE
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-center text-sm text-white/70 py-2 flex items-center justify-center gap-2">
+                      {g.phase === 'flying'
+                        ? <><Loader2 size={16} className="animate-spin" /> Incoming…</>
+                        : `Waiting for ${active?.name}…`}
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>,
+          document.body,
         )}
       </div>
     </div>

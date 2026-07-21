@@ -11,6 +11,17 @@ import { isNative } from './platform';
 
 type AnyOrientation = { lock?: (o: string) => Promise<void>; unlock?: () => void } | undefined;
 
+/** Resolve even if the underlying promise hangs — some orientation plugins
+ *  never resolve lock() when the target equals the current orientation. */
+function withTimeout(p: Promise<unknown>, ms = 1500): Promise<void> {
+  return new Promise<void>(resolve => {
+    let done = false;
+    const finish = () => { if (!done) { done = true; resolve(); } };
+    p.then(finish, finish);
+    setTimeout(finish, ms);
+  });
+}
+
 async function nativePlugin() {
   if (!isNative) return null;
   try {
@@ -24,7 +35,7 @@ async function nativePlugin() {
 /** Lock to landscape while the game is on screen. */
 export async function lockLandscape(el?: Element | null): Promise<void> {
   const native = await nativePlugin();
-  if (native) { try { await native.lock({ orientation: 'landscape' }); return; } catch { /* fall through */ } }
+  if (native) { try { await withTimeout(native.lock({ orientation: 'landscape' })); return; } catch { /* fall through */ } }
 
   // Web fallback: lock via the Screen Orientation API (requires fullscreen).
   const so = (screen as unknown as { orientation?: AnyOrientation }).orientation;
@@ -45,7 +56,7 @@ export async function lockLandscape(el?: Element | null): Promise<void> {
  *  so the plugin is the single source of truth. */
 export async function lockPortrait(): Promise<void> {
   const native = await nativePlugin();
-  if (native) { try { await native.lock({ orientation: 'portrait' }); } catch { /* ignore */ } return; }
+  if (native) { try { await withTimeout(native.lock({ orientation: 'portrait' })); } catch { /* ignore */ } return; }
   try {
     const so = (screen as unknown as { orientation?: AnyOrientation }).orientation;
     await so?.lock?.('portrait');

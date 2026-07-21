@@ -20,6 +20,9 @@ async function initNativeChrome() {
     await StatusBar.setStyle({ style: Style.Dark });
     await StatusBar.setOverlaysWebView({ overlay: true });
   } catch { /* plugin unavailable in web preview */ }
+  // The manifest no longer pins portrait (so the game can go landscape); keep
+  // the rest of the app portrait by locking it here at startup.
+  try { const { lockPortrait } = await import('./lib/orientation'); await lockPortrait(); } catch { /* ignore */ }
 }
 
 /**

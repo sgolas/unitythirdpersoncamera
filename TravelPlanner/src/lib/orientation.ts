@@ -40,16 +40,19 @@ export async function lockLandscape(el?: Element | null): Promise<void> {
   try { await so?.lock?.('landscape'); } catch { /* unsupported */ }
 }
 
-/** Return to the app's normal portrait orientation when leaving the game. */
-export async function unlockOrientation(): Promise<void> {
+/** Pin the app to portrait (its default everywhere except the game). Called at
+ *  startup and when leaving the game — the manifest no longer forces portrait,
+ *  so the plugin is the single source of truth. */
+export async function lockPortrait(): Promise<void> {
   const native = await nativePlugin();
-  if (native) {
-    // Pin back to portrait (the app's default) rather than free-rotating.
-    try { await native.lock({ orientation: 'portrait' }); } catch { try { await native.unlock(); } catch { /* ignore */ } }
-    return;
-  }
+  if (native) { try { await native.lock({ orientation: 'portrait' }); } catch { /* ignore */ } return; }
   try {
     const so = (screen as unknown as { orientation?: AnyOrientation }).orientation;
-    so?.unlock?.();
+    await so?.lock?.('portrait');
   } catch { /* unsupported */ }
+}
+
+/** Return to the app's normal portrait orientation when leaving the game. */
+export async function unlockOrientation(): Promise<void> {
+  await lockPortrait();
 }

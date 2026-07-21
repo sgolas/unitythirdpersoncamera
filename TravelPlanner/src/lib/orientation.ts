@@ -1,23 +1,36 @@
 /**
- * Screen-orientation lock for the artillery game.
+ * Screen-orientation control for the artillery game.
  *
- * There's no native @capacitor/screen-orientation plugin in the build, so we
- * use the Web Screen Orientation API — which reaches installed apps over OTA.
- * Chromium (and the Android WebView) only allow `orientation.lock()` while the
- * page is in the Fullscreen API, so we enter fullscreen on the game element
- * first, then lock to landscape. Everything is best-effort: on platforms that
- * don't support it (desktop, iOS Safari) the calls just no-op.
+ * The app is pinned to portrait in the Android manifest, so the game locks to
+ * landscape at the native level via @capacitor/screen-orientation (its runtime
+ * setRequestedOrientation overrides the manifest per-screen). On the web (and
+ * on older APKs without the plugin) we fall back to the Web Screen Orientation
+ * API, which needs the page to be fullscreen first. Everything is best-effort.
  */
+import { isNative } from './platform';
 
 type AnyOrientation = { lock?: (o: string) => Promise<void>; unlock?: () => void } | undefined;
 
+async function nativePlugin() {
+  if (!isNative) return null;
+  try {
+    const { Capacitor } = await import('@capacitor/core');
+    if (!Capacitor.isPluginAvailable('ScreenOrientation')) return null; // older APK
+    const { ScreenOrientation } = await import('@capacitor/screen-orientation');
+    return ScreenOrientation;
+  } catch { return null; }
+}
+
+/** Lock to landscape while the game is on screen. */
 export async function lockLandscape(el?: Element | null): Promise<void> {
+  const native = await nativePlugin();
+  if (native) { try { await native.lock({ orientation: 'landscape' }); return; } catch { /* fall through */ } }
+
+  // Web fallback: lock via the Screen Orientation API (requires fullscreen).
   const so = (screen as unknown as { orientation?: AnyOrientation }).orientation;
-  // Fast path: some platforms allow locking without fullscreen.
   if (so?.lock) {
     try { await so.lock('landscape'); return; } catch { /* needs fullscreen */ }
   }
-  // Enter fullscreen on the game element, then retry the lock.
   const target = (el || document.documentElement) as any;
   if (!document.fullscreenElement && target?.requestFullscreen) {
     try { await target.requestFullscreen(); } catch { /* denied */ }
@@ -27,7 +40,14 @@ export async function lockLandscape(el?: Element | null): Promise<void> {
   try { await so?.lock?.('landscape'); } catch { /* unsupported */ }
 }
 
-export function unlockOrientation(): void {
+/** Return to the app's normal portrait orientation when leaving the game. */
+export async function unlockOrientation(): Promise<void> {
+  const native = await nativePlugin();
+  if (native) {
+    // Pin back to portrait (the app's default) rather than free-rotating.
+    try { await native.lock({ orientation: 'portrait' }); } catch { try { await native.unlock(); } catch { /* ignore */ } }
+    return;
+  }
   try {
     const so = (screen as unknown as { orientation?: AnyOrientation }).orientation;
     so?.unlock?.();

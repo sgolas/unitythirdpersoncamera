@@ -77,8 +77,8 @@ export function ArtilleryTab() {
   // which the Web Orientation API requires), and release it on the way out.
   useEffect(() => {
     if (screen !== 'game') return;
-    lockLandscape(wrapRef.current);
-    return () => unlockOrientation();
+    void lockLandscape(wrapRef.current);
+    return () => { void unlockOrientation(); };
   }, [screen]);
 
   // ── Realtime lobby ────────────────────────────────────────────────

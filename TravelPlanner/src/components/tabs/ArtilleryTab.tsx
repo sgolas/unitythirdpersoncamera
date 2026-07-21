@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { Users, Loader2, Crosshair, Wind } from 'lucide-react';
+import { Users, Loader2, Crosshair, Wind, Maximize2, Minimize2 } from 'lucide-react';
 import { TabHeader } from '../ui';
 import { getSyncCode, isSyncConfigured } from '../../lib/config';
 import { chatDeviceId } from '../../lib/chatUnread';
@@ -31,6 +31,27 @@ export function ArtilleryTab() {
   const gameRef = useRef<GameState | null>(null);
   const [, force] = useState(0);
   const rerender = useCallback(() => force(v => v + 1), []);
+
+  // Fullscreen: a fixed overlay covers the whole app (nav + header), and we
+  // also request native fullscreen when the platform supports it (hides the
+  // system bars too). `fs` is the source of truth; exiting native fullscreen
+  // via a system gesture drops the overlay too.
+  const [fs, setFs] = useState(false);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  function enterFs() {
+    setFs(true);
+    const el: any = wrapRef.current;
+    (el?.requestFullscreen?.() ?? el?.webkitRequestFullscreen?.())?.catch?.(() => {});
+  }
+  function exitFs() {
+    setFs(false);
+    if (document.fullscreenElement) (document.exitFullscreen?.() as any)?.catch?.(() => {});
+  }
+  useEffect(() => {
+    const onChange = () => { if (!document.fullscreenElement) setFs(false); };
+    document.addEventListener('fullscreenchange', onChange);
+    return () => document.removeEventListener('fullscreenchange', onChange);
+  }, []);
 
   // ── Realtime lobby ────────────────────────────────────────────────
   async function goOnline() {
@@ -105,7 +126,11 @@ export function ArtilleryTab() {
     const l = launch(t);
     simRef.current = { projs: [{ ...l, weapon: t.weapon }], flashes: simRef.current?.flashes ?? [], authority };
     rerender();
-    if (!rafRef.current) rafRef.current = requestAnimationFrame(step);
+    // Always (re)start the loop — a lingering, already-consumed frame id must
+    // not block the next shot's animation (that was the "freezes after firing"
+    // bug: the old `if (!rafRef.current)` guard never re-scheduled).
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    rafRef.current = requestAnimationFrame(step);
   }
 
   function step() {
@@ -160,7 +185,9 @@ export function ArtilleryTab() {
     }
     // Non-authority clients just keep the flashes fading and wait for 'snap'.
     simRef.current = { projs: [], flashes: sim.flashes, authority: sim.authority };
-    if (!rafRef.current) rafRef.current = requestAnimationFrame(fadeOnly);
+    // We're at the end of a step frame (its id is consumed) — schedule the fade
+    // loop unconditionally so rafRef never gets stuck holding a dead id.
+    rafRef.current = requestAnimationFrame(fadeOnly);
   }
   function fadeOnly() {
     const sim = simRef.current; if (!sim) { rafRef.current = null; return; }
@@ -279,7 +306,16 @@ export function ArtilleryTab() {
         )}
 
         {screen === 'game' && g && (
-          <div className="space-y-3">
+          <div ref={wrapRef} className={fs ? 'fixed inset-0 z-[300] bg-slate-950 overflow-auto p-3 space-y-2 safe-top' : 'space-y-3'}>
+            {/* Exit-fullscreen button, top-right, only while full screen. */}
+            {fs && (
+              <button onClick={exitFs} aria-label="Exit full screen"
+                className="fixed z-[310] w-10 h-10 rounded-full bg-black/50 text-white/90 active:bg-black/70 flex items-center justify-center backdrop-blur"
+                style={{ top: 'calc(env(safe-area-inset-top, 0px) + 10px)', right: '12px' }}>
+                <Minimize2 size={18} />
+              </button>
+            )}
+
             {/* Turn / wind banner */}
             <div className="flex items-center justify-between text-sm">
               <span className="font-bold" style={{ color: active?.color }}>
@@ -287,9 +323,16 @@ export function ArtilleryTab() {
                   ? (g.winnerId ? `${g.tanks.find(t => t.id === g.winnerId)?.name} wins! 🏆` : 'Draw')
                   : myTurn ? 'Your turn' : `${active?.name}'s turn`}
               </span>
-              <span className="flex items-center gap-1.5 text-muted">
-                <Wind size={14} /> {g.wind === 0 ? 'calm' : `${Math.abs(g.wind * 100) | 0} ${g.wind > 0 ? '→' : '←'}`}
-              </span>
+              <div className="flex items-center gap-3">
+                <span className="flex items-center gap-1.5 text-muted">
+                  <Wind size={14} /> {g.wind === 0 ? 'calm' : `${Math.abs(g.wind * 100) | 0} ${g.wind > 0 ? '→' : '←'}`}
+                </span>
+                {!fs && (
+                  <button onClick={enterFs} aria-label="Full screen" className="text-muted active:text-content">
+                    <Maximize2 size={18} />
+                  </button>
+                )}
+              </div>
             </div>
 
             <canvas ref={canvasRef} width={960} height={540}

@@ -12,7 +12,7 @@ import {
   type GameState, type PlayerSeed, type Snapshot,
 } from '../../game/artillery';
 
-type Proj = { x: number; y: number; vx: number; vy: number; weapon: string; rolling?: boolean; rollDist?: number; split?: boolean; dead?: boolean };
+type Proj = { x: number; y: number; vx: number; vy: number; weapon: string; rolling?: boolean; rollDist?: number; split?: boolean; dead?: boolean; life?: number };
 type Flash = { x: number; y: number; r: number; t: number; color: string };
 
 export function ArtilleryTab() {
@@ -137,9 +137,17 @@ export function ArtilleryTab() {
     const g = gameRef.current; const sim = simRef.current;
     if (!g || !sim) { rafRef.current = null; return; }
     const wind = g.wind;
-    for (const p of sim.projs) {
+    // Iterate a fixed count so projectiles spawned THIS frame (e.g. MIRV
+    // children) are only simulated from the next frame — never in a same-frame
+    // cascade (that exponential cascade was the MIRV freeze).
+    const count = sim.projs.length;
+    for (let i = 0; i < count; i++) {
+      const p = sim.projs[i];
       if (p.dead) continue;
       const w = weaponById(p.weapon);
+      // Hard safety: no projectile may fly forever.
+      p.life = (p.life ?? 0) + 1;
+      if (p.life > 2000) { p.dead = true; continue; }
       if (p.rolling) {
         const dir = terrainAt(g, p.x + 3) <= terrainAt(g, p.x - 3) ? 1 : -1;
         p.x += dir * 2.4; p.y = terrainAt(g, p.x); p.rollDist = (p.rollDist ?? 0) + 2.4;
@@ -148,10 +156,11 @@ export function ArtilleryTab() {
         continue;
       }
       p.vy += GRAVITY; p.vx += wind * WIND_ACCEL; p.x += p.vx; p.y += p.vy;
-      // MIRV splits into three on the way down.
-      if (w.kind === 'mirv' && !p.split && p.vy > 1.5) {
+      // MIRV splits into three on the way down — children are 'split' so they
+      // don't re-split, and we cap the total to be safe.
+      if (w.kind === 'mirv' && !p.split && p.vy > 1.5 && sim.projs.length < 24) {
         p.split = true; p.dead = true;
-        for (const dvx of [-1.6, 0, 1.6]) sim.projs.push({ x: p.x, y: p.y, vx: p.vx + dvx, vy: p.vy, weapon: 'mirv' });
+        for (const dvx of [-1.6, 0, 1.6]) sim.projs.push({ x: p.x, y: p.y, vx: p.vx + dvx, vy: p.vy, weapon: 'mirv', split: true });
         continue;
       }
       if (p.y >= terrainAt(g, p.x) || hitTank(g, p.x, p.y)) {

@@ -1,19 +1,31 @@
 /**
  * Artillery — a Scorched-Earth-style turn-based tank game engine (pure logic,
  * no React/Canvas). Deterministic terrain from a seed; a destructible heightmap
- * world; projectile physics with gravity + wind; several weapons. The React
- * component (ArtilleryTab) owns rendering and the per-frame projectile
+ * world with optional buildings; projectile physics with gravity + wind;
+ * several weapons; configurable match settings and multi-round scoring. The
+ * React component (ArtilleryTab) owns rendering and the per-frame projectile
  * animation and calls into these helpers for terrain/damage.
  */
 
 export const WORLD = { w: 960, h: 540 };
-export const GRAVITY = 0.16;
-export const WIND_ACCEL = 0.012; // per unit of wind (-1..1)
+// Base gravity. Lowered from the old 0.16 for floatier, more realistic arcs;
+// the match settings scale it (see gravityValue). WIND_ACCEL nudges sideways.
+export const GRAVITY = 0.095;
+export const WIND_ACCEL = 0.014; // per unit of wind (-1..1)
 
 export interface Tank {
   id: string; name: string; color: string;
   x: number; y: number; health: number; alive: boolean;
   angle: number; power: number; weapon: string;
+}
+
+/** A destructible building/structure that sits on the terrain and blocks shots. */
+export interface Structure {
+  id: string;
+  x: number; y: number; w: number; h: number; // top-left + size (world units)
+  hp: number; maxHp: number;
+  kind: 'tower' | 'block' | 'bunker';
+  hue: number; // base colour hue so each looks distinct
 }
 
 export type WeaponKind = 'normal' | 'mirv' | 'roller' | 'dirt' | 'tracer';
@@ -34,14 +46,47 @@ export const WEAPONS: Weapon[] = [
 ];
 export const weaponById = (id: string) => WEAPONS.find(w => w.id === id) ?? WEAPONS[0];
 
+/* ── Match settings (mirrors the original game's options screen) ─────── */
+export type WindSetting = 'off' | 'low' | 'high';
+export type GravitySetting = 'low' | 'normal' | 'high';
+export type TerrainSetting = 'hills' | 'mountains' | 'plains';
+
+export interface GameSettings {
+  players: number;          // local (hotseat) player count, 2..4
+  wind: WindSetting;
+  gravity: GravitySetting;
+  rounds: number;           // rounds per match (1,3,5,…)
+  structures: boolean;      // place buildings on the map
+  terrain: TerrainSetting;  // map style
+}
+
+export const DEFAULT_SETTINGS: GameSettings = {
+  players: 2, wind: 'low', gravity: 'normal', rounds: 3, structures: true, terrain: 'hills',
+};
+
+/** Resolve a gravity setting to the per-frame acceleration used by the sim. */
+export function gravityValue(s: GravitySetting): number {
+  return s === 'low' ? GRAVITY * 0.7 : s === 'high' ? GRAVITY * 1.5 : GRAVITY;
+}
+/** Max |wind| a setting allows (wind itself is stored/rendered in -1..1). */
+export function windMaxFor(s: WindSetting): number {
+  return s === 'off' ? 0 : s === 'high' ? 1 : 0.5;
+}
+
 export interface GameState {
   seed: number;
   terrain: number[];   // surface Y per column [0..WORLD.w-1]; larger = lower
+  structures: Structure[];
   tanks: Tank[];
   turn: number;        // index of the active tank
   wind: number;        // -1..1
+  gravity: number;     // resolved per-frame gravity for this match
+  windMax: number;     // resolved max |wind| for this match
+  settings: GameSettings;
+  round: number;       // 1-based current round
+  scores: Record<string, number>; // wins per tank id across rounds
   phase: 'aim' | 'flying' | 'over';
-  winnerId: string | null;
+  winnerId: string | null; // winner of THIS round (null = draw / ongoing)
 }
 
 /** Deterministic PRNG (mulberry32) so every device builds the identical world. */
@@ -55,24 +100,42 @@ export function rng(seed: number): () => number {
   };
 }
 
-/** Midpoint-displacement hills, clamped so tanks always have somewhere to sit. */
-export function genTerrain(seed: number): number[] {
+/**
+ * Rolling hills from summed sine octaves, then a couple of smoothing passes for
+ * the soft, modern look. The terrain style scales the amplitude/baseline.
+ */
+export function genTerrain(seed: number, style: TerrainSetting = 'hills'): number[] {
   const rand = rng(seed);
   const n = WORLD.w;
   const h = new Array(n).fill(0);
-  const base = WORLD.h * 0.55;
-  // Sum a few sine octaves with random phase for rolling hills.
+  const cfg = style === 'mountains'
+    ? { base: 0.62, amp: [0.24, 0.14, 0.07, 0.035] }
+    : style === 'plains'
+      ? { base: 0.72, amp: [0.07, 0.045, 0.025, 0.015] }
+      : { base: 0.58, amp: [0.16, 0.09, 0.05, 0.03] };
+  const base = WORLD.h * cfg.base;
   const octaves = [
-    { amp: WORLD.h * 0.16, len: 520, ph: rand() * 7 },
-    { amp: WORLD.h * 0.09, len: 210, ph: rand() * 7 },
-    { amp: WORLD.h * 0.05, len: 95,  ph: rand() * 7 },
-    { amp: WORLD.h * 0.03, len: 47,  ph: rand() * 7 },
+    { amp: WORLD.h * cfg.amp[0], len: 520, ph: rand() * 7 },
+    { amp: WORLD.h * cfg.amp[1], len: 240, ph: rand() * 7 },
+    { amp: WORLD.h * cfg.amp[2], len: 110, ph: rand() * 7 },
+    { amp: WORLD.h * cfg.amp[3], len: 54,  ph: rand() * 7 },
   ];
   for (let x = 0; x < n; x++) {
     let y = base;
     for (const o of octaves) y -= Math.sin((x / o.len) * Math.PI * 2 + o.ph) * o.amp;
-    h[x] = Math.max(WORLD.h * 0.22, Math.min(WORLD.h - 8, y));
+    h[x] = y;
   }
+  // Smooth (moving average) for gentle, modern curves — twice.
+  for (let pass = 0; pass < 2; pass++) {
+    const src = h.slice();
+    const k = 6;
+    for (let x = 0; x < n; x++) {
+      let sum = 0, cnt = 0;
+      for (let d = -k; d <= k; d++) { const i = x + d; if (i >= 0 && i < n) { sum += src[i]; cnt++; } }
+      h[x] = sum / cnt;
+    }
+  }
+  for (let x = 0; x < n; x++) h[x] = Math.max(WORLD.h * 0.2, Math.min(WORLD.h - 8, h[x]));
   return h;
 }
 
@@ -80,25 +143,65 @@ const TANK_COLORS = ['#38bdf8', '#fb7185', '#34d399', '#f59e0b', '#a78bfa', '#f4
 
 export interface PlayerSeed { id: string; name: string }
 
+/** Place a few destructible buildings in the gaps between tanks. */
+export function genStructures(seed: number, terrain: number[], tanks: Tank[]): Structure[] {
+  const rand = rng(seed ^ 0x5bd1e995);
+  const out: Structure[] = [];
+  const count = 2 + Math.floor(rand() * 3); // 2..4 buildings
+  let tries = 0;
+  while (out.length < count && tries < 60) {
+    tries++;
+    const w = 30 + Math.round(rand() * 34);
+    const h = 44 + Math.round(rand() * 60);
+    const cx = 80 + Math.round(rand() * (WORLD.w - 160));
+    // Keep clear of tanks and other structures.
+    if (tanks.some(t => Math.abs(t.x - cx) < 46)) continue;
+    if (out.some(s => Math.abs((s.x + s.w / 2) - cx) < 70)) continue;
+    const groundY = terrain[Math.max(0, Math.min(WORLD.w - 1, cx))];
+    const kind: Structure['kind'] = rand() < 0.34 ? 'tower' : rand() < 0.6 ? 'bunker' : 'block';
+    const hh = kind === 'tower' ? h + 22 : kind === 'bunker' ? Math.min(h, 52) : h;
+    const ww = kind === 'bunker' ? w + 16 : kind === 'tower' ? Math.max(26, w - 10) : w;
+    const maxHp = Math.round((ww * hh) / 26);
+    out.push({
+      id: `st${out.length}`,
+      x: Math.round(cx - ww / 2), y: Math.round(groundY - hh), w: ww, h: hh,
+      hp: maxHp, maxHp, kind, hue: Math.round(rand() * 360),
+    });
+  }
+  return out.sort((a, b) => a.x - b.x);
+}
+
 /** Build a fresh game: terrain from the seed, tanks spread evenly across it. */
-export function newGame(seed: number, players: PlayerSeed[]): GameState {
-  const terrain = genTerrain(seed);
+export function newGame(
+  seed: number, players: PlayerSeed[], settings: GameSettings = DEFAULT_SETTINGS,
+  opts: { round?: number; scores?: Record<string, number> } = {},
+): GameState {
+  const terrain = genTerrain(seed, settings.terrain);
   const n = players.length;
   const tanks: Tank[] = players.map((p, i) => {
     const x = Math.round(WORLD.w * ((i + 1) / (n + 1)));
     return {
       id: p.id, name: p.name, color: TANK_COLORS[i % TANK_COLORS.length],
       x, y: terrain[x], health: 100, alive: true,
-      angle: x < WORLD.w / 2 ? 55 : 125, power: 55, weapon: 'baby',
+      angle: x < WORLD.w / 2 ? 55 : 125, power: 58, weapon: 'baby',
     };
   });
-  return { seed, terrain, tanks, turn: 0, wind: windFor(seed, 0), phase: 'aim', winnerId: null };
+  const structures = settings.structures ? genStructures(seed, terrain, tanks) : [];
+  const windMax = windMaxFor(settings.wind);
+  const scores = opts.scores ?? Object.fromEntries(players.map(p => [p.id, 0]));
+  return {
+    seed, terrain, structures, tanks, turn: 0,
+    wind: windFor(seed, 0, windMax),
+    gravity: gravityValue(settings.gravity), windMax, settings,
+    round: opts.round ?? 1, scores,
+    phase: 'aim', winnerId: null,
+  };
 }
 
 /** Deterministic wind per turn so all clients agree without extra messages. */
-export function windFor(seed: number, turnCount: number): number {
+export function windFor(seed: number, turnCount: number, windMax = 0.5): number {
   const r = rng(seed ^ (turnCount * 0x9e3779b1))();
-  return Math.round((r * 2 - 1) * 100) / 100;
+  return Math.round((r * 2 - 1) * windMax * 100) / 100;
 }
 
 export const activeTank = (s: GameState): Tank | undefined => s.tanks[s.turn];
@@ -111,10 +214,20 @@ export function terrainAt(s: GameState, x: number): number {
   return s.terrain[i] * (1 - f) + s.terrain[i + 1] * f;
 }
 
+/** The intact structure (hp>0) containing point (x,y), or null. */
+export function structureAt(s: GameState, x: number, y: number): Structure | null {
+  for (const st of s.structures) {
+    if (st.hp <= 0) continue;
+    if (x >= st.x && x <= st.x + st.w && y >= st.y && y <= st.y + st.h) return st;
+  }
+  return null;
+}
+
 /** Muzzle position + initial velocity for a tank's current angle/power. */
 export function launch(t: Tank): { x: number; y: number; vx: number; vy: number } {
   const a = (t.angle * Math.PI) / 180;
-  const speed = 2 + (t.power / 100) * 12;
+  // Slightly higher muzzle speed pairs with the lower gravity for long, lofty arcs.
+  const speed = 3 + (t.power / 100) * 13;
   return {
     x: t.x + Math.cos(a) * 16,
     y: t.y - 14 - Math.sin(a) * 16,
@@ -123,8 +236,25 @@ export function launch(t: Tank): { x: number; y: number; vx: number; vy: number 
   };
 }
 
-/** Carve (or, for dirt, raise) a circular crater and damage nearby tanks.
- *  Mutates the state's terrain + tanks. */
+/** Damage structures within a blast; returns true if any were hit. */
+export function damageStructures(s: GameState, cx: number, cy: number, w: Weapon): void {
+  if (w.damage <= 0 || w.radius <= 0) return;
+  const r = w.radius;
+  for (const st of s.structures) {
+    if (st.hp <= 0) continue;
+    // distance from blast centre to the structure rect
+    const nx = Math.max(st.x, Math.min(cx, st.x + st.w));
+    const ny = Math.max(st.y, Math.min(cy, st.y + st.h));
+    const d = Math.hypot(cx - nx, cy - ny);
+    if (d < r) {
+      const dmg = Math.round((w.damage + 20) * (1 - d / r));
+      st.hp = Math.max(0, st.hp - dmg);
+    }
+  }
+}
+
+/** Carve (or, for dirt, raise) a circular crater and damage nearby tanks +
+ *  structures. Mutates the state's terrain + tanks + structures. */
 export function explode(s: GameState, cx: number, cy: number, w: Weapon): void {
   if (w.kind === 'tracer' || w.radius <= 0) return;
   const r = w.radius;
@@ -132,10 +262,8 @@ export function explode(s: GameState, cx: number, cy: number, w: Weapon): void {
     const dx = x - cx;
     const dy = Math.sqrt(Math.max(0, r * r - dx * dx));
     if (w.kind === 'dirt') {
-      // Add a mound: raise the surface (lower Y) but never above the crater top.
       s.terrain[x] = Math.min(s.terrain[x], Math.max(cy - dy, 12));
     } else {
-      // Remove ground down to the bottom of the blast circle at this column.
       const bottom = cy + dy;
       if (bottom > s.terrain[x]) s.terrain[x] = Math.min(WORLD.h, bottom);
     }
@@ -149,6 +277,7 @@ export function explode(s: GameState, cx: number, cy: number, w: Weapon): void {
         t.health = Math.max(0, t.health - dmg);
       }
     }
+    damageStructures(s, cx, cy, w);
   }
   settleTanks(s);
 }
@@ -179,6 +308,26 @@ export function checkOver(s: GameState): boolean {
   return false;
 }
 
+/** Award the round win (call once when a round ends). */
+export function awardRound(s: GameState): void {
+  if (s.winnerId) s.scores[s.winnerId] = (s.scores[s.winnerId] ?? 0) + 1;
+}
+
+/** True when the whole match (all rounds) is decided. */
+export function matchOver(s: GameState): boolean {
+  return s.round >= s.settings.rounds;
+}
+
+/** id of the overall match leader (or null on a tie). */
+export function matchChampion(s: GameState): string | null {
+  let best: string | null = null, bestN = -1, tie = false;
+  for (const [id, n] of Object.entries(s.scores)) {
+    if (n > bestN) { bestN = n; best = id; tie = false; }
+    else if (n === bestN) tie = true;
+  }
+  return tie ? null : best;
+}
+
 /** Advance to the next living tank and roll fresh wind. */
 export function nextTurn(s: GameState): void {
   if (checkOver(s)) return;
@@ -188,25 +337,36 @@ export function nextTurn(s: GameState): void {
     if (s.tanks[next].alive) break;
   }
   s.turn = next;
-  s.wind = windFor(s.seed, (s.wind * 1000 + Date.now()) | 0); // fresh, deterministic-enough
+  s.wind = windFor(s.seed, (s.wind * 1000 + Date.now()) | 0, s.windMax);
   s.phase = 'aim';
 }
 
 /** A compact, JSON-safe snapshot the active player broadcasts as the
  *  authoritative post-shot state (terrain packed as rounded ints). */
 export interface Snapshot {
-  terrain: number[]; tanks: Tank[]; turn: number; wind: number;
+  terrain: number[]; structures: Structure[]; tanks: Tank[];
+  turn: number; wind: number; gravity: number; windMax: number;
+  settings: GameSettings; round: number; scores: Record<string, number>;
   phase: GameState['phase']; winnerId: string | null;
 }
 export function snapshot(s: GameState): Snapshot {
   return {
     terrain: s.terrain.map(v => Math.round(v)),
+    structures: s.structures.map(st => ({ ...st })),
     tanks: s.tanks.map(t => ({ ...t })),
-    turn: s.turn, wind: s.wind, phase: s.phase, winnerId: s.winnerId,
+    turn: s.turn, wind: s.wind, gravity: s.gravity, windMax: s.windMax,
+    settings: s.settings, round: s.round, scores: { ...s.scores },
+    phase: s.phase, winnerId: s.winnerId,
   };
 }
 export function applySnapshot(s: GameState, snap: Snapshot): void {
   s.terrain = snap.terrain.slice();
+  s.structures = snap.structures.map(st => ({ ...st }));
   s.tanks = snap.tanks.map(t => ({ ...t }));
-  s.turn = snap.turn; s.wind = snap.wind; s.phase = snap.phase; s.winnerId = snap.winnerId;
+  s.turn = snap.turn; s.wind = snap.wind;
+  s.gravity = snap.gravity ?? s.gravity; s.windMax = snap.windMax ?? s.windMax;
+  if (snap.settings) s.settings = snap.settings;
+  if (snap.round) s.round = snap.round;
+  if (snap.scores) s.scores = { ...snap.scores };
+  s.phase = snap.phase; s.winnerId = snap.winnerId;
 }

@@ -17,7 +17,16 @@ export interface Tank {
   id: string; name: string; color: string;
   x: number; y: number; health: number; alive: boolean;
   angle: number; power: number; weapon: string;
+  // Economy & defences (Scorched-Earth shop system)
+  cash: number;
+  inventory: Record<string, number>; // weaponId -> rounds owned (UNLIMITED = infinite)
+  armor: number;      // shield/battery points; absorbs damage before health
+  parachutes: number; // auto-deployed to cancel fall damage
 }
+
+/** Inventory sentinel meaning "never runs out" (JSON-safe, unlike Infinity). */
+export const UNLIMITED = 999999;
+export const isUnlimited = (n: number) => n >= 100000;
 
 /** A destructible building/structure that sits on the terrain and blocks shots. */
 export interface Structure {
@@ -92,29 +101,36 @@ export const WEAPONS: Weapon[] = [
   { id: 'riotblast',name: 'Riot Blast',   emoji: '🧹', radius: 68, damage: 0, kind: 'normal', cat: 'Riot' },
   // Utility
   { id: 'tracer',   name: 'Tracer',       emoji: '➰', radius: 0, damage: 0, kind: 'normal', cat: 'Utility' },
-  // Helper projectile — spawned by cluster/funky bursts, never selectable.
+  // Helper projectiles — spawned in play, never selectable.
   { id: 'bomblet',  name: 'Bomblet',      emoji: '•', radius: 20, damage: 22, kind: 'normal', hidden: true },
+  { id: 'meteor',   name: 'Meteor',       emoji: '☄️', radius: 40, damage: 44, kind: 'normal', hidden: true },
 ];
 export const weaponById = (id: string) => WEAPONS.find(w => w.id === id) ?? WEAPONS[0];
 /** Weapons shown in the toolbar (excludes helper projectiles). */
 export const PICKABLE_WEAPONS = WEAPONS.filter(w => !w.hidden);
 
 /* ── Match settings (mirrors the original game's options screen) ─────── */
-export type WindSetting = 'off' | 'low' | 'high';
+export type WindSetting = 'none' | 'constant' | 'changing';
 export type GravitySetting = 'low' | 'normal' | 'high';
 export type TerrainSetting = 'hills' | 'mountains' | 'plains';
+export type WeatherSetting = 'off' | 'light' | 'heavy';
+export type OrderSetting = 'sequential' | 'random' | 'losers' | 'winners';
 
 export interface GameSettings {
   players: number;          // local (hotseat) player count, 2..4
-  wind: WindSetting;
+  wind: WindSetting;        // none · constant (fixed per round) · changing (per turn)
   gravity: GravitySetting;
-  rounds: number;           // rounds per match (1,3,5,…)
+  rounds: number;           // rounds per match (1,3,5,10)
+  cash: number;             // starting cash for the shop
+  weather: WeatherSetting;  // meteor-shower intensity
+  order: OrderSetting;      // how the turn order cycles
   structures: boolean;      // place buildings on the map
   terrain: TerrainSetting;  // map style
 }
 
 export const DEFAULT_SETTINGS: GameSettings = {
-  players: 2, wind: 'low', gravity: 'normal', rounds: 3, structures: true, terrain: 'hills',
+  players: 2, wind: 'changing', gravity: 'normal', rounds: 10, cash: 25000,
+  weather: 'off', order: 'sequential', structures: true, terrain: 'hills',
 };
 
 /** Resolve a gravity setting to the per-frame acceleration used by the sim. */
@@ -123,7 +139,78 @@ export function gravityValue(s: GravitySetting): number {
 }
 /** Max |wind| a setting allows (wind itself is stored/rendered in -1..1). */
 export function windMaxFor(s: WindSetting): number {
-  return s === 'off' ? 0 : s === 'high' ? 1 : 0.5;
+  return s === 'none' ? 0 : 0.6;
+}
+
+/* ── Shop / economy ──────────────────────────────────────────────────── */
+export type ShopKind = 'weapon' | 'armor' | 'parachute';
+export interface ShopItem {
+  id: string; name: string; emoji: string;
+  price: number; qty: number;   // cost buys `qty` units
+  kind: ShopKind; value?: number; // armor: points added per unit
+}
+
+/** Weapons every tank always owns (free, unlimited) — never in the shop. */
+export const FREE_WEAPONS = ['baby'];
+
+/** Price/pack for a weapon, tiered by rough destructive power. */
+function weaponPrice(w: Weapon): { price: number; qty: number } {
+  const power = w.damage + w.radius * 0.6
+    + (w.splits ? w.splits * 5 : 0) + (w.bomblets ? w.bomblets * 4 : 0)
+    + (w.kind === 'homing' ? 30 : 0) + (w.kind === 'airstrike' ? 25 : 0)
+    + (w.kind === 'dirt' ? 20 : 0);
+  if (power < 26) return { price: 800, qty: 10 };
+  if (power < 50) return { price: 1875, qty: 10 };
+  if (power < 78) return { price: 5000, qty: 5 };
+  if (power < 108) return { price: 10000, qty: 3 };
+  return { price: 15000, qty: 1 };
+}
+
+/** The between-rounds shop: buyable weapons + defences. */
+export const SHOP_ITEMS: ShopItem[] = [
+  ...PICKABLE_WEAPONS.filter(w => !FREE_WEAPONS.includes(w.id)).map(w => {
+    const { price, qty } = weaponPrice(w);
+    return { id: w.id, name: w.name, emoji: w.emoji, price, qty, kind: 'weapon' as const };
+  }),
+  { id: 'parachute', name: 'Parachutes', emoji: '🪂', price: 1200, qty: 3, kind: 'parachute' },
+  { id: 'shield',    name: 'Shield',       emoji: '🛡️', price: 2500,  qty: 1, kind: 'armor', value: 50 },
+  { id: 'battery',   name: 'Battery',      emoji: '🔋', price: 3500,  qty: 1, kind: 'armor', value: 75 },
+  { id: 'heavysh',   name: 'Heavy Shield', emoji: '🛡️', price: 5000,  qty: 1, kind: 'armor', value: 100 },
+  { id: 'forcesh',   name: 'Force Shield', emoji: '🛡️', price: 10000, qty: 1, kind: 'armor', value: 200 },
+];
+
+/** A fresh tank inventory: unlimited Baby Missile (+ everything if `all`). */
+export function startInventory(all: boolean): Record<string, number> {
+  const inv: Record<string, number> = {};
+  for (const w of PICKABLE_WEAPONS) inv[w.id] = all || FREE_WEAPONS.includes(w.id) ? UNLIMITED : 0;
+  if (!all) { inv.missile = 3; inv.dirtclod = 2; } // a small starter kit
+  return inv;
+}
+
+/** Buy a shop item for a tank if affordable; mutates the tank. Returns success. */
+export function buyItem(t: Tank, item: ShopItem): boolean {
+  if (t.cash < item.price) return false;
+  t.cash -= item.price;
+  if (item.kind === 'weapon') {
+    const cur = t.inventory[item.id] ?? 0;
+    if (!isUnlimited(cur)) t.inventory[item.id] = cur + item.qty;
+  } else if (item.kind === 'armor') {
+    t.armor += (item.value ?? 0) * item.qty;
+  } else if (item.kind === 'parachute') {
+    t.parachutes += item.qty;
+  }
+  return true;
+}
+
+/** Owned, selectable weapons for a tank (count > 0), in toolbar order. */
+export function ownedWeapons(t: Tank): Weapon[] {
+  return PICKABLE_WEAPONS.filter(w => (t.inventory[w.id] ?? 0) > 0);
+}
+
+/** Spend one round of a weapon (no-op for unlimited weapons). */
+export function consumeWeapon(t: Tank, id: string): void {
+  const cur = t.inventory[id] ?? 0;
+  if (cur > 0 && !isUnlimited(cur)) t.inventory[id] = cur - 1;
 }
 
 export interface GameState {
@@ -138,6 +225,8 @@ export interface GameState {
   settings: GameSettings;
   round: number;       // 1-based current round
   scores: Record<string, number>; // wins per tank id across rounds
+  order: number[];     // tank indices in play order for this round
+  economy: boolean;    // shop/economy active (local play) vs unlimited (online)
   phase: 'aim' | 'flying' | 'over';
   winnerId: string | null; // winner of THIS round (null = draw / ongoing)
 }
@@ -224,31 +313,62 @@ export function genStructures(seed: number, terrain: number[], tanks: Tank[]): S
   return out.sort((a, b) => a.x - b.x);
 }
 
+/** Per-tank state carried between rounds (cash, inventory, defences). */
+export interface Carry { cash: number; inventory: Record<string, number>; armor: number; parachutes: number }
+
 /** Build a fresh game: terrain from the seed, tanks spread evenly across it. */
 export function newGame(
   seed: number, players: PlayerSeed[], settings: GameSettings = DEFAULT_SETTINGS,
-  opts: { round?: number; scores?: Record<string, number> } = {},
+  opts: { round?: number; scores?: Record<string, number>; carry?: Record<string, Carry>; economy?: boolean } = {},
 ): GameState {
   const terrain = genTerrain(seed, settings.terrain);
   const n = players.length;
+  const economy = opts.economy ?? true;
+  const scores = opts.scores ?? Object.fromEntries(players.map(p => [p.id, 0]));
   const tanks: Tank[] = players.map((p, i) => {
     const x = Math.round(WORLD.w * ((i + 1) / (n + 1)));
+    const c = opts.carry?.[p.id];
     return {
       id: p.id, name: p.name, color: TANK_COLORS[i % TANK_COLORS.length],
       x, y: terrain[x], health: 100, alive: true,
-      angle: x < WORLD.w / 2 ? 55 : 125, power: 58, weapon: 'bazooka',
+      angle: x < WORLD.w / 2 ? 55 : 125, power: 58, weapon: 'baby',
+      cash: c ? c.cash : (economy ? settings.cash : 0),
+      inventory: c ? { ...c.inventory } : startInventory(!economy),
+      armor: c ? c.armor : 0,
+      parachutes: c ? c.parachutes : 0,
     };
   });
   const structures = settings.structures ? genStructures(seed, terrain, tanks) : [];
   const windMax = windMaxFor(settings.wind);
-  const scores = opts.scores ?? Object.fromEntries(players.map(p => [p.id, 0]));
+  const order = turnOrder(seed, tanks, scores, settings.order);
   return {
-    seed, terrain, structures, tanks, turn: 0,
+    seed, terrain, structures, tanks, turn: order[0] ?? 0,
     wind: windFor(seed, 0, windMax),
     gravity: gravityValue(settings.gravity), windMax, settings,
-    round: opts.round ?? 1, scores,
+    round: opts.round ?? 1, scores, order, economy,
     phase: 'aim', winnerId: null,
   };
+}
+
+/** Extract each tank's carry-over economy state (for the next round). */
+export function carryOf(s: GameState): Record<string, Carry> {
+  const out: Record<string, Carry> = {};
+  for (const t of s.tanks) out[t.id] = { cash: t.cash, inventory: { ...t.inventory }, armor: t.armor, parachutes: t.parachutes };
+  return out;
+}
+
+/** Build the round's play order (indices into tanks) per the order setting. */
+export function turnOrder(seed: number, tanks: Tank[], scores: Record<string, number>, mode: OrderSetting): number[] {
+  const idx = tanks.map((_, i) => i);
+  if (mode === 'random') {
+    const rand = rng(seed ^ 0x1234567);
+    for (let i = idx.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [idx[i], idx[j]] = [idx[j], idx[i]]; }
+  } else if (mode === 'losers') {
+    idx.sort((a, b) => (scores[tanks[a].id] ?? 0) - (scores[tanks[b].id] ?? 0));
+  } else if (mode === 'winners') {
+    idx.sort((a, b) => (scores[tanks[b].id] ?? 0) - (scores[tanks[a].id] ?? 0));
+  }
+  return idx;
 }
 
 /** Deterministic wind per turn so all clients agree without extra messages. */
@@ -306,6 +426,16 @@ export function damageStructures(s: GameState, cx: number, cy: number, w: Weapon
   }
 }
 
+/** Apply damage to a tank, absorbed by armor (shields/battery) first. */
+export function applyDamage(t: Tank, dmg: number): void {
+  if (dmg <= 0) return;
+  if (t.armor > 0) {
+    const absorbed = Math.min(t.armor, dmg);
+    t.armor -= absorbed; dmg -= absorbed;
+  }
+  if (dmg > 0) t.health = Math.max(0, t.health - dmg);
+}
+
 /** Carve (or, for dirt, raise) a circular crater and damage nearby tanks +
  *  structures. Mutates the state's terrain + tanks + structures. */
 export function explode(s: GameState, cx: number, cy: number, w: Weapon): void {
@@ -320,7 +450,7 @@ export function explode(s: GameState, cx: number, cy: number, w: Weapon): void {
     }
     for (const t of s.tanks) {
       if (!t.alive) continue;
-      if (Math.abs(t.x - cx) < hw + 6 && t.y >= cy - 12) t.health = Math.max(0, t.health - w.damage);
+      if (Math.abs(t.x - cx) < hw + 6 && t.y >= cy - 12) applyDamage(t, w.damage);
     }
     settleTanks(s); return;
   }
@@ -333,7 +463,7 @@ export function explode(s: GameState, cx: number, cy: number, w: Weapon): void {
     for (const t of s.tanks) {
       if (!t.alive) continue;
       const d = Math.abs(t.x - cx);
-      if (d < burn && Math.abs(t.y - cy) < 70) t.health = Math.max(0, t.health - Math.round(w.damage * (1 - d / burn)));
+      if (d < burn && Math.abs(t.y - cy) < 70) applyDamage(t, Math.round(w.damage * (1 - d / burn)));
     }
     damageStructures(s, cx, cy, w);
     settleTanks(s); return;
@@ -352,10 +482,7 @@ export function explode(s: GameState, cx: number, cy: number, w: Weapon): void {
     for (const t of s.tanks) {
       if (!t.alive) continue;
       const d = Math.hypot(t.x - cx, t.y - cy);
-      if (d < r + 6) {
-        const dmg = Math.round(w.damage * (1 - d / (r + 6)));
-        t.health = Math.max(0, t.health - dmg);
-      }
+      if (d < r + 6) applyDamage(t, Math.round(w.damage * (1 - d / (r + 6))));
     }
     damageStructures(s, cx, cy, w);
   }
@@ -370,7 +497,11 @@ export function settleTanks(s: GameState): void {
     const ground = terrainAt(s, t.x);
     if (ground > t.y + 2) {
       const fall = ground - t.y;
-      if (fall > 60) t.health = Math.max(0, t.health - Math.round((fall - 60) / 4));
+      // A parachute auto-deploys to cancel a damaging fall; else take fall damage.
+      if (fall > 60) {
+        if (t.parachutes > 0) t.parachutes -= 1;
+        else applyDamage(t, Math.round((fall - 60) / 4));
+      }
     }
     t.y = ground;
     if (t.health <= 0) t.alive = false;
@@ -393,6 +524,23 @@ export function awardRound(s: GameState): void {
   if (s.winnerId) s.scores[s.winnerId] = (s.scores[s.winnerId] ?? 0) + 1;
 }
 
+/** Pay out cash at the end of a round: survival + health + a win bonus. */
+export function awardCash(s: GameState): void {
+  if (!s.economy) return;
+  for (const t of s.tanks) {
+    let earned = 1000; // participation
+    if (t.alive) earned += 2000 + Math.round(t.health * 15);
+    if (t.id === s.winnerId) earned += 6000;
+    t.cash += earned;
+  }
+}
+
+/** Finish a round: credit the win and pay out cash. */
+export function endRound(s: GameState): void {
+  awardRound(s);
+  awardCash(s);
+}
+
 /** True when the whole match (all rounds) is decided. */
 export function matchOver(s: GameState): boolean {
   return s.round >= s.settings.rounds;
@@ -408,16 +556,19 @@ export function matchChampion(s: GameState): string | null {
   return tie ? null : best;
 }
 
-/** Advance to the next living tank and roll fresh wind. */
+/** Advance to the next living tank (following the round's play order) and,
+ *  when wind is 'changing', roll fresh wind. */
 export function nextTurn(s: GameState): void {
   if (checkOver(s)) return;
-  let next = s.turn;
-  for (let i = 0; i < s.tanks.length; i++) {
-    next = (next + 1) % s.tanks.length;
-    if (s.tanks[next].alive) break;
+  const order = s.order.length === s.tanks.length ? s.order : s.tanks.map((_, i) => i);
+  const pos = Math.max(0, order.indexOf(s.turn));
+  for (let i = 1; i <= order.length; i++) {
+    const cand = order[(pos + i) % order.length];
+    if (s.tanks[cand]?.alive) { s.turn = cand; break; }
   }
-  s.turn = next;
-  s.wind = windFor(s.seed, (s.wind * 1000 + Date.now()) | 0, s.windMax);
+  if (s.settings.wind === 'changing') {
+    s.wind = windFor(s.seed, (s.wind * 1000 + Date.now()) | 0, s.windMax);
+  }
   s.phase = 'aim';
 }
 
@@ -427,6 +578,7 @@ export interface Snapshot {
   terrain: number[]; structures: Structure[]; tanks: Tank[];
   turn: number; wind: number; gravity: number; windMax: number;
   settings: GameSettings; round: number; scores: Record<string, number>;
+  order?: number[]; economy?: boolean;
   phase: GameState['phase']; winnerId: string | null;
 }
 export function snapshot(s: GameState): Snapshot {
@@ -436,6 +588,7 @@ export function snapshot(s: GameState): Snapshot {
     tanks: s.tanks.map(t => ({ ...t })),
     turn: s.turn, wind: s.wind, gravity: s.gravity, windMax: s.windMax,
     settings: s.settings, round: s.round, scores: { ...s.scores },
+    order: s.order.slice(), economy: s.economy,
     phase: s.phase, winnerId: s.winnerId,
   };
 }
@@ -448,5 +601,7 @@ export function applySnapshot(s: GameState, snap: Snapshot): void {
   if (snap.settings) s.settings = snap.settings;
   if (snap.round) s.round = snap.round;
   if (snap.scores) s.scores = { ...snap.scores };
+  if (snap.order) s.order = snap.order.slice();
+  if (typeof snap.economy === 'boolean') s.economy = snap.economy;
   s.phase = snap.phase; s.winnerId = snap.winnerId;
 }

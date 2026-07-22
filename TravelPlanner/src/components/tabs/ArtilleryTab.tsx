@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { Users, Loader2, Crosshair, Wind, Maximize2, Minimize2, X, ChevronUp, ChevronDown, Settings2, Play, ChevronLeft } from 'lucide-react';
+import { Users, Loader2, Crosshair, Wind, Maximize2, Minimize2, X, ChevronUp, ChevronDown, Settings2, Play, ChevronLeft, ShoppingCart, Coins } from 'lucide-react';
 import { TabHeader } from '../ui';
 import { getSyncCode, isSyncConfigured } from '../../lib/config';
 import { chatDeviceId } from '../../lib/chatUnread';
@@ -9,20 +9,36 @@ import { useTravelers } from '../../hooks/useTrip';
 import { lockLandscape, unlockOrientation } from '../../lib/orientation';
 import type { Room, Peer } from '../../lib/realtime';
 import {
-  WORLD, WIND_ACCEL, PICKABLE_WEAPONS, weaponById, newGame, launch, explode,
+  WORLD, WIND_ACCEL, SHOP_ITEMS, weaponById, newGame, launch, explode,
   nextTurn, checkOver, terrainAt, structureAt, snapshot, applySnapshot,
-  awardRound, matchOver, matchChampion, DEFAULT_SETTINGS,
-  type GameState, type PlayerSeed, type Snapshot, type GameSettings, type Structure,
+  matchOver, matchChampion, DEFAULT_SETTINGS, endRound, carryOf, buyItem, ownedWeapons,
+  consumeWeapon, isUnlimited,
+  type GameState, type PlayerSeed, type Snapshot, type GameSettings, type Structure, type Carry,
 } from '../../game/artillery';
 
 type Trail = { x: number; y: number }[];
 type Proj = { x: number; y: number; vx: number; vy: number; weapon: string; rolling?: boolean; rollDist?: number; split?: boolean; dead?: boolean; life?: number; trail?: Trail; bounces?: number; leaps?: number };
 type Flash = { x: number; y: number; r: number; t: number; color: string };
+type Sim = { projs: Proj[]; flashes: Flash[]; authority: boolean; meteor?: boolean };
 
 const SETTINGS_KEY = 'trip.artillery.settings';
+const ONE_OF = <T,>(v: unknown, allowed: readonly T[], def: T): T => (allowed.includes(v as T) ? (v as T) : def);
+/** Load settings, coercing any stale/invalid values to valid ones. */
 function loadSettings(): GameSettings {
-  try { return { ...DEFAULT_SETTINGS, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}') }; }
-  catch { return { ...DEFAULT_SETTINGS }; }
+  let raw: Partial<GameSettings> = {};
+  try { raw = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}'); } catch { /* ignore */ }
+  const s = { ...DEFAULT_SETTINGS, ...raw };
+  return {
+    players: ONE_OF(s.players, [2, 3, 4], 2),
+    wind: ONE_OF(s.wind, ['none', 'constant', 'changing'] as const, 'changing'),
+    gravity: ONE_OF(s.gravity, ['low', 'normal', 'high'] as const, 'normal'),
+    rounds: ONE_OF(s.rounds, [1, 3, 5, 10], 10),
+    cash: ONE_OF(s.cash, [0, 10000, 25000, 50000], 25000),
+    weather: ONE_OF(s.weather, ['off', 'light', 'heavy'] as const, 'off'),
+    order: ONE_OF(s.order, ['sequential', 'random', 'losers', 'winners'] as const, 'sequential'),
+    structures: typeof s.structures === 'boolean' ? s.structures : true,
+    terrain: ONE_OF(s.terrain, ['plains', 'hills', 'mountains'] as const, 'hills'),
+  };
 }
 
 type StartPayload = { seed: number; players: PlayerSeed[]; settings: GameSettings; round: number; scores: Record<string, number> };
@@ -33,7 +49,9 @@ export function ArtilleryTab() {
   const myName = travelers[0]?.name || getDeviceName();
   const configured = isSyncConfigured();
 
-  const [screen, setScreen] = useState<'splash' | 'setup' | 'settings' | 'lobby' | 'game'>('splash');
+  const [screen, setScreen] = useState<'splash' | 'setup' | 'settings' | 'lobby' | 'game' | 'shop'>('splash');
+  // Between-rounds shop: index into living tanks whose turn it is to buy.
+  const [shopIdx, setShopIdx] = useState(0);
   const [peers, setPeers] = useState<Peer[]>([]);
   const [connecting, setConnecting] = useState(false);
   const [error, setError] = useState('');
@@ -98,7 +116,8 @@ export function ArtilleryTab() {
       room.onPeers(p => setPeers([...p]));
       room.on('start', (payload: StartPayload) => {
         matchRef.current = { players: payload.players, settings: payload.settings };
-        gameRef.current = newGame(payload.seed, payload.players, payload.settings, { round: payload.round, scores: payload.scores });
+        // Online is a quick battle: all weapons unlimited, no shop/economy.
+        gameRef.current = newGame(payload.seed, payload.players, payload.settings, { round: payload.round, scores: payload.scores, economy: false });
         setBarOpen(true); setScreen('game'); rerender();
       });
       room.on('fire', (p: { angle: number; power: number; weapon: string; fromId: string }) => {
@@ -142,14 +161,36 @@ export function ArtilleryTab() {
     setBarOpen(true); setScreen('game'); rerender();
   }
 
-  /** Begin the next round (new terrain, carried scores) or a brand-new match. */
-  function advance(fresh: boolean) {
+  /** Build the next round locally, carrying scores + (unless fresh) economy. */
+  function buildLocalRound(fresh: boolean, carry?: Record<string, Carry>) {
     const g = gameRef.current; const m = matchRef.current; if (!m) return;
     const round = fresh ? 1 : (g?.round ?? 1) + 1;
     const scores = fresh ? Object.fromEntries(m.players.map(p => [p.id, 0])) : (g?.scores ?? {});
-    if (online.current) { sendStart(m.players, round, scores); return; }
-    gameRef.current = newGame((Math.random() * 2 ** 31) | 0, m.players, m.settings, { round, scores });
-    setBarOpen(true); rerender();
+    gameRef.current = newGame((Math.random() * 2 ** 31) | 0, m.players, m.settings, { round, scores, carry, economy: true });
+    setBarOpen(true); setScreen('game'); rerender();
+  }
+
+  /** After a round: online restarts immediately; local opens the shop first
+   *  (unless it's a brand-new match, which resets the economy). */
+  function advance(fresh: boolean) {
+    const g = gameRef.current; const m = matchRef.current; if (!m) return;
+    if (online.current) {
+      const round = fresh ? 1 : (g?.round ?? 1) + 1;
+      const scores = fresh ? Object.fromEntries(m.players.map(p => [p.id, 0])) : (g?.scores ?? {});
+      sendStart(m.players, round, scores);
+      return;
+    }
+    if (fresh) { buildLocalRound(true); return; } // new match — fresh economy
+    // Carry economy forward and let each surviving-or-all player shop.
+    setShopIdx(0); setScreen('shop'); rerender();
+  }
+
+  /** Finish shopping for the current player and either advance to the next
+   *  shopper or start the next round carrying everyone's purchases. */
+  function shopNext() {
+    const g = gameRef.current; if (!g) return;
+    if (shopIdx + 1 < g.tanks.length) { setShopIdx(shopIdx + 1); rerender(); return; }
+    buildLocalRound(false, carryOf(g));
   }
 
   function quitGame() {
@@ -163,7 +204,7 @@ export function ArtilleryTab() {
 
   // ── Projectile animation (authority mutates state + broadcasts) ────
   const rafRef = useRef<number | null>(null);
-  const simRef = useRef<{ projs: Proj[]; flashes: Flash[]; authority: boolean } | null>(null);
+  const simRef = useRef<Sim | null>(null);
 
   function cancelAnim() { if (rafRef.current) cancelAnimationFrame(rafRef.current); rafRef.current = null; simRef.current = null; }
 
@@ -185,7 +226,11 @@ export function ArtilleryTab() {
   function fire() {
     const g = gameRef.current; if (!g || g.phase !== 'aim') return;
     const t = g.tanks[g.turn]; if (!t || !t.alive) return;
+    if ((t.inventory[t.weapon] ?? 0) <= 0) t.weapon = 'baby'; // safety
     if (online.current) roomRef.current?.send('fire', { angle: t.angle, power: t.power, weapon: t.weapon, fromId: t.id });
+    // Spend a round of the fired weapon; if it's now empty, fall back to Baby.
+    consumeWeapon(t, t.weapon);
+    if ((t.inventory[t.weapon] ?? 0) <= 0) t.weapon = 'baby';
     animateShot(t.id, true);
   }
 
@@ -304,7 +349,7 @@ export function ArtilleryTab() {
     rafRef.current = requestAnimationFrame(step);
   }
 
-  function impact(p: Proj, sim: { projs: Proj[]; flashes: Flash[]; authority: boolean }) {
+  function impact(p: Proj, sim: Sim) {
     const g = gameRef.current!; const w = weaponById(p.weapon);
     p.dead = true;
     sim.flashes.push({ x: p.x, y: p.y, r: Math.max(14, w.radius), t: 0, color: w.kind === 'dirt' ? '#a16207' : '#fb923c' });
@@ -325,11 +370,12 @@ export function ArtilleryTab() {
     }
   }
 
-  function resolve(sim: { projs: Proj[]; flashes: Flash[]; authority: boolean }) {
+  function resolve(sim: Sim) {
     const g = gameRef.current!;
     if (sim.authority) {
       checkOver(g);
-      if (g.phase === 'over') awardRound(g); // credit the round win exactly once
+      if (g.phase === 'over') endRound(g);           // credit the round win + pay cash once
+      else if (sim.meteor) { if (!g.tanks[g.turn]?.alive) nextTurn(g); } // meteor killed the active tank
       else nextTurn(g);
       if (online.current) roomRef.current?.send('snap', snapshot(g));
     }
@@ -338,6 +384,26 @@ export function ArtilleryTab() {
     // We're at the end of a step frame (its id is consumed) — schedule the fade
     // loop unconditionally so rafRef never gets stuck holding a dead id.
     rafRef.current = requestAnimationFrame(fadeOnly);
+    // A fresh aim turn in a local weather game may bring a meteor shower.
+    if (sim.authority && !sim.meteor && g.phase === 'aim') maybeMeteors();
+  }
+
+  /** Weather: occasionally rain meteors between turns (local games only). */
+  function maybeMeteors() {
+    const g = gameRef.current; if (!g || online.current || g.settings.weather === 'off') return;
+    const chance = g.settings.weather === 'heavy' ? 0.5 : 0.22;
+    if (Math.random() > chance) return;
+    const count = g.settings.weather === 'heavy' ? 2 + (Math.random() * 3 | 0) : 1 + (Math.random() * 2 | 0);
+    g.phase = 'flying';
+    const projs: Proj[] = [];
+    for (let i = 0; i < count; i++) {
+      const x = 40 + Math.random() * (WORLD.w - 80);
+      projs.push({ x, y: -30 - Math.random() * 50, vx: (Math.random() - 0.5) * 1.5, vy: 2.2 + Math.random() * 1.5, weapon: 'meteor', split: true, trail: [] });
+    }
+    simRef.current = { projs, flashes: simRef.current?.flashes ?? [], authority: true, meteor: true };
+    rerender();
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    rafRef.current = requestAnimationFrame(step);
   }
   function fadeOnly() {
     const sim = simRef.current; if (!sim) { rafRef.current = null; return; }
@@ -529,10 +595,10 @@ export function ArtilleryTab() {
             <Seg label="Players" value={String(settings.players)} options={['2', '3', '4']}
               onPick={v => saveSettings({ players: +v })} render={v => `${v} players`} />
             <div className="rounded-2xl border border-line bg-surface p-3 text-xs text-muted">
-              Take turns on one phone — each player aims and fires, then hands it to the next.
-              Best of {settings.rounds} · wind {settings.wind} · gravity {settings.gravity}
-              {settings.structures ? ' · buildings on' : ''}.
-              <button onClick={() => setScreen('settings')} className="text-accent font-semibold ml-1">Change</button>
+              Take turns on one phone — aim, fire, then hand it on. Between rounds you earn cash and
+              shop for weapons, shields and parachutes.
+              <div className="mt-1">{settings.rounds} rounds · ${settings.cash.toLocaleString()} start · wind {settings.wind} · gravity {settings.gravity} · {settings.order} order{settings.weather !== 'off' ? ` · ${settings.weather} meteors` : ''}{settings.structures ? ' · buildings' : ''}.
+              <button onClick={() => setScreen('settings')} className="text-accent font-semibold ml-1">Change</button></div>
             </div>
             <button onClick={startLocal} className="w-full accent-gradient text-white font-bold rounded-2xl py-3.5 flex items-center justify-center gap-2 press">
               <Play size={18} /> Start battle
@@ -543,12 +609,18 @@ export function ArtilleryTab() {
         {screen === 'settings' && (
           <div className="space-y-4">
             <BackRow onBack={() => setScreen('splash')} title="Game settings" />
+            <p className="text-xs font-bold text-muted uppercase tracking-wide">Game options</p>
             <Seg label="Players (local)" value={String(settings.players)} options={['2', '3', '4']} onPick={v => saveSettings({ players: +v })} render={v => v} />
-            <Seg label="Rounds per match" value={String(settings.rounds)} options={['1', '3', '5']} onPick={v => saveSettings({ rounds: +v })} render={v => `Best of ${v}`} />
-            <Seg label="Wind" value={settings.wind} options={['off', 'low', 'high']} onPick={v => saveSettings({ wind: v as GameSettings['wind'] })} render={v => v} />
+            <Seg label="Rounds per match" value={String(settings.rounds)} options={['1', '3', '5', '10']} onPick={v => saveSettings({ rounds: +v })} render={v => v} />
+            <Seg label="Starting cash" value={String(settings.cash)} options={['0', '10000', '25000', '50000']} onPick={v => saveSettings({ cash: +v })} render={v => v === '0' ? 'None' : `$${(+v / 1000)}k`} />
             <Seg label="Gravity" value={settings.gravity} options={['low', 'normal', 'high']} onPick={v => saveSettings({ gravity: v as GameSettings['gravity'] })} render={v => v} />
+            <p className="text-xs font-bold text-muted uppercase tracking-wide pt-1">Environment</p>
+            <Seg label="Wind" value={settings.wind} options={['none', 'constant', 'changing']} onPick={v => saveSettings({ wind: v as GameSettings['wind'] })} render={v => v} />
+            <Seg label="Meteor showers" value={settings.weather} options={['off', 'light', 'heavy']} onPick={v => saveSettings({ weather: v as GameSettings['weather'] })} render={v => v} />
             <Seg label="Terrain" value={settings.terrain} options={['plains', 'hills', 'mountains']} onPick={v => saveSettings({ terrain: v as GameSettings['terrain'] })} render={v => v} />
             <Seg label="Buildings" value={settings.structures ? 'on' : 'off'} options={['off', 'on']} onPick={v => saveSettings({ structures: v === 'on' })} render={v => v} />
+            <p className="text-xs font-bold text-muted uppercase tracking-wide pt-1">Play order</p>
+            <Seg label="Turn order" value={settings.order} options={['sequential', 'random', 'losers', 'winners']} onPick={v => saveSettings({ order: v as GameSettings['order'] })} render={v => v === 'losers' ? 'losers 1st' : v === 'winners' ? 'winners 1st' : v} />
             <button onClick={() => setScreen('splash')} className="w-full accent-gradient text-white font-bold rounded-2xl py-3 press">Done</button>
           </div>
         )}
@@ -576,6 +648,47 @@ export function ArtilleryTab() {
             </button>
           </div>
         )}
+
+        {screen === 'shop' && g && (() => {
+          const shopper = g.tanks[shopIdx]; if (!shopper) return null;
+          return (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="font-bold text-content flex items-center gap-1.5"><ShoppingCart size={18} /> {shopper.name}’s shop</h3>
+                <span className="text-sm font-bold text-emerald-600 flex items-center gap-1"><Coins size={15} /> ${shopper.cash.toLocaleString()}</span>
+              </div>
+              <p className="text-xs text-muted">Round {g.round + 1} of {g.settings.rounds} coming up. Spend your winnings, then pass the phone.
+                {shopper.armor > 0 || shopper.parachutes > 0
+                  ? <span className="ml-1">Have: {shopper.armor > 0 ? `🛡 ${shopper.armor} armor` : ''}{shopper.armor > 0 && shopper.parachutes > 0 ? ' · ' : ''}{shopper.parachutes > 0 ? `🪂 ${shopper.parachutes}` : ''}.</span>
+                  : null}
+              </p>
+              <div className="grid grid-cols-2 gap-2 max-h-[52vh] overflow-y-auto pr-1">
+                {SHOP_ITEMS.map(item => {
+                  const owned = item.kind === 'weapon' ? (shopper.inventory[item.id] ?? 0) : 0;
+                  const afford = shopper.cash >= item.price;
+                  return (
+                    <button key={item.id} disabled={!afford}
+                      onClick={() => { if (buyItem(shopper, item)) rerender(); }}
+                      className={`text-left rounded-xl border p-2.5 press ${afford ? 'bg-surface border-line active:bg-accent/5' : 'bg-surface/50 border-line opacity-50'}`}>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-lg">{item.emoji}</span>
+                        <span className="text-sm font-bold text-content leading-tight flex-1">{item.name}</span>
+                        {item.kind === 'weapon' && owned > 0 && <span className="text-[10px] font-bold text-accent">×{isUnlimited(owned) ? '∞' : owned}</span>}
+                      </div>
+                      <div className="mt-1 flex items-center justify-between text-[11px]">
+                        <span className="text-muted">{item.kind === 'weapon' ? `+${item.qty} rounds` : item.kind === 'armor' ? `+${item.value} armor` : `+${item.qty}`}</span>
+                        <span className="font-bold text-emerald-600">${item.price.toLocaleString()}</span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+              <button onClick={shopNext} className="w-full accent-gradient text-white font-bold rounded-2xl py-3 press">
+                {shopIdx + 1 < g.tanks.length ? `Done — next player` : `Start round ${g.round + 1}`}
+              </button>
+            </div>
+          );
+        })()}
 
         {screen === 'game' && g && createPortal(
           // Portal to <body> so the fixed overlay is viewport-relative (the tab's
@@ -618,7 +731,7 @@ export function ArtilleryTab() {
                 {g.tanks.map(t => (
                   <span key={t.id} className={`text-[11px] font-bold px-2 py-0.5 rounded-full backdrop-blur ${t.alive ? '' : 'opacity-40 line-through'}`}
                     style={{ background: `${t.color}33`, color: t.color, boxShadow: t.id === active?.id && g.phase !== 'over' ? `0 0 0 1.5px ${t.color}` : 'none' }}>
-                    {t.name} · {t.health}{g.settings.rounds > 1 ? ` · ${'★'.repeat(g.scores[t.id] || 0) || '0'}` : ''}
+                    {t.name} · {t.health}{t.armor > 0 ? ` 🛡${t.armor}` : ''}{t.parachutes > 0 ? ` 🪂${t.parachutes}` : ''}{g.settings.rounds > 1 ? ` · ${'★'.repeat(g.scores[t.id] || 0) || '0'}` : ''}
                   </span>
                 ))}
               </div>
@@ -664,13 +777,17 @@ export function ArtilleryTab() {
                         <input type="range" min={5} max={100} value={active.power} onChange={e => setAim({ power: +e.target.value })} className="w-full accent-orange-500" />
                       </label>
                       <div className="flex-1 flex gap-1 overflow-x-auto no-scrollbar">
-                        {PICKABLE_WEAPONS.map(w => (
-                          <button key={w.id} onClick={() => setAim({ weapon: w.id })}
-                            className={`flex-shrink-0 w-11 flex flex-col items-center justify-center gap-0.5 py-1 rounded-lg border text-white ${active.weapon === w.id ? 'bg-orange-500/25 border-orange-400' : 'bg-white/5 border-white/10'}`}>
-                            <span className="text-base leading-none">{w.emoji}</span>
-                            <span className="text-[8px] font-semibold text-white/70 leading-none text-center truncate w-full">{w.name}</span>
-                          </button>
-                        ))}
+                        {ownedWeapons(active).map(w => {
+                          const n = active.inventory[w.id] ?? 0;
+                          return (
+                            <button key={w.id} onClick={() => setAim({ weapon: w.id })}
+                              className={`relative flex-shrink-0 w-11 flex flex-col items-center justify-center gap-0.5 py-1 rounded-lg border text-white ${active.weapon === w.id ? 'bg-orange-500/25 border-orange-400' : 'bg-white/5 border-white/10'}`}>
+                              <span className="absolute top-0 right-0.5 text-[8px] font-bold text-amber-300 leading-none">{isUnlimited(n) ? '∞' : n}</span>
+                              <span className="text-base leading-none">{w.emoji}</span>
+                              <span className="text-[8px] font-semibold text-white/70 leading-none text-center truncate w-full">{w.name}</span>
+                            </button>
+                          );
+                        })}
                       </div>
                       <button onClick={fire} aria-label="Fire"
                         className="shrink-0 w-16 self-stretch accent-gradient text-white font-extrabold rounded-xl flex flex-col items-center justify-center gap-0.5 press">

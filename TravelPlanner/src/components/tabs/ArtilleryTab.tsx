@@ -16,7 +16,7 @@ import {
 } from '../../game/artillery';
 
 type Trail = { x: number; y: number }[];
-type Proj = { x: number; y: number; vx: number; vy: number; weapon: string; rolling?: boolean; rollDist?: number; split?: boolean; dead?: boolean; life?: number; trail?: Trail; bounces?: number };
+type Proj = { x: number; y: number; vx: number; vy: number; weapon: string; rolling?: boolean; rollDist?: number; split?: boolean; dead?: boolean; life?: number; trail?: Trail; bounces?: number; leaps?: number };
 type Flash = { x: number; y: number; r: number; t: number; color: string };
 
 const SETTINGS_KEY = 'trip.artillery.settings';
@@ -206,7 +206,7 @@ export function ArtilleryTab() {
       }
     } else {
       const l = launch(t);
-      projs = [{ ...l, weapon: t.weapon, trail: [], bounces: w.bounces }];
+      projs = [{ ...l, weapon: t.weapon, trail: [], bounces: w.bounces, leaps: w.leaps }];
     }
     simRef.current = { projs, flashes: simRef.current?.flashes ?? [], authority };
     rerender();
@@ -267,11 +267,15 @@ export function ArtilleryTab() {
         p.vy += gravity; p.vx += wind * WIND_ACCEL;
       }
       p.x += p.vx; p.y += p.vy;
-      // Mortar: splits into three on the way down (children marked so they
-      // don't re-split), capped for safety.
-      if (w.kind === 'mirv' && !p.split && p.vy > 1.3 && sim.projs.length < 24) {
+      // MIRV / Death's Head: split into sub-munitions on the way down (children
+      // marked so they don't re-split), capped for safety.
+      if (w.kind === 'mirv' && !p.split && p.vy > 1.3 && sim.projs.length < 22) {
+        const n = Math.min(w.splits ?? 3, 24 - sim.projs.length);
         p.split = true; p.dead = true;
-        for (const dvx of [-1.6, 0, 1.6]) sim.projs.push({ x: p.x, y: p.y, vx: p.vx + dvx, vy: p.vy, weapon: p.weapon, split: true, trail: [] });
+        for (let k = 0; k < n; k++) {
+          const dvx = (k - (n - 1) / 2) * 1.1;
+          sim.projs.push({ x: p.x, y: p.y, vx: p.vx + dvx, vy: p.vy, weapon: p.weapon, split: true, trail: [] });
+        }
         continue;
       }
       const tankHit = hitTank(g, p.x, p.y);
@@ -305,14 +309,19 @@ export function ArtilleryTab() {
     p.dead = true;
     sim.flashes.push({ x: p.x, y: p.y, r: Math.max(14, w.radius), t: 0, color: w.kind === 'dirt' ? '#a16207' : '#fb923c' });
     if (sim.authority) explode(g, p.x, p.y, w);
-    // Cluster & banana bombs burst into a scatter of bomblets on detonation.
-    if ((w.kind === 'cluster' || w.kind === 'banana') && !p.split && sim.projs.length < 22) {
-      const n = 5;
+    // Cluster / funky / banana bombs burst into a scatter of bomblets.
+    if ((w.kind === 'cluster' || w.kind === 'banana') && !p.split) {
+      const n = Math.min(w.bomblets ?? 5, Math.max(0, 22 - sim.projs.length));
       for (let i = 0; i < n; i++) {
-        const ang = -Math.PI / 2 + (i - (n - 1) / 2) * 0.42;
+        const ang = -Math.PI / 2 + (i - (n - 1) / 2) * 0.4;
         const sp = 2.6 + Math.random() * 2.2;
         sim.projs.push({ x: p.x, y: p.y - 4, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp, weapon: 'bomblet', split: true, trail: [] });
       }
+    }
+    // Leapfrog: hop a chain of blasts forward in the travel direction.
+    if (w.kind === 'leapfrog' && (p.leaps ?? 0) > 0 && sim.projs.length < 22) {
+      const dir = (p.vx || 1) >= 0 ? 1 : -1;
+      sim.projs.push({ x: p.x + dir * 8, y: p.y - 8, vx: dir * 3.6, vy: -4.6, weapon: p.weapon, leaps: (p.leaps ?? 0) - 1, trail: [] });
     }
   }
 

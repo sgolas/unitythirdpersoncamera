@@ -30,34 +30,70 @@ export interface Structure {
 
 export type WeaponKind =
   | 'normal' | 'mirv' | 'roller' | 'dirt'
-  | 'bounce' | 'cluster' | 'banana' | 'holy' | 'airstrike' | 'homing';
+  | 'bounce' | 'cluster' | 'banana' | 'holy' | 'airstrike' | 'homing'
+  | 'digger' | 'leapfrog' | 'napalm';
 export interface Weapon {
   id: string; name: string; emoji: string;
   radius: number; damage: number; kind: WeaponKind;
-  fuse?: number;    // frames before a bouncy weapon self-detonates
-  bounces?: number; // how many times a bouncy weapon rebounds off terrain
-  hidden?: boolean; // helper projectiles (cluster bomblets) — not shown in the toolbar
+  fuse?: number;     // frames before a bouncy weapon self-detonates
+  bounces?: number;  // how many times a bouncy weapon rebounds off terrain
+  splits?: number;   // MIRV/Death's Head child count
+  bomblets?: number; // cluster/funky burst count
+  leaps?: number;    // leapfrog hop count
+  cat?: string;      // toolbar grouping label
+  hidden?: boolean;  // helper projectiles (cluster bomblets) — not selectable
 }
 
 /**
- * A Worms-Armageddon-flavoured arsenal. The character is in the *mechanics*,
- * not just the names: grenades bounce on a fuse, cluster/banana bombs burst
- * into bomblets, the air strike rains bombs from the sky, the sheep walks the
- * ground before blowing up, and the homing missile chases the nearest enemy.
+ * A big Scorched-Earth arsenal (plus a few Worms-flavoured extras). The
+ * character is in the *mechanics*: missiles/nukes escalate in size, MIRV and
+ * Death's Head rain sub-munitions, grenades and the banana/holy bombs bounce on
+ * a fuse, cluster & funky bombs burst into bomblets, leapfrog walks a chain of
+ * blasts forward, napalm lays a wide sheet of fire, rollers walk downhill,
+ * diggers bore shafts, dirt weapons build terrain, riot charges clear it
+ * without damage, and the tracer is a no-damage ranging shot.
  */
 export const WEAPONS: Weapon[] = [
-  { id: 'bazooka', name: 'Bazooka',      emoji: '🚀', radius: 34, damage: 42, kind: 'normal' },
-  { id: 'grenade', name: 'Grenade',      emoji: '💣', radius: 32, damage: 44, kind: 'bounce', fuse: 150, bounces: 8 },
-  { id: 'cluster', name: 'Cluster Bomb', emoji: '🧨', radius: 22, damage: 26, kind: 'cluster' },
-  { id: 'banana',  name: 'Banana Bomb',  emoji: '🍌', radius: 30, damage: 40, kind: 'banana', fuse: 170, bounces: 6 },
-  { id: 'holy',    name: 'Holy Grenade',  emoji: '🙏', radius: 72, damage: 96, kind: 'holy', fuse: 130, bounces: 3 },
-  { id: 'mortar',  name: 'Mortar',       emoji: '☄️', radius: 26, damage: 32, kind: 'mirv' },
-  { id: 'airstrike', name: 'Air Strike', emoji: '✈️', radius: 30, damage: 38, kind: 'airstrike' },
-  { id: 'homing',  name: 'Homing',       emoji: '🎯', radius: 34, damage: 46, kind: 'homing' },
-  { id: 'sheep',   name: 'Sheep',        emoji: '🐑', radius: 34, damage: 52, kind: 'roller' },
-  { id: 'girder',  name: 'Girder',       emoji: '🧱', radius: 42, damage: 0,  kind: 'dirt' },
-  // Cluster/banana bomblets — spawned in play, never selectable.
-  { id: 'bomblet', name: 'Bomblet',      emoji: '•',  radius: 20, damage: 22, kind: 'normal', hidden: true },
+  // Missiles & nukes ─ escalating direct blasts
+  { id: 'baby',     name: 'Baby Missile', emoji: '🚀', radius: 22, damage: 24, kind: 'normal', cat: 'Missiles' },
+  { id: 'missile',  name: 'Missile',      emoji: '🚀', radius: 34, damage: 42, kind: 'normal', cat: 'Missiles' },
+  { id: 'babynuke', name: 'Baby Nuke',    emoji: '☢️', radius: 52, damage: 66, kind: 'normal', cat: 'Missiles' },
+  { id: 'nuke',     name: 'Nuke',         emoji: '💥', radius: 82, damage: 98, kind: 'normal', cat: 'Missiles' },
+  // Sub-munitions
+  { id: 'mirv',     name: 'MIRV',         emoji: '✳️', radius: 26, damage: 30, kind: 'mirv', splits: 5, cat: 'Cluster' },
+  { id: 'deaths',   name: "Death's Head", emoji: '💀', radius: 32, damage: 40, kind: 'mirv', splits: 9, cat: 'Cluster' },
+  { id: 'cluster',  name: 'Cluster Bomb', emoji: '🧨', radius: 22, damage: 26, kind: 'cluster', bomblets: 5, cat: 'Cluster' },
+  { id: 'funky',    name: 'Funky Bomb',   emoji: '🎉', radius: 22, damage: 24, kind: 'cluster', bomblets: 9, cat: 'Cluster' },
+  { id: 'leapfrog', name: 'Leapfrog',     emoji: '🐸', radius: 28, damage: 32, kind: 'leapfrog', leaps: 4, cat: 'Cluster' },
+  // Fire
+  { id: 'napalm',   name: 'Napalm',       emoji: '🔥', radius: 42, damage: 36, kind: 'napalm', cat: 'Fire' },
+  { id: 'hotnapalm',name: 'Hot Napalm',   emoji: '🔥', radius: 58, damage: 50, kind: 'napalm', cat: 'Fire' },
+  // Worms-style specials
+  { id: 'grenade',  name: 'Grenade',      emoji: '💣', radius: 32, damage: 44, kind: 'bounce', fuse: 150, bounces: 8, cat: 'Special' },
+  { id: 'banana',   name: 'Banana Bomb',  emoji: '🍌', radius: 30, damage: 40, kind: 'banana', fuse: 170, bounces: 6, bomblets: 5, cat: 'Special' },
+  { id: 'holy',     name: 'Holy Grenade', emoji: '🙏', radius: 72, damage: 96, kind: 'holy', fuse: 130, bounces: 3, cat: 'Special' },
+  { id: 'airstrike',name: 'Air Strike',   emoji: '✈️', radius: 30, damage: 38, kind: 'airstrike', cat: 'Special' },
+  { id: 'homing',   name: 'Homing',       emoji: '🎯', radius: 34, damage: 46, kind: 'homing', cat: 'Special' },
+  { id: 'sheep',    name: 'Sheep',        emoji: '🐑', radius: 34, damage: 52, kind: 'roller', cat: 'Special' },
+  // Rollers ─ walk downhill before blowing up
+  { id: 'babyroll', name: 'Baby Roller',  emoji: '🎳', radius: 24, damage: 30, kind: 'roller', cat: 'Rollers' },
+  { id: 'roller',   name: 'Roller',       emoji: '🎳', radius: 34, damage: 48, kind: 'roller', cat: 'Rollers' },
+  { id: 'heavyroll',name: 'Heavy Roller', emoji: '🎳', radius: 48, damage: 72, kind: 'roller', cat: 'Rollers' },
+  // Diggers ─ bore a shaft straight down
+  { id: 'babydig',  name: 'Baby Digger',  emoji: '⛏️', radius: 18, damage: 22, kind: 'digger', cat: 'Diggers' },
+  { id: 'digger',   name: 'Digger',       emoji: '⛏️', radius: 28, damage: 34, kind: 'digger', cat: 'Diggers' },
+  { id: 'heavydig', name: 'Heavy Digger', emoji: '⛏️', radius: 40, damage: 50, kind: 'digger', cat: 'Diggers' },
+  // Dirt ─ build terrain (shields / bridges)
+  { id: 'dirtclod', name: 'Dirt Clod',    emoji: '🟫', radius: 30, damage: 0, kind: 'dirt', cat: 'Dirt' },
+  { id: 'dirtball', name: 'Dirt Ball',    emoji: '🟫', radius: 46, damage: 0, kind: 'dirt', cat: 'Dirt' },
+  { id: 'tondirt',  name: 'Ton of Dirt',  emoji: '⛰️', radius: 70, damage: 0, kind: 'dirt', cat: 'Dirt' },
+  // Riot ─ clear dirt without harming tanks
+  { id: 'riotbomb', name: 'Riot Bomb',    emoji: '🧹', radius: 44, damage: 0, kind: 'normal', cat: 'Riot' },
+  { id: 'riotblast',name: 'Riot Blast',   emoji: '🧹', radius: 68, damage: 0, kind: 'normal', cat: 'Riot' },
+  // Utility
+  { id: 'tracer',   name: 'Tracer',       emoji: '➰', radius: 0, damage: 0, kind: 'normal', cat: 'Utility' },
+  // Helper projectile — spawned by cluster/funky bursts, never selectable.
+  { id: 'bomblet',  name: 'Bomblet',      emoji: '•', radius: 20, damage: 22, kind: 'normal', hidden: true },
 ];
 export const weaponById = (id: string) => WEAPONS.find(w => w.id === id) ?? WEAPONS[0];
 /** Weapons shown in the toolbar (excludes helper projectiles). */
@@ -275,6 +311,33 @@ export function damageStructures(s: GameState, cx: number, cy: number, w: Weapon
 export function explode(s: GameState, cx: number, cy: number, w: Weapon): void {
   if (w.radius <= 0) return;
   const r = w.radius;
+  if (w.kind === 'digger') {
+    // Bore a deep, narrow shaft straight down from the surface.
+    const hw = Math.max(5, Math.round(r * 0.4));
+    const depth = r * 2.4;
+    for (let x = Math.max(0, Math.round(cx - hw)); x <= Math.min(WORLD.w - 1, Math.round(cx + hw)); x++) {
+      s.terrain[x] = Math.min(WORLD.h, s.terrain[x] + depth);
+    }
+    for (const t of s.tanks) {
+      if (!t.alive) continue;
+      if (Math.abs(t.x - cx) < hw + 6 && t.y >= cy - 12) t.health = Math.max(0, t.health - w.damage);
+    }
+    settleTanks(s); return;
+  }
+  if (w.kind === 'napalm') {
+    // A wide, shallow sheet of fire: light surface scorch + broad tank burn.
+    for (let x = Math.max(0, Math.floor(cx - r)); x <= Math.min(WORLD.w - 1, Math.ceil(cx + r)); x++) {
+      s.terrain[x] = Math.min(WORLD.h, s.terrain[x] + 3);
+    }
+    const burn = r * 1.4;
+    for (const t of s.tanks) {
+      if (!t.alive) continue;
+      const d = Math.abs(t.x - cx);
+      if (d < burn && Math.abs(t.y - cy) < 70) t.health = Math.max(0, t.health - Math.round(w.damage * (1 - d / burn)));
+    }
+    damageStructures(s, cx, cy, w);
+    settleTanks(s); return;
+  }
   for (let x = Math.max(0, Math.floor(cx - r)); x <= Math.min(WORLD.w - 1, Math.ceil(cx + r)); x++) {
     const dx = x - cx;
     const dy = Math.sqrt(Math.max(0, r * r - dx * dx));

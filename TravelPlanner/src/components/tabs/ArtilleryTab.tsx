@@ -13,8 +13,34 @@ import {
   nextTurn, checkOver, terrainAt, structureAt, snapshot, applySnapshot,
   matchOver, matchChampion, DEFAULT_SETTINGS, endRound, carryOf, buyItem, ownedWeapons,
   consumeWeapon, isUnlimited,
-  type GameState, type PlayerSeed, type Snapshot, type GameSettings, type Structure, type Carry,
+  type GameState, type PlayerSeed, type Snapshot, type GameSettings, type Structure, type Carry, type Weapon,
 } from '../../game/artillery';
+
+/**
+ * Per-weapon visual identity. Every shell flies as its own emoji with a
+ * distinctly coloured smoke trail + glow and bursts in a colour that matches
+ * its nature — so a nuke, a banana bomb, a sheep and a dirt clod are instantly
+ * tellable apart in the air, not identical yellow dots. `orient` decides how
+ * the emoji is turned: 'fly' points it along its flight path (rockets),
+ * 'spin' tumbles it (lobbed bombs), 'none' leaves it upright.
+ */
+type Vis = { trail: string; glow: string; flash: string; orient: 'fly' | 'spin' | 'none' };
+function weaponVis(w: Weapon): Vis {
+  const id = w.id, k = w.kind;
+  if (id === 'nuke' || id === 'babynuke')      return { trail: '134,239,172', glow: '#22c55e', flash: '#84cc16', orient: 'fly' };
+  if (k === 'napalm')                          return { trail: '251,146,60',  glow: '#f97316', flash: '#ef4444', orient: 'spin' };
+  if (k === 'holy')                            return { trail: '253,230,138', glow: '#fbbf24', flash: '#fde047', orient: 'spin' };
+  if (k === 'mirv')                            return { trail: '196,181,253', glow: '#a78bfa', flash: '#c4b5fd', orient: 'fly' };
+  if (k === 'cluster' || k === 'banana')       return { trail: '250,204,21',  glow: '#eab308', flash: '#f59e0b', orient: 'spin' };
+  if (k === 'homing')                          return { trail: '248,113,113', glow: '#ef4444', flash: '#fb7185', orient: 'fly' };
+  if (k === 'airstrike')                       return { trail: '186,230,253', glow: '#38bdf8', flash: '#fb923c', orient: 'fly' };
+  if (k === 'digger' || k === 'dirt')          return { trail: '180,120,60',  glow: '#a16207', flash: '#a16207', orient: 'spin' };
+  if (k === 'roller')                          return { trail: '203,213,225', glow: '#94a3b8', flash: '#fb923c', orient: 'spin' };
+  if (k === 'bounce' || k === 'leapfrog')      return { trail: '134,239,172', glow: '#4ade80', flash: '#fb923c', orient: 'spin' };
+  if (id === 'riotbomb' || id === 'riotblast') return { trail: '191,219,254', glow: '#93c5fd', flash: '#bfdbfe', orient: 'spin' };
+  if (id === 'meteor')                         return { trail: '251,146,60',  glow: '#f97316', flash: '#ef4444', orient: 'fly' };
+  return { trail: '253,224,138', glow: '#fbbf24', flash: '#fb923c', orient: 'fly' }; // plain missiles
+}
 
 type Trail = { x: number; y: number }[];
 type Proj = { x: number; y: number; vx: number; vy: number; weapon: string; rolling?: boolean; rollDist?: number; split?: boolean; dead?: boolean; life?: number; trail?: Trail; bounces?: number; leaps?: number };
@@ -353,7 +379,7 @@ export function ArtilleryTab() {
   function impact(p: Proj, sim: Sim) {
     const g = gameRef.current!; const w = weaponById(p.weapon);
     p.dead = true;
-    sim.flashes.push({ x: p.x, y: p.y, r: Math.max(14, w.radius), t: 0, color: w.kind === 'dirt' ? '#a16207' : '#fb923c' });
+    sim.flashes.push({ x: p.x, y: p.y, r: Math.max(14, w.radius), t: 0, color: weaponVis(w).flash });
     if (sim.authority) explode(g, p.x, p.y, w);
     // Cluster / funky / banana bombs burst into a scatter of bomblets.
     if ((w.kind === 'cluster' || w.kind === 'banana') && !p.split) {
@@ -515,15 +541,34 @@ export function ArtilleryTab() {
     if (sim) {
       for (const p of sim.projs) {
         if (p.dead) continue;
+        const w = weaponById(p.weapon);
+        const vis = weaponVis(w);
+        // coloured smoke trail — thicker for heavier ordnance
         if (p.trail && p.trail.length > 1) {
+          ctx.lineCap = 'round';
           for (let i = 1; i < p.trail.length; i++) {
             const a = i / p.trail.length;
-            ctx.strokeStyle = `rgba(253,224,138,${a * 0.5})`; ctx.lineWidth = a * 3;
+            ctx.strokeStyle = `rgba(${vis.trail},${a * 0.55})`; ctx.lineWidth = a * (1.8 + w.radius * 0.06);
             ctx.beginPath(); ctx.moveTo(p.trail[i - 1].x, p.trail[i - 1].y); ctx.lineTo(p.trail[i].x, p.trail[i].y); ctx.stroke();
           }
         }
-        ctx.fillStyle = '#fff7cc'; ctx.shadowColor = '#fbbf24'; ctx.shadowBlur = 10;
-        ctx.beginPath(); ctx.arc(p.x, p.y, 3.4, 0, 7); ctx.fill(); ctx.shadowBlur = 0;
+        // head: bomblets/tracer are tiny glowing dots; everything else flies as
+        // its own emoji, sized by blast radius and turned per its `orient`.
+        if (p.weapon === 'bomblet' || w.radius === 0) {
+          ctx.fillStyle = '#fff7cc'; ctx.shadowColor = vis.glow; ctx.shadowBlur = 8;
+          ctx.beginPath(); ctx.arc(p.x, p.y, 2.8, 0, 7); ctx.fill(); ctx.shadowBlur = 0;
+        } else {
+          const size = Math.max(14, Math.min(32, 12 + w.radius * 0.3));
+          ctx.save();
+          ctx.translate(p.x, p.y);
+          if (vis.orient === 'fly') ctx.rotate(Math.atan2(p.vy, p.vx) + Math.PI / 4);
+          else if (vis.orient === 'spin') ctx.rotate((p.life ?? 0) * 0.12);
+          ctx.shadowColor = vis.glow; ctx.shadowBlur = 12;
+          ctx.font = `${size}px serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+          ctx.fillText(w.emoji, 0, 0);
+          ctx.restore();
+          ctx.shadowBlur = 0;
+        }
       }
       for (const f of sim.flashes) {
         const a = 1 - f.t / 18; const rr = f.r * (0.5 + f.t / 22);

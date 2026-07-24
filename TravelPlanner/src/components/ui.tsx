@@ -1,7 +1,7 @@
 /** Small reusable UI primitives shared across all tabs. */
 import { useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { X } from 'lucide-react';
+import { X, Plus } from 'lucide-react';
 import { money, CURRENCY_SYMBOLS } from '../types';
 
 /**
@@ -186,9 +186,12 @@ export function EmptyState({ emoji, title, hint, action }: { emoji: string; titl
 export function Fab({ onClick, label }: { onClick: () => void; label: string }) {
   return (
     <Overlay>
+      {/* Big, thumb-friendly target lifted clear of the bottom nav bar (which is
+          ~74px + the device's safe-area inset). */}
       <button onClick={onClick} aria-label={label} title={label}
-        className="fixed bottom-24 right-4 z-40 w-11 h-11 rounded-full bg-ink/90 text-white shadow-lg shadow-ink/25 active:scale-90 transition flex items-center justify-center backdrop-blur">
-        <span className="text-xl leading-none -mt-0.5">＋</span>
+        className="fixed right-5 z-[60] w-16 h-16 rounded-full accent-gradient text-white shadow-xl shadow-ink/30 active:scale-90 transition flex items-center justify-center"
+        style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 92px)' }}>
+        <Plus size={30} strokeWidth={2.5} />
       </button>
     </Overlay>
   );

@@ -150,28 +150,30 @@ export function ArtilleryTab() {
     sendStart(players, 1, Object.fromEntries(players.map(p => [p.id, 0])));
   }
 
-  /** Start a local pass-and-play match with the configured player count. */
+  /** Build (but don't yet enter) the upcoming round's game state. */
+  function buildRound(round: number, scores: Record<string, number>, carry?: Record<string, Carry>) {
+    const m = matchRef.current; if (!m) return;
+    gameRef.current = newGame((Math.random() * 2 ** 31) | 0, m.players, m.settings, { round, scores, carry, economy: true });
+  }
+
+  /** Show the arsenal shop for the first player, before the (already-built) round. */
+  function openShop() { cancelAnim(); setShopIdx(0); setScreen('shop'); rerender(); }
+
+  /** Enter the built round (called from the shop's Start button — a user gesture). */
+  function enterRound() { goImmersive(); setBarOpen(true); setScreen('game'); rerender(); }
+
+  /** Start a local pass-and-play match: build round 1, then shop before playing. */
   function startLocal() {
-    goImmersive();
     online.current = false; roomRef.current?.leave(); roomRef.current = null;
     const n = Math.min(4, Math.max(2, settings.players));
     const players: PlayerSeed[] = Array.from({ length: n }, (_, i) => ({ id: `p${i + 1}`, name: `Player ${i + 1}` }));
     matchRef.current = { players, settings };
-    gameRef.current = newGame((Math.random() * 2 ** 31) | 0, players, settings, { round: 1, scores: Object.fromEntries(players.map(p => [p.id, 0])) });
-    setBarOpen(true); setScreen('game'); rerender();
+    buildRound(1, Object.fromEntries(players.map(p => [p.id, 0])));
+    openShop();
   }
 
-  /** Build the next round locally, carrying scores + (unless fresh) economy. */
-  function buildLocalRound(fresh: boolean, carry?: Record<string, Carry>) {
-    const g = gameRef.current; const m = matchRef.current; if (!m) return;
-    const round = fresh ? 1 : (g?.round ?? 1) + 1;
-    const scores = fresh ? Object.fromEntries(m.players.map(p => [p.id, 0])) : (g?.scores ?? {});
-    gameRef.current = newGame((Math.random() * 2 ** 31) | 0, m.players, m.settings, { round, scores, carry, economy: true });
-    setBarOpen(true); setScreen('game'); rerender();
-  }
-
-  /** After a round: online restarts immediately; local opens the shop first
-   *  (unless it's a brand-new match, which resets the economy). */
+  /** After a round: online restarts immediately; local builds the next round and
+   *  opens the shop (a brand-new match resets the economy first). */
   function advance(fresh: boolean) {
     const g = gameRef.current; const m = matchRef.current; if (!m) return;
     if (online.current) {
@@ -180,17 +182,16 @@ export function ArtilleryTab() {
       sendStart(m.players, round, scores);
       return;
     }
-    if (fresh) { buildLocalRound(true); return; } // new match — fresh economy
-    // Carry economy forward and let each surviving-or-all player shop.
-    setShopIdx(0); setScreen('shop'); rerender();
+    if (fresh) buildRound(1, Object.fromEntries(m.players.map(p => [p.id, 0])));
+    else buildRound((g?.round ?? 1) + 1, g?.scores ?? {}, carryOf(g!));
+    openShop();
   }
 
-  /** Finish shopping for the current player and either advance to the next
-   *  shopper or start the next round carrying everyone's purchases. */
+  /** Finish shopping for the current player, then the next player, then play. */
   function shopNext() {
     const g = gameRef.current; if (!g) return;
     if (shopIdx + 1 < g.tanks.length) { setShopIdx(shopIdx + 1); rerender(); return; }
-    buildLocalRound(false, carryOf(g));
+    enterRound();
   }
 
   function quitGame() {
@@ -601,7 +602,7 @@ export function ArtilleryTab() {
               <button onClick={() => setScreen('settings')} className="text-accent font-semibold ml-1">Change</button></div>
             </div>
             <button onClick={startLocal} className="w-full accent-gradient text-white font-bold rounded-2xl py-3.5 flex items-center justify-center gap-2 press">
-              <Play size={18} /> Start battle
+              <ShoppingCart size={18} /> To the armoury
             </button>
           </div>
         )}
@@ -657,7 +658,7 @@ export function ArtilleryTab() {
                 <h3 className="font-bold text-content flex items-center gap-1.5"><ShoppingCart size={18} /> {shopper.name}’s shop</h3>
                 <span className="text-sm font-bold text-emerald-600 flex items-center gap-1"><Coins size={15} /> ${shopper.cash.toLocaleString()}</span>
               </div>
-              <p className="text-xs text-muted">Round {g.round + 1} of {g.settings.rounds} coming up. Spend your winnings, then pass the phone.
+              <p className="text-xs text-muted">Round {g.round} of {g.settings.rounds}{g.round === 1 ? ' — kit out your tank' : ' coming up'}. Spend your cash, then pass the phone.
                 {shopper.armor > 0 || shopper.parachutes > 0
                   ? <span className="ml-1">Have: {shopper.armor > 0 ? `🛡 ${shopper.armor} armor` : ''}{shopper.armor > 0 && shopper.parachutes > 0 ? ' · ' : ''}{shopper.parachutes > 0 ? `🪂 ${shopper.parachutes}` : ''}.</span>
                   : null}
@@ -684,8 +685,9 @@ export function ArtilleryTab() {
                 })}
               </div>
               <button onClick={shopNext} className="w-full accent-gradient text-white font-bold rounded-2xl py-3 press">
-                {shopIdx + 1 < g.tanks.length ? `Done — next player` : `Start round ${g.round + 1}`}
+                {shopIdx + 1 < g.tanks.length ? `Done — next player` : g.round === 1 ? 'Deploy — start battle' : `Start round ${g.round}`}
               </button>
+              <button onClick={() => { gameRef.current = null; setScreen('splash'); }} className="w-full text-muted text-sm py-1">Leave match</button>
             </div>
           );
         })()}

@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { Trash2, MapPin, Clock } from 'lucide-react';
-import { useItinerary, useTrip } from '../../hooks/useTrip';
+import { useItinerary, useTrip, useTransport, useAccommodation, useCarRentals } from '../../hooks/useTrip';
 import { put, remove } from '../../db/database';
 import type { ItineraryEvent } from '../../types';
 import { money } from '../../types';
@@ -20,8 +20,22 @@ const CATS = [
 type Cat = typeof CATS[number]['key'];
 const catMeta = (k: Cat) => CATS.find(c => c.key === k)!;
 
-export function ItineraryTab() {
+const MODE_EMOJI: Record<string, string> = { flight: '✈️', train: '🚆', bus: '🚌', car: '🚗', ferry: '⛴️', transfer: '🚐', other: '📍' };
+
+/** A normalised entry in the "All Events" trip timeline. */
+type TimelineNav = 'transport' | 'accommodation' | 'carrental';
+type TL = {
+  id: string; date: string; time: string; emoji: string; color: string;
+  title: string; sub?: string; cost?: number; costCur?: string;
+  ev?: ItineraryEvent;   // itinerary items open the editor
+  nav?: TimelineNav;     // logistics items jump to their tab
+};
+
+export function ItineraryTab({ onNavigate }: { onNavigate?: (v: TimelineNav) => void } = {}) {
   const events = useItinerary();
+  const transport = useTransport();
+  const stays = useAccommodation();
+  const cars = useCarRentals();
   const trip = useTrip();
   const [selectedDate, setSelectedDate] = useState(() => {
     const today = todayStr();
@@ -39,12 +53,31 @@ export function ItineraryTab() {
   const dayEvents = events.filter(e => e.date === selectedDate);
   const dayCost = dayEvents.reduce((s, e) => s + convert(e.cost || 0, e.costCurrency ?? cur, cur), 0);
 
-  // "All" view: every event grouped by date, in chronological order.
-  const groups = useMemo(() => {
-    const by = new Map<string, ItineraryEvent[]>();
-    for (const e of events) { const k = e.date || 'No date'; (by.get(k) ?? by.set(k, []).get(k)!).push(e); }
+  // "All Events": a full trip timeline — activities + flights/trains, hotel
+  // check-in/out, and car pick-up/drop-off — grouped by date, ordered by time.
+  const timeline = useMemo(() => {
+    const items: TL[] = [];
+    for (const e of events) if (e.date) {
+      const m = catMeta(e.category as Cat);
+      items.push({ id: 'i' + e.id, date: e.date, time: e.startTime || '', emoji: m.emoji, color: m.color, title: e.title, sub: e.place, cost: e.cost, costCur: e.costCurrency, ev: e });
+    }
+    for (const t of transport) if (t.departDate) {
+      const name = t.flightNumber ? ` ${t.flightNumber}` : t.provider ? ` · ${t.provider}` : '';
+      items.push({ id: 't' + t.id, date: t.departDate, time: t.departTime || '', emoji: MODE_EMOJI[t.mode] || '✈️', color: '#38bdf8', title: `${t.mode[0].toUpperCase()}${t.mode.slice(1)}${name}`, sub: [t.fromPlace, t.toPlace].filter(Boolean).join(' → '), cost: t.cost, costCur: t.costCurrency, nav: 'transport' });
+    }
+    for (const s of stays) {
+      if (s.checkIn) items.push({ id: 'sci' + s.id, date: s.checkIn, time: '', emoji: '🏨', color: '#a78bfa', title: `Check in · ${s.name}`, sub: s.city, cost: s.cost, costCur: s.costCurrency, nav: 'accommodation' });
+      if (s.checkOut) items.push({ id: 'sco' + s.id, date: s.checkOut, time: '', emoji: '🏨', color: '#a78bfa', title: `Check out · ${s.name}`, sub: s.city, nav: 'accommodation' });
+    }
+    for (const cr of cars) {
+      if (cr.pickupDate) items.push({ id: 'cpu' + cr.id, date: cr.pickupDate, time: cr.pickupTime || '', emoji: '🚗', color: '#22c55e', title: `Pick up car · ${cr.company}`, sub: cr.pickupLocation, cost: cr.cost, costCur: cr.costCurrency, nav: 'carrental' });
+      if (cr.dropoffDate) items.push({ id: 'cdo' + cr.id, date: cr.dropoffDate, time: cr.dropoffTime || '', emoji: '🚗', color: '#22c55e', title: `Drop off car · ${cr.company}`, sub: cr.dropoffLocation, nav: 'carrental' });
+    }
+    const by = new Map<string, TL[]>();
+    for (const it of items) (by.get(it.date) ?? by.set(it.date, []).get(it.date)!).push(it);
+    for (const [, arr] of by) arr.sort((a, b) => (a.time || '99:99').localeCompare(b.time || '99:99'));
     return [...by.entries()].sort(([a], [b]) => a.localeCompare(b));
-  }, [events]);
+  }, [events, transport, stays, cars]);
 
   return (
     <div className="animate-fadeUp">
@@ -101,21 +134,25 @@ export function ItineraryTab() {
           )}
         </>
       ) : (
-        /* All events — every item in one list, ordered by date */
-        events.length === 0 ? (
-          <EmptyState emoji="🗓️" title="Nothing planned yet" hint="Tap + to add your first activity" />
+        /* All Events — the whole trip in one list: activities, transport,
+           stays and car rentals, ordered by date & time */
+        timeline.length === 0 ? (
+          <EmptyState emoji="🗓️" title="Nothing planned yet" hint="Add activities, flights, stays or cars — they all show here" />
         ) : (
           <div className="px-4 py-3 space-y-4">
-            {groups.map(([date, evs]) => {
-              const sum = evs.reduce((s, e) => s + convert(e.cost || 0, e.costCurrency ?? cur, cur), 0);
+            {timeline.map(([date, items]) => {
+              const sum = items.reduce((s, it) => s + convert(it.cost || 0, it.costCur ?? cur, cur), 0);
               return (
                 <div key={date}>
                   <div className="flex items-center justify-between px-1 mb-1.5">
-                    <h3 className="font-bold text-slate-700 text-sm">{date === 'No date' ? 'No date' : fmtDateLong(date)}</h3>
+                    <h3 className="font-bold text-slate-700 text-sm">{fmtDateLong(date)}</h3>
                     {sum > 0 && <span className="text-xs font-semibold text-amber bg-amber-50 px-2 py-0.5 rounded-full">{money(sum, cur)}</span>}
                   </div>
                   <div className="space-y-2">
-                    {evs.map(ev => <EventCard key={ev.id} ev={ev} cur={cur} onEdit={() => setEditing(ev)} onDelete={() => setPendingDelete(ev)} />)}
+                    {items.map(it => (
+                      <TimelineCard key={it.id} it={it} cur={cur}
+                        onTap={() => { if (it.ev) setEditing(it.ev); else if (it.nav) onNavigate?.(it.nav); }} />
+                    ))}
                   </div>
                 </div>
               );
@@ -134,6 +171,22 @@ export function ItineraryTab() {
           onCancel={() => setPendingDelete(null)}
           onConfirm={async () => { await remove('itinerary', pendingDelete.id, `Removed event: ${pendingDelete.title}`); setPendingDelete(null); }} />
       )}
+    </div>
+  );
+}
+
+function TimelineCard({ it, cur, onTap }: { it: TL; cur: string; onTap: () => void }) {
+  return (
+    <div onClick={onTap} className="bg-white rounded-2xl shadow-sm flex overflow-hidden active:bg-slate-50">
+      <div className="w-1.5 flex-shrink-0" style={{ backgroundColor: it.color }} />
+      <div className="flex-1 p-3.5 min-w-0">
+        <p className="font-semibold text-slate-800">{it.emoji} {it.title}</p>
+        <div className="flex items-center gap-3 mt-1 flex-wrap text-xs text-slate-500">
+          {it.time && <span className="flex items-center gap-1"><Clock size={11} />{fmtTime(it.time)}</span>}
+          {it.sub && <span className="flex items-center gap-1 min-w-0"><MapPin size={11} className="flex-shrink-0" /><span className="truncate">{it.sub}</span></span>}
+          {it.cost ? <span className="font-semibold text-amber">{money(it.cost, it.costCur ?? cur)}</span> : null}
+        </div>
+      </div>
     </div>
   );
 }

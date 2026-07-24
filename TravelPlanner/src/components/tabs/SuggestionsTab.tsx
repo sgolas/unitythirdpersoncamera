@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import { useSuggestions, useTravelers, useTrip } from '../../hooks/useTrip';
 import { put, remove, getDeviceName } from '../../db/database';
-import { useMeId, setMeId } from '../../lib/me';
+import { useMeId, setMeId, getMeId } from '../../lib/me';
 import type { Suggestion, ItineraryEvent, Traveler } from '../../types';
 import { money } from '../../types';
 import { fmtDate, fmtTime, todayStr } from '../../utils/format';
@@ -87,17 +87,19 @@ export function SuggestionsTab() {
       <div className="px-4 pt-4 space-y-3">
         <p className="text-sm text-muted">Propose things to do. Every member approves — once everyone’s in, the idea turns green and drops straight into the itinerary.</p>
 
-        {/* Who is approving on this device */}
+        {/* This phone belongs to one person — they can only approve themselves. */}
         {travelers.length > 0 && (
-          <div className="flex items-center gap-2 bg-surface border border-line rounded-xl px-3 py-2">
-            <span className="text-sm font-semibold text-content flex-shrink-0">You’re</span>
+          <div className={`flex items-center gap-2 rounded-xl px-3 py-2 border ${me ? 'bg-surface border-line' : 'bg-amber-50 border-amber-300'}`}>
+            <span className="text-sm font-semibold text-content flex-shrink-0">This phone is</span>
             <select value={meId ?? ''} onChange={e => setMeId(e.target.value || null)}
               className="flex-1 bg-transparent text-sm font-semibold text-accent outline-none">
-              <option value="">everyone (tap any name)</option>
+              <option value="">— choose who you are —</option>
               {travelers.map(t => <option key={t.id} value={t.id}>{t.emoji || '🙂'} {t.name}</option>)}
             </select>
-            {me && <span className="text-xs text-muted flex-shrink-0">approve as yourself</span>}
           </div>
+        )}
+        {travelers.length > 0 && !me && (
+          <p className="text-xs text-amber-700">Pick your name so you can approve. Each phone approves for one person only.</p>
         )}
       </div>
 
@@ -200,34 +202,31 @@ function SuggestionCard({ s, travelers, currency, me, approved, onToggle, onEdit
                 <p className="text-xs text-muted">Add travellers (in Settings) so the group can approve.</p>
               ) : (
                 <>
-                  {/* Status of every member — tappable only in honour-system mode */}
+                  {/* Read-only status of every member — nobody can approve for others */}
                   <div className="flex flex-wrap gap-1.5">
                     {travelers.map(t => {
                       const ok = s.approvals?.includes(t.id);
                       const mine = me && t.id === me.id;
-                      const chip = (
-                        <span className={`flex items-center gap-1 pl-1 pr-2 py-1 rounded-full border text-xs font-semibold ${ok ? 'bg-emerald-100 border-emerald-400 text-emerald-700' : 'bg-surface border-line text-muted'} ${mine ? 'ring-2 ring-accent/40' : ''}`}>
+                      return (
+                        <span key={t.id} className={`flex items-center gap-1 pl-1 pr-2 py-1 rounded-full border text-xs font-semibold ${ok ? 'bg-emerald-100 border-emerald-400 text-emerald-700' : 'bg-surface border-line text-muted'} ${mine ? 'ring-2 ring-accent/40' : ''}`}>
                           <span className={`w-5 h-5 rounded-full flex items-center justify-center ${ok ? 'bg-emerald-500 text-white' : 'bg-slate-200 text-slate-500'}`}>
                             {ok ? <Check size={12} /> : (t.emoji || '🙂')}
                           </span>
                           {t.name}{mine ? ' (you)' : ''}
                         </span>
                       );
-                      // When no identity is chosen, tapping any chip toggles it.
-                      return me
-                        ? <div key={t.id}>{chip}</div>
-                        : <button key={t.id} onClick={() => onToggle(s, t)} className="active:opacity-70">{chip}</button>;
                     })}
                   </div>
 
-                  {/* Per-traveller approve button (when you've said who you are) */}
-                  {me && (
+                  {/* Only you can cast your own vote. */}
+                  {me ? (
                     <button onClick={() => onToggle(s, me)}
                       className={`mt-2.5 w-full rounded-xl py-2.5 font-bold text-sm flex items-center justify-center gap-1.5 press ${iApproved ? 'bg-emerald-100 text-emerald-700 border border-emerald-300' : 'accent-gradient text-white'}`}>
                       {iApproved ? <><Check size={16} /> You approved · tap to undo</> : <><Check size={16} /> Approve as {me.name}</>}
                     </button>
+                  ) : (
+                    <p className="text-[11px] text-amber-700 mt-2">Choose who you are (at the top) to cast your approval.</p>
                   )}
-                  {!me && <p className="text-[11px] text-muted mt-2">Pick who you are above to approve just for yourself.</p>}
                 </>
               )}
             </>
@@ -279,7 +278,7 @@ function SuggestionSheet({ suggestion, currency, defaultDate, onClose }: {
       title: title.trim(), date, startTime, place: place.trim(), category,
       description: description.trim(), link: link.trim(), notes: notes.trim(),
       cost: parseFloat(cost) || 0, costCurrency, photos,
-      proposedBy: suggestion?.proposedBy ?? (travelers[0]?.name || getDeviceName()),
+      proposedBy: suggestion?.proposedBy ?? (travelers.find(t => t.id === getMeId())?.name || travelers[0]?.name || getDeviceName()),
       // Editing keeps existing approvals; a material edit could reset them, but we
       // keep them so tweaks don't wipe votes. New suggestions start un-approved.
       approvals: suggestion?.approvals ?? [],

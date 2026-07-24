@@ -199,6 +199,25 @@ export interface MapPin extends SyncMeta {
   lng: number;
 }
 
+/* ── Suggestions (proposed activities awaiting group approval) ── */
+export interface Suggestion extends SyncMeta {
+  kind: 'suggestion';
+  title: string;                       // event name
+  date: ISODate | '';
+  startTime: ISOTime | '';
+  place: string;                       // location
+  category: ItineraryEvent['category'];
+  description: string;
+  link: string;                        // external link
+  photos: string[];                    // data: URIs (stored locally, synced)
+  notes: string;
+  cost: number;                        // price
+  costCurrency?: string;
+  proposedBy: string;                  // who suggested it
+  approvals: string[];                 // traveler ids who have approved
+  itineraryId?: string;                // set once it's added to the itinerary (dedupe)
+}
+
 /* ── Family chat (messages sync to the whole group) ─────────── */
 export interface ChatMessage extends SyncMeta {
   kind: 'chatmsg';
@@ -228,7 +247,7 @@ export interface ChangeLogEntry {
 /* ── Union of all synced records ────────────────────────────── */
 export type AnyRecord =
   | Traveler | TravelDocument | ChecklistItem | Transport
-  | Accommodation | CarRental | Expense | ItineraryEvent | BudgetLine | TripMeta | TripPhoto | MapPin | ChatMessage;
+  | Accommodation | CarRental | Expense | ItineraryEvent | BudgetLine | TripMeta | TripPhoto | MapPin | ChatMessage | Suggestion;
 
 export type EntityKind = AnyRecord['kind'];
 

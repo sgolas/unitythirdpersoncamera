@@ -9,7 +9,7 @@
 import Dexie, { type Table } from 'dexie';
 import type {
   Traveler, TravelDocument, ChecklistItem, Transport, Accommodation, CarRental,
-  Expense, ItineraryEvent, BudgetLine, TripMeta, TripPhoto, MapPin, ChatMessage, ChangeLogEntry,
+  Expense, ItineraryEvent, BudgetLine, TripMeta, TripPhoto, MapPin, ChatMessage, Suggestion, ChangeLogEntry,
   AnyRecord, EntityKind, ChangeAction,
 } from '../types';
 
@@ -27,6 +27,7 @@ class TripDB extends Dexie {
   photos!:         Table<TripPhoto, string>;
   mappins!:        Table<MapPin, string>;
   chat!:           Table<ChatMessage, string>;
+  suggestions!:    Table<Suggestion, string>;
   changelog!:      Table<ChangeLogEntry, string>;
 
   constructor() {
@@ -59,6 +60,10 @@ class TripDB extends Dexie {
     this.version(5).stores({
       carrentals:    'id, pickupDate, updatedAt',
     });
+    // v6 adds group activity suggestions (approve → itinerary).
+    this.version(6).stores({
+      suggestions:   'id, date, updatedAt',
+    });
   }
 }
 
@@ -79,6 +84,7 @@ const TABLES: Record<EntityKind, Table<any, string>> = {
   photo:         db.photos,
   mappin:        db.mappins,
   chatmsg:       db.chat,
+  suggestion:    db.suggestions,
 };
 
 export function tableFor(kind: EntityKind): Table<any, string> {

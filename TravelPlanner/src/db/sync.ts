@@ -15,7 +15,7 @@ import {
 
 const ENTITY_KINDS: EntityKind[] = [
   'traveler', 'document', 'checklist', 'transport',
-  'accommodation', 'carrental', 'expense', 'itinerary', 'budget', 'trip', 'photo', 'mappin', 'chatmsg',
+  'accommodation', 'carrental', 'expense', 'itinerary', 'budget', 'trip', 'photo', 'mappin', 'chatmsg', 'suggestion',
 ];
 
 interface RelayRecord {

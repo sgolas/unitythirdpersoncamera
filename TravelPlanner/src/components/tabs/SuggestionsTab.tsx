@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { useSuggestions, useTravelers, useTrip } from '../../hooks/useTrip';
 import { put, remove, getDeviceName } from '../../db/database';
+import { useMeId, setMeId } from '../../lib/me';
 import type { Suggestion, ItineraryEvent, Traveler } from '../../types';
 import { money } from '../../types';
 import { fmtDate, fmtTime, todayStr } from '../../utils/format';
@@ -35,6 +36,11 @@ export function SuggestionsTab() {
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<Suggestion | null>(null);
   const [pendingDelete, setPendingDelete] = useState<Suggestion | null>(null);
+
+  // Per-device identity: who is using this phone. When set, you can only
+  // approve as yourself; otherwise it falls back to tap-anyone (honour system).
+  const meId = useMeId();
+  const me = travelers.find(t => t.id === meId) ?? null;
 
   const memberCount = travelers.length;
   const isApproved = (s: Suggestion) =>
@@ -78,8 +84,21 @@ export function SuggestionsTab() {
     <div className="animate-fadeUp">
       <TabHeader title="Suggestions" subtitle="Ideas the whole group approves" gradient="linear-gradient(135deg,#ca8a04,#eab308)" icon="💡" />
 
-      <div className="px-4 pt-4">
+      <div className="px-4 pt-4 space-y-3">
         <p className="text-sm text-muted">Propose things to do. Every member approves — once everyone’s in, the idea turns green and drops straight into the itinerary.</p>
+
+        {/* Who is approving on this device */}
+        {travelers.length > 0 && (
+          <div className="flex items-center gap-2 bg-surface border border-line rounded-xl px-3 py-2">
+            <span className="text-sm font-semibold text-content flex-shrink-0">You’re</span>
+            <select value={meId ?? ''} onChange={e => setMeId(e.target.value || null)}
+              className="flex-1 bg-transparent text-sm font-semibold text-accent outline-none">
+              <option value="">everyone (tap any name)</option>
+              {travelers.map(t => <option key={t.id} value={t.id}>{t.emoji || '🙂'} {t.name}</option>)}
+            </select>
+            {me && <span className="text-xs text-muted flex-shrink-0">approve as yourself</span>}
+          </div>
+        )}
       </div>
 
       {suggestions.length === 0 ? (
@@ -87,7 +106,7 @@ export function SuggestionsTab() {
       ) : (
         <div className="px-4 py-4 space-y-3">
           {sorted.map(s => (
-            <SuggestionCard key={s.id} s={s} travelers={travelers} currency={cur}
+            <SuggestionCard key={s.id} s={s} travelers={travelers} currency={cur} me={me}
               approved={isApproved(s)} onToggle={toggleApproval}
               onEdit={() => setEditing(s)} onDelete={() => setPendingDelete(s)} />
           ))}
@@ -109,14 +128,15 @@ export function SuggestionsTab() {
   );
 }
 
-function SuggestionCard({ s, travelers, currency, approved, onToggle, onEdit, onDelete }: {
-  s: Suggestion; travelers: Traveler[]; currency: string; approved: boolean;
+function SuggestionCard({ s, travelers, currency, me, approved, onToggle, onEdit, onDelete }: {
+  s: Suggestion; travelers: Traveler[]; currency: string; me: Traveler | null; approved: boolean;
   onToggle: (s: Suggestion, t: Traveler) => void; onEdit: () => void; onDelete: () => void;
 }) {
   const added = !!s.itineraryId;
   const count = travelers.filter(t => s.approvals?.includes(t.id)).length;
   const border = added ? 'border-emerald-400' : 'border-line';
   const bg = added ? 'bg-emerald-50' : 'bg-surface';
+  const iApproved = me ? s.approvals?.includes(me.id) : false;
 
   return (
     <div className={`rounded-2xl border ${border} ${bg} overflow-hidden shadow-sm transition-colors`}>
@@ -179,20 +199,36 @@ function SuggestionCard({ s, travelers, currency, approved, onToggle, onEdit, on
               {travelers.length === 0 ? (
                 <p className="text-xs text-muted">Add travellers (in Settings) so the group can approve.</p>
               ) : (
-                <div className="flex flex-wrap gap-1.5">
-                  {travelers.map(t => {
-                    const ok = s.approvals?.includes(t.id);
-                    return (
-                      <button key={t.id} onClick={() => onToggle(s, t)}
-                        className={`flex items-center gap-1 pl-1 pr-2 py-1 rounded-full border text-xs font-semibold transition ${ok ? 'bg-emerald-100 border-emerald-400 text-emerald-700' : 'bg-surface border-line text-muted'}`}>
-                        <span className={`w-5 h-5 rounded-full flex items-center justify-center ${ok ? 'bg-emerald-500 text-white' : 'bg-slate-200 text-slate-500'}`}>
-                          {ok ? <Check size={12} /> : (t.emoji || '🙂')}
+                <>
+                  {/* Status of every member — tappable only in honour-system mode */}
+                  <div className="flex flex-wrap gap-1.5">
+                    {travelers.map(t => {
+                      const ok = s.approvals?.includes(t.id);
+                      const mine = me && t.id === me.id;
+                      const chip = (
+                        <span className={`flex items-center gap-1 pl-1 pr-2 py-1 rounded-full border text-xs font-semibold ${ok ? 'bg-emerald-100 border-emerald-400 text-emerald-700' : 'bg-surface border-line text-muted'} ${mine ? 'ring-2 ring-accent/40' : ''}`}>
+                          <span className={`w-5 h-5 rounded-full flex items-center justify-center ${ok ? 'bg-emerald-500 text-white' : 'bg-slate-200 text-slate-500'}`}>
+                            {ok ? <Check size={12} /> : (t.emoji || '🙂')}
+                          </span>
+                          {t.name}{mine ? ' (you)' : ''}
                         </span>
-                        {t.name}
-                      </button>
-                    );
-                  })}
-                </div>
+                      );
+                      // When no identity is chosen, tapping any chip toggles it.
+                      return me
+                        ? <div key={t.id}>{chip}</div>
+                        : <button key={t.id} onClick={() => onToggle(s, t)} className="active:opacity-70">{chip}</button>;
+                    })}
+                  </div>
+
+                  {/* Per-traveller approve button (when you've said who you are) */}
+                  {me && (
+                    <button onClick={() => onToggle(s, me)}
+                      className={`mt-2.5 w-full rounded-xl py-2.5 font-bold text-sm flex items-center justify-center gap-1.5 press ${iApproved ? 'bg-emerald-100 text-emerald-700 border border-emerald-300' : 'accent-gradient text-white'}`}>
+                      {iApproved ? <><Check size={16} /> You approved · tap to undo</> : <><Check size={16} /> Approve as {me.name}</>}
+                    </button>
+                  )}
+                  {!me && <p className="text-[11px] text-muted mt-2">Pick who you are above to approve just for yourself.</p>}
+                </>
               )}
             </>
           )}

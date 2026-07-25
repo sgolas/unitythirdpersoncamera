@@ -43,7 +43,10 @@ function weaponVis(w: Weapon): Vis {
 }
 
 type Trail = { x: number; y: number }[];
-type Proj = { x: number; y: number; vx: number; vy: number; weapon: string; rolling?: boolean; rollDist?: number; split?: boolean; dead?: boolean; life?: number; trail?: Trail; bounces?: number; leaps?: number };
+type Proj = { x: number; y: number; vx: number; vy: number; weapon: string; rolling?: boolean; rollDist?: number; rollDir?: number; rollStart?: number; split?: boolean; dead?: boolean; life?: number; trail?: Trail; bounces?: number; leaps?: number };
+
+// The render/sim loop runs at ~60fps; convert a duration in ms to frames.
+const framesForMs = (ms: number) => Math.round((ms / 1000) * 60);
 type Flash = { x: number; y: number; r: number; t: number; color: string };
 type Sim = { projs: Proj[]; flashes: Flash[]; authority: boolean; meteor?: boolean };
 
@@ -307,11 +310,17 @@ export function ArtilleryTab() {
       p.life = (p.life ?? 0) + 1;
       if (p.life > 2400) { p.dead = true; continue; }
       if (p.rolling) {
-        // Sheep / roller: walk along the ground until it settles, then blow up.
-        const dir = terrainAt(g, p.x + 3) <= terrainAt(g, p.x - 3) ? 1 : -1;
-        p.x += dir * 2.4; p.y = terrainAt(g, p.x); p.rollDist = (p.rollDist ?? 0) + 2.4;
-        const settled = terrainAt(g, p.x - 3) >= p.y && terrainAt(g, p.x + 3) >= p.y;
-        if (settled || (p.rollDist ?? 0) > 340 || p.x < 4 || p.x > WORLD.w - 4 || hitTank(g, p.x, p.y)) impact(p, sim);
+        // Sheep / roller: keep travelling along the ground (climbing over hills)
+        // in a fixed direction for the weapon's roll time, blowing up early only
+        // when it reaches a target (tank or building) or runs off the map.
+        const dir = p.rollDir ?? 1;
+        const speed = w.id === 'sheep' ? 2.0 : 2.6; // sheep walks; rollers roll faster
+        p.x += dir * speed; p.y = terrainAt(g, p.x);
+        (p.trail ??= []).push({ x: p.x, y: p.y - 4 });
+        if (p.trail.length > 12) p.trail.shift();
+        const elapsed = (p.life ?? 0) - (p.rollStart ?? 0);
+        const done = elapsed >= framesForMs(w.rollMs ?? 4000);
+        if (done || p.x < 4 || p.x > WORLD.w - 4 || hitTank(g, p.x, p.y) || structureAt(g, p.x, p.y)) impact(p, sim);
         continue;
       }
       const bouncy = w.kind === 'bounce' || w.kind === 'banana' || w.kind === 'holy';
@@ -354,7 +363,15 @@ export function ArtilleryTab() {
       const structHit = !!structureAt(g, p.x, p.y);
       const terrHit = p.y >= terrainAt(g, p.x);
       if (terrHit || tankHit || structHit) {
-        if (w.kind === 'roller' && !p.rolling && !structHit && !tankHit) { p.rolling = true; p.y = terrainAt(g, p.x); continue; }
+        if (w.kind === 'roller' && !p.rolling && !structHit && !tankHit) {
+          // Start rolling: the sheep walks the way it was thrown; a roller heads
+          // downhill. Lock the direction so it keeps going for its full roll time.
+          p.rolling = true; p.y = terrainAt(g, p.x); p.rollStart = p.life;
+          p.rollDir = w.id === 'sheep'
+            ? ((p.vx || 1) >= 0 ? 1 : -1)
+            : (terrainAt(g, p.x + 3) <= terrainAt(g, p.x - 3) ? 1 : -1);
+          continue;
+        }
         // Bouncy weapons rebound off the terrain until their bounces/fuse run out.
         if (bouncy && terrHit && !tankHit && !structHit && (p.bounces ?? 0) > 0) {
           const s = (terrainAt(g, p.x + 3) - terrainAt(g, p.x - 3)) / 6; // slope dy/dx

@@ -49,6 +49,7 @@ export interface Weapon {
   splits?: number;   // MIRV/Death's Head child count
   bomblets?: number; // cluster/funky burst count
   leaps?: number;    // leapfrog hop count
+  rollMs?: number;   // roller/sheep: how long it rolls/walks before self-detonating
   cat?: string;      // toolbar grouping label
   hidden?: boolean;  // helper projectiles (cluster bomblets) — not selectable
 }
@@ -83,11 +84,11 @@ export const WEAPONS: Weapon[] = [
   { id: 'holy',     name: 'Holy Grenade', emoji: '🙏', radius: 72, damage: 96, kind: 'holy', fuse: 130, bounces: 3, cat: 'Special' },
   { id: 'airstrike',name: 'Air Strike',   emoji: '✈️', radius: 30, damage: 38, kind: 'airstrike', cat: 'Special' },
   { id: 'homing',   name: 'Homing',       emoji: '🎯', radius: 34, damage: 46, kind: 'homing', cat: 'Special' },
-  { id: 'sheep',    name: 'Sheep',        emoji: '🐑', radius: 34, damage: 52, kind: 'roller', cat: 'Special' },
-  // Rollers ─ walk downhill before blowing up
-  { id: 'babyroll', name: 'Baby Roller',  emoji: '🎳', radius: 24, damage: 30, kind: 'roller', cat: 'Rollers' },
-  { id: 'roller',   name: 'Roller',       emoji: '🎳', radius: 34, damage: 48, kind: 'roller', cat: 'Rollers' },
-  { id: 'heavyroll',name: 'Heavy Roller', emoji: '🎳', radius: 48, damage: 72, kind: 'roller', cat: 'Rollers' },
+  { id: 'sheep',    name: 'Sheep',        emoji: '🐑', radius: 34, damage: 52, kind: 'roller', rollMs: 5000, cat: 'Special' },
+  // Rollers ─ roll along the ground for a few seconds before blowing up
+  { id: 'babyroll', name: 'Baby Roller',  emoji: '🎳', radius: 24, damage: 30, kind: 'roller', rollMs: 4000, cat: 'Rollers' },
+  { id: 'roller',   name: 'Roller',       emoji: '🎳', radius: 34, damage: 48, kind: 'roller', rollMs: 4000, cat: 'Rollers' },
+  { id: 'heavyroll',name: 'Heavy Roller', emoji: '🎳', radius: 48, damage: 72, kind: 'roller', rollMs: 4000, cat: 'Rollers' },
   // Diggers ─ bore a shaft straight down
   { id: 'babydig',  name: 'Baby Digger',  emoji: '⛏️', radius: 18, damage: 22, kind: 'digger', cat: 'Diggers' },
   { id: 'digger',   name: 'Digger',       emoji: '⛏️', radius: 28, damage: 34, kind: 'digger', cat: 'Diggers' },

@@ -30,7 +30,8 @@ export interface Traveler extends SyncMeta {
 /* ── 1. Travel Documents ────────────────────────────────────── */
 export type DocType =
   | 'passport' | 'visa' | 'id' | 'insurance'
-  | 'ticket' | 'reservation' | 'vaccination' | 'other';
+  | 'ticket' | 'reservation' | 'vaccination'
+  | 'flightreceipt' | 'purchasereceipt' | 'warranty' | 'other';
 
 export interface TravelDocument extends SyncMeta {
   kind: 'document';

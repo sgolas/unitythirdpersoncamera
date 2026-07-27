@@ -15,6 +15,7 @@ import {
 } from '../ui';
 import { PlaceInput } from '../PlaceInput';
 import { compressToDataUrl } from '../../lib/photoUpload';
+import { DocViewer } from '../DocViewer';
 
 const CATS = [
   { key: 'sightseeing', label: 'Sightseeing', emoji: '📸' },
@@ -139,16 +140,24 @@ function SuggestionCard({ s, travelers, currency, me, approved, onToggle, onEdit
   const border = added ? 'border-emerald-400' : 'border-line';
   const bg = added ? 'bg-emerald-50' : 'bg-surface';
   const iApproved = me ? s.approvals?.includes(me.id) : false;
+  const [viewing, setViewing] = useState<number | null>(null);
 
   return (
     <div className={`rounded-2xl border ${border} ${bg} overflow-hidden shadow-sm transition-colors`}>
-      {/* Photos */}
+      {/* Photos — tap to view full screen (zoom + download) */}
       {s.photos?.length > 0 && (
         <div className="flex gap-1 overflow-x-auto no-scrollbar">
           {s.photos.map((src, i) => (
-            <img key={i} src={src} alt="" className="h-32 w-auto object-cover flex-shrink-0" />
+            <button key={i} type="button" onClick={() => setViewing(i)}
+              className="h-32 flex-shrink-0 active:opacity-80" aria-label="View photo">
+              <img src={src} alt="" className="h-32 w-auto object-cover pointer-events-none" />
+            </button>
           ))}
         </div>
+      )}
+      {viewing !== null && s.photos?.[viewing] && (
+        <DocViewer name={`${s.title || 'Photo'} ${viewing + 1}`} mime="image/jpeg"
+          dataUrl={s.photos[viewing]} onClose={() => setViewing(null)} />
       )}
 
       <div className="p-3.5">

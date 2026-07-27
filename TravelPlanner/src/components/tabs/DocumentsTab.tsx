@@ -18,6 +18,9 @@ const TYPES: { key: DocType; label: string; emoji: string }[] = [
   { key: 'ticket',      label: 'Ticket',      emoji: '🎟️' },
   { key: 'reservation', label: 'Reservation', emoji: '📋' },
   { key: 'vaccination', label: 'Vaccination', emoji: '💉' },
+  { key: 'flightreceipt',   label: 'Flight receipt',   emoji: '🧾' },
+  { key: 'purchasereceipt', label: 'Purchase receipt', emoji: '🧾' },
+  { key: 'warranty',        label: 'Warranty',         emoji: '📑' },
   { key: 'other',       label: 'Other',       emoji: '📄' },
 ];
 const typeMeta = (k: DocType) => TYPES.find(t => t.key === k)!;

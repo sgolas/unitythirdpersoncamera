@@ -7,6 +7,7 @@ import { money } from '../../types';
 import { fmtDate, fmtTime, todayStr } from '../../utils/format';
 import { TabHeader, Sheet, Field, TextInput, TextArea, FormFooter, Fab, EmptyState, ConfirmDelete, CostField, Overlay } from '../ui';
 import { PlaceInput } from '../PlaceInput';
+import { CarNameInput } from '../CarNameInput';
 import { compressToDataUrl } from '../../lib/photoUpload';
 
 export function CarRentalTab() {
@@ -150,7 +151,7 @@ function RentalSheet({ rental, currency, onClose }: { rental: CarRental | null; 
     <Sheet title={rental ? 'Edit car rental' : 'Add car rental'} onClose={onClose}
       footer={<FormFooter onCancel={onClose} onSubmit={save} disabled={disabled} submitLabel={rental ? 'Save' : 'Add'} />}>
       <Field label="Rental company"><TextInput autoFocus value={company} onChange={e => setCompany(e.target.value)} placeholder="e.g. Hertz, Avis, Sixt" /></Field>
-      <Field label="Vehicle / class"><TextInput value={carType} onChange={e => setCarType(e.target.value)} placeholder="e.g. SUV — VW Tiguan" /></Field>
+      <Field label="Vehicle / class"><CarNameInput value={carType} onChange={setCarType} placeholder="Type or pick — e.g. VW Golf, Tesla, SUV" /></Field>
 
       <Field label="Pick-up location"><PlaceInput value={pickupLocation} onChange={setPickupLocation} placeholder="Search a location…" /></Field>
       <div className="grid grid-cols-2 gap-3">

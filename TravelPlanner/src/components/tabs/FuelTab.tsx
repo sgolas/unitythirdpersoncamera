@@ -15,9 +15,10 @@ import {
   isElectric, isEnergyUnit, unitsForFuel, unitLabel,
 } from '../../lib/fuel';
 import { roadDistanceKm, googleMapsDirections, optimizeRoute, type RoutePoint } from '../../lib/route';
-import { CAR_MODELS, carById, carEconomy } from '../../lib/cars';
+import { carById, carEconomy } from '../../lib/cars';
 import { TabHeader, Sheet, Field, TextInput, Select, FormFooter, Fab, EmptyState, ConfirmDelete } from '../ui';
 import { PlaceInput } from '../PlaceInput';
+import { CarNameInput } from '../CarNameInput';
 
 const KM_PER_MI = 1.609344;
 const openExternal = (url: string) => window.open(url, '_blank', 'noopener');
@@ -154,15 +155,6 @@ function RouteSheet({ route, tripCur, onClose }: { route: FuelRoute | null; trip
   const [fuelType, setFuelType] = useState<FuelType>(route?.fuelType ?? 'petrol');
   const [vehicle, setVehicle] = useState(route?.vehicle ?? '');
   const [modelId, setModelId] = useState(''); // selected preset, '' = custom
-  const [carOpen, setCarOpen] = useState(false);
-  // Predictive matches for what's typed in the car-name box (all models when empty).
-  const carMatches = useMemo(() => {
-    const q = vehicle.trim().toLowerCase().replace(/[.\s-]/g, '');
-    const list = q
-      ? CAR_MODELS.filter(c => `${c.make} ${c.model}`.toLowerCase().replace(/[.\s-]/g, '').includes(q))
-      : CAR_MODELS;
-    return list.slice(0, 40);
-  }, [vehicle]);
 
   // The right display unit for a fuel: kWh units for electric, litre/MPG units
   // for liquid — keeping the user's chosen liquid unit where it still applies.
@@ -322,25 +314,11 @@ function RouteSheet({ route, tripCur, onClose }: { route: FuelRoute | null; trip
       {/* Vehicle */}
       <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 mt-2">Vehicle</p>
       <Field label="Car model (optional)">
-        <div className="relative">
-          <TextInput value={vehicle}
-            onChange={e => { setVehicle(e.target.value); setModelId(''); setCarOpen(true); }}
-            onFocus={() => setCarOpen(true)}
-            onBlur={() => setTimeout(() => setCarOpen(false), 150)}
-            placeholder="Type a make or model — e.g. Golf, Tesla, RAV4" />
-          {carOpen && carMatches.length > 0 && (
-            <div className="absolute z-20 left-0 right-0 mt-1.5 rounded-2xl border-2 border-sky/40 bg-white shadow-xl overflow-y-auto max-h-64">
-              {carMatches.map(c => (
-                <button key={c.id} type="button" onMouseDown={e => e.preventDefault()}
-                  onClick={() => { pickModel(c.id); setCarOpen(false); }}
-                  className="w-full text-left px-3.5 py-2.5 hover:bg-sky/10 active:bg-sky/20 border-b border-slate-100 last:border-0 flex items-center justify-between gap-2">
-                  <span className="text-sm text-slate-700 truncate">{fuelMeta(c.fuel).emoji} {c.make} {c.model}{c.dieselL100 ? ' ·⛽/🛢️' : ''}</span>
-                  <span className="text-[11px] text-slate-400 flex-shrink-0">{econLabel(carEconomy(c, c.fuel), unitFor(c.fuel, economyUnit))} · {c.region === 'eu' ? 'EU' : 'NA'}</span>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+        <CarNameInput value={vehicle}
+          onChange={v => { setVehicle(v); setModelId(''); }}
+          onPick={c => pickModel(c.id)}
+          placeholder="Type a make or model — e.g. Golf, Tesla, RAV4"
+          meta={c => `${econLabel(carEconomy(c, c.fuel), unitFor(c.fuel, economyUnit))} · ${c.region === 'eu' ? 'EU' : 'NA'}`} />
         {vehicle && !modelId && <p className="text-[11px] text-muted mt-1">Custom vehicle — set the economy below, or pick a match above.</p>}
       </Field>
       <div className="grid grid-cols-2 gap-3">

@@ -1,19 +1,20 @@
 import { useState, useMemo } from 'react';
 import {
   MapPin, Plus, X, Trash2, Navigation, Loader2, RefreshCw, Coins, Route as RouteIcon,
-  CornerDownRight, Repeat, Pencil,
+  CornerDownRight, Repeat, Pencil, Check,
 } from 'lucide-react';
 import { useFuelRoutes, useTrip, useTravelers } from '../../hooks/useTrip';
 import { put, remove } from '../../db/database';
-import type { FuelRoute, FuelWaypoint, EconomyUnit, FuelType } from '../../types';
+import type { FuelRoute, FuelWaypoint, EconomyUnit, FuelType, Expense } from '../../types';
 import { money1, CURRENCY_SYMBOLS } from '../../types';
+import { todayStr } from '../../utils/format';
 import { convert } from '../../lib/currency';
 import {
   ECONOMY_UNITS, toL100, defaultEconomyFor, PRICE_UNITS, perLitreFrom, perUnitFrom,
   litresUsed, fuelCost, FUEL_TYPES, countryAt, livePrice, type PriceUnit,
 } from '../../lib/fuel';
 import { roadDistanceKm, googleMapsDirections, optimizeRoute, type RoutePoint } from '../../lib/route';
-import { CAR_MODELS, carById } from '../../lib/cars';
+import { CAR_MODELS, carById, carEconomy } from '../../lib/cars';
 import { TabHeader, Sheet, Field, TextInput, Select, FormFooter, Fab, EmptyState, ConfirmDelete } from '../ui';
 import { PlaceInput } from '../PlaceInput';
 
@@ -73,6 +74,18 @@ function costOf(r: FuelRoute, tripCur: string) {
 
 function RouteCard({ r, tripCur, onEdit, onDelete }: { r: FuelRoute; tripCur: string; onEdit: () => void; onDelete: () => void }) {
   const { total, litres, priceCost, tripCost } = costOf(r, tripCur);
+  const [logged, setLogged] = useState(false);
+  async function addExpense() {
+    await put<Expense>({
+      kind: 'expense', id: crypto.randomUUID(),
+      title: `Fuel — ${r.name || 'drive'}`,
+      amount: Math.round(priceCost * 100) / 100, currency: r.priceCurrency, category: 'transport',
+      date: todayStr(), paidBy: null, place: '',
+      notes: `${r.vehicle ? r.vehicle + ' · ' : ''}${Math.round(total)} km${r.roundTrip ? ' round trip' : ''}`,
+      updatedAt: '', updatedBy: '',
+    }, `Added fuel expense: ${r.name || 'drive'}`, 'create');
+    setLogged(true);
+  }
   const from = r.waypoints[0]?.label || 'Start';
   const to = r.waypoints[r.waypoints.length - 1]?.label || 'Destination';
   const stops = Math.max(0, r.waypoints.length - 2);
@@ -101,6 +114,13 @@ function RouteCard({ r, tripCur, onEdit, onDelete }: { r: FuelRoute; tripCur: st
           <Stat label="Fuel" value={`${litres.toFixed(1)} L`} sub={`${(litres / 3.785411784).toFixed(1)} gal`} />
           <Stat label="Cost" value={money1(tripCost, tripCur)} sub={r.priceCurrency !== tripCur ? money1(priceCost, r.priceCurrency) : undefined} accent />
         </div>
+        {tripCost > 0 && (
+          <button onClick={addExpense} disabled={logged}
+            className={`w-full mt-2.5 py-2 rounded-xl text-sm font-semibold flex items-center justify-center gap-1.5 border transition ${
+              logged ? 'bg-emerald-50 border-emerald-200 text-emerald-600' : 'bg-white border-line text-slate-600 active:bg-slate-50'}`}>
+            {logged ? <><Check size={14} /> Added to expenses</> : <><Coins size={14} /> Add to expenses</>}
+          </button>
+        )}
       </div>
     </div>
   );
@@ -135,9 +155,17 @@ function RouteSheet({ route, tripCur, onClose }: { route: FuelRoute | null; trip
     setModelId(id);
     const c = carById(id);
     if (!c) { setVehicle(''); return; }
-    setEconomy(String(round2(fromL100(c.l100, economyUnit))));
     setFuelType(c.fuel);
+    setEconomy(String(round2(fromL100(carEconomy(c, c.fuel), economyUnit))));
     setVehicle(`${c.make} ${c.model}`);
+  }
+
+  // Switching fuel type re-reads the picked model's economy for that fuel, so a
+  // model's diesel variant swaps in its (lower) consumption automatically.
+  function changeFuel(f: FuelType) {
+    setFuelType(f);
+    const c = carById(modelId);
+    if (c) setEconomy(String(round2(fromL100(carEconomy(c, f), economyUnit))));
   }
   const [priceUnit, setPriceUnit] = useState<PriceUnit>('liter');
   const [priceCurrency, setPriceCurrency] = useState(route?.priceCurrency ?? tripCur);
@@ -271,12 +299,12 @@ function RouteSheet({ route, tripCur, onClose }: { route: FuelRoute | null; trip
           <option value="">{vehicle ? `${vehicle} (custom)` : 'Custom — enter economy below'}</option>
           <optgroup label="Europe — top rentals">
             {CAR_MODELS.filter(c => c.region === 'eu').map(c => (
-              <option key={c.id} value={c.id}>{c.make} {c.model} · {econLabel(c.l100, economyUnit)}</option>
+              <option key={c.id} value={c.id}>{c.make} {c.model} · {econLabel(carEconomy(c, c.fuel), economyUnit)}{c.dieselL100 ? ' · diesel avail.' : ''}</option>
             ))}
           </optgroup>
           <optgroup label="North America — top rentals">
             {CAR_MODELS.filter(c => c.region === 'na').map(c => (
-              <option key={c.id} value={c.id}>{c.make} {c.model} · {econLabel(c.l100, economyUnit)}</option>
+              <option key={c.id} value={c.id}>{c.make} {c.model} · {econLabel(carEconomy(c, c.fuel), economyUnit)}</option>
             ))}
           </optgroup>
         </Select>
@@ -296,7 +324,7 @@ function RouteSheet({ route, tripCur, onClose }: { route: FuelRoute | null; trip
         </Field>
       </div>
       <Field label="Fuel type">
-        <Select value={fuelType} onChange={e => setFuelType(e.target.value as FuelType)}>
+        <Select value={fuelType} onChange={e => changeFuel(e.target.value as FuelType)}>
           {FUEL_TYPES.map(f => <option key={f.key} value={f.key}>{f.emoji} {f.label}</option>)}
         </Select>
       </Field>

@@ -13,22 +13,29 @@ export interface CarModel {
   make: string;
   model: string;
   region: 'eu' | 'na';
-  l100: number;      // combined litres / 100 km
-  fuel: FuelType;
+  l100: number;          // petrol combined litres / 100 km
+  fuel: FuelType;        // the variant most commonly rented
+  dieselL100?: number;   // diesel variant economy, when one is commonly rented
+}
+
+/** A model's economy for a given fuel: its diesel figure if picked & available,
+ *  otherwise the (petrol) base figure. */
+export function carEconomy(c: CarModel, fuel: FuelType): number {
+  return fuel === 'diesel' && c.dieselL100 ? c.dieselL100 : c.l100;
 }
 
 export const CAR_MODELS: CarModel[] = [
-  // ── Europe — most common rental fleet models ──────────────────────
-  { id: 'eu-clio',     make: 'Renault',    model: 'Clio',     region: 'eu', l100: 5.2, fuel: 'petrol' },
-  { id: 'eu-208',      make: 'Peugeot',    model: '208',      region: 'eu', l100: 5.3, fuel: 'petrol' },
-  { id: 'eu-fiesta',   make: 'Ford',       model: 'Fiesta',   region: 'eu', l100: 5.3, fuel: 'petrol' },
-  { id: 'eu-corsa',    make: 'Opel',       model: 'Corsa',    region: 'eu', l100: 5.4, fuel: 'petrol' },
-  { id: 'eu-polo',     make: 'Volkswagen', model: 'Polo',     region: 'eu', l100: 5.4, fuel: 'petrol' },
+  // ── Europe — most common rental fleet models (diesel variant common) ──
+  { id: 'eu-clio',     make: 'Renault',    model: 'Clio',     region: 'eu', l100: 5.2, fuel: 'petrol', dieselL100: 4.3 },
+  { id: 'eu-208',      make: 'Peugeot',    model: '208',      region: 'eu', l100: 5.3, fuel: 'petrol', dieselL100: 4.2 },
+  { id: 'eu-fiesta',   make: 'Ford',       model: 'Fiesta',   region: 'eu', l100: 5.3, fuel: 'petrol', dieselL100: 4.4 },
+  { id: 'eu-corsa',    make: 'Opel',       model: 'Corsa',    region: 'eu', l100: 5.4, fuel: 'petrol', dieselL100: 4.4 },
+  { id: 'eu-polo',     make: 'Volkswagen', model: 'Polo',     region: 'eu', l100: 5.4, fuel: 'petrol', dieselL100: 4.5 },
   { id: 'eu-500',      make: 'Fiat',       model: '500',      region: 'eu', l100: 5.1, fuel: 'petrol' },
   { id: 'eu-yaris',    make: 'Toyota',     model: 'Yaris',    region: 'eu', l100: 4.8, fuel: 'petrol' },
-  { id: 'eu-golf',     make: 'Volkswagen', model: 'Golf',     region: 'eu', l100: 5.9, fuel: 'petrol' },
-  { id: 'eu-octavia',  make: 'Škoda',      model: 'Octavia',  region: 'eu', l100: 5.2, fuel: 'diesel' },
-  { id: 'eu-qashqai',  make: 'Nissan',     model: 'Qashqai',  region: 'eu', l100: 6.4, fuel: 'petrol' },
+  { id: 'eu-golf',     make: 'Volkswagen', model: 'Golf',     region: 'eu', l100: 5.9, fuel: 'petrol', dieselL100: 4.9 },
+  { id: 'eu-octavia',  make: 'Škoda',      model: 'Octavia',  region: 'eu', l100: 6.2, fuel: 'diesel', dieselL100: 5.0 },
+  { id: 'eu-qashqai',  make: 'Nissan',     model: 'Qashqai',  region: 'eu', l100: 6.4, fuel: 'petrol', dieselL100: 5.3 },
 
   // ── North America — most common rental fleet models ───────────────
   { id: 'na-corolla',  make: 'Toyota',     model: 'Corolla',        region: 'na', l100: 7.1, fuel: 'petrol' },

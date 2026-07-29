@@ -15,7 +15,7 @@ import {
   isElectric, isEnergyUnit, unitsForFuel, unitLabel,
 } from '../../lib/fuel';
 import { roadDistanceKm, googleMapsDirections, optimizeRoute, type RoutePoint } from '../../lib/route';
-import { CAR_MODELS, CAR_CLASSES, carById, carEconomy } from '../../lib/cars';
+import { CAR_MODELS, carById, carEconomy } from '../../lib/cars';
 import { TabHeader, Sheet, Field, TextInput, Select, FormFooter, Fab, EmptyState, ConfirmDelete } from '../ui';
 import { PlaceInput } from '../PlaceInput';
 
@@ -154,6 +154,15 @@ function RouteSheet({ route, tripCur, onClose }: { route: FuelRoute | null; trip
   const [fuelType, setFuelType] = useState<FuelType>(route?.fuelType ?? 'petrol');
   const [vehicle, setVehicle] = useState(route?.vehicle ?? '');
   const [modelId, setModelId] = useState(''); // selected preset, '' = custom
+  const [carOpen, setCarOpen] = useState(false);
+  // Predictive matches for what's typed in the car-name box (all models when empty).
+  const carMatches = useMemo(() => {
+    const q = vehicle.trim().toLowerCase().replace(/[.\s-]/g, '');
+    const list = q
+      ? CAR_MODELS.filter(c => `${c.make} ${c.model}`.toLowerCase().replace(/[.\s-]/g, '').includes(q))
+      : CAR_MODELS;
+    return list.slice(0, 40);
+  }, [vehicle]);
 
   // The right display unit for a fuel: kWh units for electric, litre/MPG units
   // for liquid — keeping the user's chosen liquid unit where it still applies.
@@ -313,23 +322,26 @@ function RouteSheet({ route, tripCur, onClose }: { route: FuelRoute | null; trip
       {/* Vehicle */}
       <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 mt-2">Vehicle</p>
       <Field label="Car model (optional)">
-        <Select value={modelId} onChange={e => pickModel(e.target.value)}>
-          <option value="">{vehicle ? `${vehicle} (custom)` : 'Custom — enter economy below'}</option>
-          {(['eu', 'na'] as const).flatMap(region => {
-            const rlabel = region === 'eu' ? 'Europe' : 'North America';
-            return CAR_CLASSES.map(cl => {
-              const models = CAR_MODELS.filter(c => c.region === region && c.klass === cl.key);
-              if (!models.length) return null;
-              return (
-                <optgroup key={region + cl.key} label={`${rlabel} · ${cl.label}`}>
-                  {models.map(c => (
-                    <option key={c.id} value={c.id}>{c.make} {c.model} · {econLabel(carEconomy(c, c.fuel), unitFor(c.fuel, economyUnit))}{c.dieselL100 ? ' · diesel' : ''}</option>
-                  ))}
-                </optgroup>
-              );
-            });
-          })}
-        </Select>
+        <div className="relative">
+          <TextInput value={vehicle}
+            onChange={e => { setVehicle(e.target.value); setModelId(''); setCarOpen(true); }}
+            onFocus={() => setCarOpen(true)}
+            onBlur={() => setTimeout(() => setCarOpen(false), 150)}
+            placeholder="Type a make or model — e.g. Golf, Tesla, RAV4" />
+          {carOpen && carMatches.length > 0 && (
+            <div className="absolute z-20 left-0 right-0 mt-1.5 rounded-2xl border-2 border-sky/40 bg-white shadow-xl overflow-y-auto max-h-64">
+              {carMatches.map(c => (
+                <button key={c.id} type="button" onMouseDown={e => e.preventDefault()}
+                  onClick={() => { pickModel(c.id); setCarOpen(false); }}
+                  className="w-full text-left px-3.5 py-2.5 hover:bg-sky/10 active:bg-sky/20 border-b border-slate-100 last:border-0 flex items-center justify-between gap-2">
+                  <span className="text-sm text-slate-700 truncate">{fuelMeta(c.fuel).emoji} {c.make} {c.model}{c.dieselL100 ? ' ·⛽/🛢️' : ''}</span>
+                  <span className="text-[11px] text-slate-400 flex-shrink-0">{econLabel(carEconomy(c, c.fuel), unitFor(c.fuel, economyUnit))} · {c.region === 'eu' ? 'EU' : 'NA'}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        {vehicle && !modelId && <p className="text-[11px] text-muted mt-1">Custom vehicle — set the economy below, or pick a match above.</p>}
       </Field>
       <div className="grid grid-cols-2 gap-3">
         <Field label={elec ? 'Energy use' : 'Fuel economy'}><TextInput type="number" inputMode="decimal" value={economy} onChange={e => { setEconomy(e.target.value); setModelId(''); }} placeholder="0" /></Field>

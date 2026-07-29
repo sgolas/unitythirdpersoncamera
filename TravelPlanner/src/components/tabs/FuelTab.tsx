@@ -14,7 +14,7 @@ import {
   litresUsed, fuelCost, FUEL_TYPES, countryAt, livePrice, type PriceUnit,
 } from '../../lib/fuel';
 import { roadDistanceKm, googleMapsDirections, optimizeRoute, type RoutePoint } from '../../lib/route';
-import { CAR_MODELS, carById, carEconomy } from '../../lib/cars';
+import { CAR_MODELS, CAR_CLASSES, carById, carEconomy } from '../../lib/cars';
 import { TabHeader, Sheet, Field, TextInput, Select, FormFooter, Fab, EmptyState, ConfirmDelete } from '../ui';
 import { PlaceInput } from '../PlaceInput';
 
@@ -297,16 +297,20 @@ function RouteSheet({ route, tripCur, onClose }: { route: FuelRoute | null; trip
       <Field label="Car model (optional)">
         <Select value={modelId} onChange={e => pickModel(e.target.value)}>
           <option value="">{vehicle ? `${vehicle} (custom)` : 'Custom — enter economy below'}</option>
-          <optgroup label="Europe — top rentals">
-            {CAR_MODELS.filter(c => c.region === 'eu').map(c => (
-              <option key={c.id} value={c.id}>{c.make} {c.model} · {econLabel(carEconomy(c, c.fuel), economyUnit)}{c.dieselL100 ? ' · diesel avail.' : ''}</option>
-            ))}
-          </optgroup>
-          <optgroup label="North America — top rentals">
-            {CAR_MODELS.filter(c => c.region === 'na').map(c => (
-              <option key={c.id} value={c.id}>{c.make} {c.model} · {econLabel(carEconomy(c, c.fuel), economyUnit)}</option>
-            ))}
-          </optgroup>
+          {(['eu', 'na'] as const).flatMap(region => {
+            const rlabel = region === 'eu' ? 'Europe' : 'North America';
+            return CAR_CLASSES.map(cl => {
+              const models = CAR_MODELS.filter(c => c.region === region && c.klass === cl.key);
+              if (!models.length) return null;
+              return (
+                <optgroup key={region + cl.key} label={`${rlabel} · ${cl.label}`}>
+                  {models.map(c => (
+                    <option key={c.id} value={c.id}>{c.make} {c.model} · {econLabel(carEconomy(c, c.fuel), economyUnit)}{c.dieselL100 ? ' · diesel' : ''}</option>
+                  ))}
+                </optgroup>
+              );
+            });
+          })}
         </Select>
       </Field>
       <div className="grid grid-cols-2 gap-3">

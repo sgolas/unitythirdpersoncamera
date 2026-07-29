@@ -26,6 +26,33 @@ export function pathLengthKm(points: RoutePoint[]): number {
   return d;
 }
 
+/** Roads wind ~30% longer than the straight line — used for the offline estimate. */
+const WINDING = 1.3;
+
+export interface RoadDistance { km: number; source: 'road' | 'estimate' }
+
+/**
+ * Driving distance through the points in order. Asks the public OSRM road
+ * router for the real distance along roads; if that's unreachable (offline, or
+ * blocked) it falls back to great-circle distance inflated by a winding factor,
+ * so a number always comes back. Never throws.
+ */
+export async function roadDistanceKm(points: RoutePoint[]): Promise<RoadDistance> {
+  const estimate: RoadDistance = { km: pathLengthKm(points) * WINDING, source: 'estimate' };
+  if (points.length < 2) return { km: 0, source: 'road' };
+  try {
+    const coords = points.map(p => `${p.lng},${p.lat}`).join(';');
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 9000);
+    const r = await fetch(`https://router.project-osrm.org/route/v1/driving/${coords}?overview=false`, { signal: ctrl.signal });
+    clearTimeout(t);
+    const j = await r.json();
+    const meters = j?.routes?.[0]?.distance;
+    if (typeof meters === 'number' && meters > 0) return { km: meters / 1000, source: 'road' };
+  } catch { /* fall back to the estimate */ }
+  return estimate;
+}
+
 /**
  * Order the places for the shortest trip. If `start` is given (e.g. your
  * current location) the route begins there and that point is kept first;

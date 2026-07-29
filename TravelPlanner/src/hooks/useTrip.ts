@@ -7,7 +7,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db, activeRows } from '../db/database';
 import type {
   Traveler, TravelDocument, ChecklistItem, Transport, Accommodation, CarRental,
-  Expense, ItineraryEvent, BudgetLine, TripMeta, TripPhoto, MapPin, ChatMessage, Suggestion, ChangeLogEntry,
+  Expense, ItineraryEvent, BudgetLine, TripMeta, TripPhoto, MapPin, ChatMessage, Suggestion, FuelRoute, ChangeLogEntry,
 } from '../types';
 
 export const useTrip = () =>
@@ -58,6 +58,10 @@ export const useMapPins = () =>
 
 export const useSuggestions = () =>
   activeRows<Suggestion>(useLiveQuery(() => db.suggestions.toArray(), []))
+    .sort((a, b) => (b.updatedAt).localeCompare(a.updatedAt));
+
+export const useFuelRoutes = () =>
+  activeRows<FuelRoute>(useLiveQuery(() => db.fuelroutes.toArray(), []))
     .sort((a, b) => (b.updatedAt).localeCompare(a.updatedAt));
 
 export const useChangelog = () =>

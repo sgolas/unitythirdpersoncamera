@@ -245,10 +245,29 @@ export interface ChangeLogEntry {
   after?: string;
 }
 
+/* ── Fuel & driving cost ────────────────────────────────────── */
+export type EconomyUnit = 'l100' | 'kml' | 'mpgus' | 'mpguk';
+export type FuelType = 'petrol' | 'diesel' | 'lpg';
+export interface FuelWaypoint { label: string; lat: number; lng: number }
+export interface FuelRoute extends SyncMeta {
+  kind: 'fuelroute';
+  name: string;
+  waypoints: FuelWaypoint[];    // start, …stops, destination (in travel order)
+  roundTrip: boolean;           // add the return leg back to the start
+  economy: number;              // vehicle fuel economy, in `economyUnit`
+  economyUnit: EconomyUnit;
+  fuelType: FuelType;
+  pricePerLiter: number;        // fuel price per litre, in `priceCurrency`
+  priceCurrency: string;        // currency of the price (e.g. EUR, USD)
+  priceSource: string;          // where the price came from ('FR live', 'DE avg', 'manual')
+  distanceKm: number;           // last computed road distance (cache for display)
+  notes: string;
+}
+
 /* ── Union of all synced records ────────────────────────────── */
 export type AnyRecord =
   | Traveler | TravelDocument | ChecklistItem | Transport
-  | Accommodation | CarRental | Expense | ItineraryEvent | BudgetLine | TripMeta | TripPhoto | MapPin | ChatMessage | Suggestion;
+  | Accommodation | CarRental | Expense | ItineraryEvent | BudgetLine | TripMeta | TripPhoto | MapPin | ChatMessage | Suggestion | FuelRoute;
 
 export type EntityKind = AnyRecord['kind'];
 

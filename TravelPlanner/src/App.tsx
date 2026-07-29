@@ -23,6 +23,7 @@ import { ChecklistTab } from './components/tabs/ChecklistTab';
 import { TransportTab } from './components/tabs/TransportTab';
 import { AccommodationTab } from './components/tabs/AccommodationTab';
 import { CarRentalTab } from './components/tabs/CarRentalTab';
+import { FuelTab } from './components/tabs/FuelTab';
 import { ExpensesTab } from './components/tabs/ExpensesTab';
 import { ItineraryTab } from './components/tabs/ItineraryTab';
 import { BudgetTab } from './components/tabs/BudgetTab';
@@ -39,7 +40,7 @@ import { SuggestionsTab } from './components/tabs/SuggestionsTab';
 
 type View =
   | 'dashboard' | 'overview' | 'documents' | 'checklist' | 'transport'
-  | 'accommodation' | 'carrental' | 'suggestions' | 'expenses' | 'itinerary' | 'budget' | 'helper'
+  | 'accommodation' | 'carrental' | 'fuel' | 'suggestions' | 'expenses' | 'itinerary' | 'budget' | 'helper'
   | 'changelog' | 'settings' | 'map' | 'photos' | 'converter' | 'chat' | 'translate' | 'artillery';
 
 const MORE_ITEMS = SECTIONS; // shared registry (also used by the dashboard)
@@ -122,6 +123,7 @@ export default function App() {
         {view === 'transport'     && <TransportTab />}
         {view === 'accommodation' && <AccommodationTab />}
         {view === 'carrental'     && <CarRentalTab />}
+        {view === 'fuel'          && <FuelTab />}
         {view === 'suggestions'   && <SuggestionsTab />}
         {view === 'expenses'      && <ExpensesTab />}
         {view === 'itinerary'     && <ItineraryTab onNavigate={go} />}

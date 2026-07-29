@@ -66,10 +66,14 @@ export function PlaceInput({ value, onChange, placeholder, onPick, osmTags }: {
   const [sugs, setSugs] = useState<Sug[]>([]);
   const [open, setOpen] = useState(false);
   const skip = useRef(false); // don't re-search right after a pick
+  const first = useRef(true); // don't auto-search the initial value (only on typing)
   const listRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (skip.current) { skip.current = false; return; }
+    // Only search when the user actually types — never auto-open on mount for a
+    // field that already has a value (e.g. when editing a saved record).
+    if (first.current) { first.current = false; return; }
     const q = value.trim();
     if (q.length < 3) { setSugs([]); setOpen(false); return; }
     const ctrl = new AbortController();

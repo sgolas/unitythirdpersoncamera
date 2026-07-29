@@ -12,8 +12,9 @@ import { convert } from '../../lib/currency';
 import {
   toL100, defaultEconomyFor, PRICE_UNITS, perLitreFrom, perUnitFrom,
   litresUsed, fuelCost, FUEL_TYPES, countryAt, livePrice, type PriceUnit,
-  isElectric, isEnergyUnit, unitsForFuel, unitLabel,
+  isElectric, isEnergyUnit, unitsForFuel, unitLabel, adjustForYear,
 } from '../../lib/fuel';
+import type { CarModel } from '../../lib/cars';
 import { roadDistanceKm, googleMapsDirections, optimizeRoute, type RoutePoint } from '../../lib/route';
 import { carById, carEconomy } from '../../lib/cars';
 import { TabHeader, Sheet, Field, TextInput, Select, FormFooter, Fab, EmptyState, ConfirmDelete } from '../ui';
@@ -105,7 +106,7 @@ function RouteCard({ r, tripCur, onEdit, onDelete }: { r: FuelRoute; tripCur: st
             <p className="text-[12px] text-muted mt-0.5 truncate">
               {shortPlace(from)} → {shortPlace(to)}{stops > 0 ? ` · ${stops} stop${stops > 1 ? 's' : ''}` : ''}
             </p>
-            {r.vehicle && <p className="text-[11px] text-muted mt-0.5 truncate">🚗 {r.vehicle}</p>}
+            {r.vehicle && <p className="text-[11px] text-muted mt-0.5 truncate">🚗 {r.year ? `${r.year} ` : ''}{r.vehicle}</p>}
           </div>
           <div className="flex items-center gap-1 flex-shrink-0">
             <button onClick={onEdit} className="p-1.5 rounded-lg text-muted active:bg-slate-100" aria-label="Edit"><Pencil size={15} /></button>
@@ -155,11 +156,19 @@ function RouteSheet({ route, tripCur, onClose }: { route: FuelRoute | null; trip
   const [fuelType, setFuelType] = useState<FuelType>(route?.fuelType ?? 'petrol');
   const [vehicle, setVehicle] = useState(route?.vehicle ?? '');
   const [modelId, setModelId] = useState(''); // selected preset, '' = custom
+  const thisYear = new Date().getFullYear();
+  const [year, setYear] = useState(String(route?.year ?? thisYear));
 
   // The right display unit for a fuel: kWh units for electric, litre/MPG units
   // for liquid — keeping the user's chosen liquid unit where it still applies.
   const unitFor = (f: FuelType, cur: EconomyUnit): EconomyUnit =>
     isElectric(f) ? 'kwh100' : (isEnergyUnit(cur) ? 'l100' : cur);
+
+  // A model's economy for a fuel + unit + model year, as a display string.
+  const econFor = (c: CarModel, f: FuelType, u: EconomyUnit, yr: string): string => {
+    const adj = adjustForYear(carEconomy(c, f), parseInt(yr) || thisYear, isElectric(f));
+    return String(round2(fromL100(adj, u)));
+  };
 
   function pickModel(id: string) {
     setModelId(id);
@@ -168,7 +177,7 @@ function RouteSheet({ route, tripCur, onClose }: { route: FuelRoute | null; trip
     const u = unitFor(c.fuel, economyUnit);
     setFuelType(c.fuel);
     setEconomyUnit(u);
-    setEconomy(String(round2(fromL100(carEconomy(c, c.fuel), u))));
+    setEconomy(econFor(c, c.fuel, u, year));
     setVehicle(`${c.make} ${c.model}`);
   }
 
@@ -181,8 +190,15 @@ function RouteSheet({ route, tripCur, onClose }: { route: FuelRoute | null; trip
     setEconomyUnit(u);
     const c = carById(modelId);
     const fits = c && (c.fuel === f || (!isElectric(f) && !isElectric(c.fuel)));
-    if (fits) setEconomy(String(round2(fromL100(carEconomy(c!, f), u))));
+    if (fits) setEconomy(econFor(c!, f, u, year));
     else { setEconomy(String(defaultEconomyFor(u))); setModelId(''); }
+  }
+
+  // Changing the year re-estimates a picked model's economy for that year.
+  function changeYear(y: string) {
+    setYear(y);
+    const c = carById(modelId);
+    if (c) setEconomy(econFor(c, fuelType, economyUnit, y));
   }
   const [priceUnit, setPriceUnit] = useState<PriceUnit>('liter');
   const [priceCurrency, setPriceCurrency] = useState(route?.priceCurrency ?? tripCur);
@@ -255,7 +271,7 @@ function RouteSheet({ route, tripCur, onClose }: { route: FuelRoute | null; trip
     await put<FuelRoute>({
       kind: 'fuelroute', id: route?.id ?? crypto.randomUUID(),
       name: name.trim() || defaultName(waypoints),
-      waypoints, roundTrip, vehicle: vehicle || undefined,
+      waypoints, roundTrip, vehicle: vehicle || undefined, year: parseInt(year) || undefined,
       economy: parseFloat(economy) || 0, economyUnit, fuelType,
       pricePerLiter: pricePerLitre, priceCurrency, priceSource,
       distanceKm: distanceKm ?? 0, notes: '',
@@ -335,11 +351,19 @@ function RouteSheet({ route, tripCur, onClose }: { route: FuelRoute | null; trip
           </Select>
         </Field>
       </div>
-      <Field label="Fuel type">
-        <Select value={fuelType} onChange={e => changeFuel(e.target.value as FuelType)}>
-          {FUEL_TYPES.map(f => <option key={f.key} value={f.key}>{f.emoji} {f.label}</option>)}
-        </Select>
-      </Field>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Year">
+          <Select value={year} onChange={e => changeYear(e.target.value)}>
+            {Array.from({ length: thisYear - 2004 }, (_, i) => thisYear - i).map(y => <option key={y} value={y}>{y}</option>)}
+          </Select>
+        </Field>
+        <Field label="Fuel type">
+          <Select value={fuelType} onChange={e => changeFuel(e.target.value as FuelType)}>
+            {FUEL_TYPES.map(f => <option key={f.key} value={f.key}>{f.emoji} {f.label}</option>)}
+          </Select>
+        </Field>
+      </div>
+      {modelId && <p className="text-[11px] text-muted -mt-1 mb-2">Economy estimated for a {year} {vehicle}. Edit the figure if you know it exactly.</p>}
 
       {/* Price */}
       <div className="flex items-center justify-between mb-1.5 mt-1">

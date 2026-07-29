@@ -47,6 +47,19 @@ export function toL100(value: number, unit: EconomyUnit): number {
   }
 }
 
+/**
+ * Adjust a model's (recent-year) energy-per-100 km for its actual model year.
+ * Cars have grown steadily more efficient, so older years use proportionally
+ * more; newer than the baseline is treated as the baseline. An estimate — the
+ * user can always override the number.
+ */
+export function adjustForYear(baseEnergy100: number, year: number, electric = false): number {
+  const BASE_YEAR = 2023;
+  const ratePerYear = electric ? 0.010 : 0.012;
+  const olderYears = Math.max(0, BASE_YEAR - year);
+  return baseEnergy100 * (1 + Math.min(0.4, olderYears * ratePerYear));
+}
+
 /** A sensible starting economy value shown for a fresh vehicle, per unit. */
 export function defaultEconomyFor(unit: EconomyUnit): number {
   switch (unit) {

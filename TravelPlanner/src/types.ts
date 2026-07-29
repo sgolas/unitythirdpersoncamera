@@ -256,6 +256,7 @@ export interface FuelRoute extends SyncMeta {
   waypoints: FuelWaypoint[];    // start, …stops, destination (in travel order)
   roundTrip: boolean;           // add the return leg back to the start
   vehicle?: string;             // picked car model name (e.g. "Volkswagen Golf")
+  year?: number;                // model year (affects the economy estimate)
   economy: number;              // vehicle fuel economy, in `economyUnit`
   economyUnit: EconomyUnit;
   fuelType: FuelType;

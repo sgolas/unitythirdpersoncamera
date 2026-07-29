@@ -70,3 +70,4 @@ export const BACKUP_ENDPOINT = isNative ? `${NATIVE_SYNC_BASE}/api/backup` : '/a
 export const PLACES_ENDPOINT = isNative ? `${NATIVE_SYNC_BASE}/api/places` : '/api/places';
 export const TRANSLATE_ENDPOINT = isNative ? `${NATIVE_SYNC_BASE}/api/translate` : '/api/translate';
 export const PUSHREGISTER_ENDPOINT = isNative ? `${NATIVE_SYNC_BASE}/api/pushregister` : '/api/pushregister';
+export const FUEL_ENDPOINT = isNative ? `${NATIVE_SYNC_BASE}/api/fuel` : '/api/fuel';

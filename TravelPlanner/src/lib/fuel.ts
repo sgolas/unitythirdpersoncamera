@@ -8,6 +8,7 @@
  * whatever units and currency the user prefers at the edges.
  */
 import type { EconomyUnit, FuelType } from '../types';
+import { FUEL_ENDPOINT } from './config';
 
 /* ── Economy units ─────────────────────────────────────────────── */
 export const ECONOMY_UNITS: { key: EconomyUnit; label: string; hint: string }[] = [
@@ -73,7 +74,7 @@ const PRICES: Record<string, CountryFuel> = {
   FR: { currency: 'EUR', petrol: 1.85, diesel: 1.75, lpg: 0.95 },
   DE: { currency: 'EUR', petrol: 1.80, diesel: 1.70, lpg: 1.05 },
   ES: { currency: 'EUR', petrol: 1.55, diesel: 1.45, lpg: 0.90 },
-  IT: { currency: 'EUR', petrol: 1.85, diesel: 1.75, lpg: 0.72 },
+  IT: { currency: 'EUR', petrol: 1.90, diesel: 2.00, lpg: 0.72 },
   PT: { currency: 'EUR', petrol: 1.75, diesel: 1.60, lpg: 0.85 },
   NL: { currency: 'EUR', petrol: 2.05, diesel: 1.75, lpg: 1.00 },
   BE: { currency: 'EUR', petrol: 1.75, diesel: 1.75, lpg: 0.90 },
@@ -136,20 +137,41 @@ export async function countryAt(lat: number, lng: number): Promise<string | null
 
 /**
  * Best-effort *live* price near a coordinate, falling back to the country
- * average. Live coverage today comes from free, keyless open-government data:
- *  • France — the national "prix des carburants" instant feed (nearest stations).
- * Everywhere else uses the editable average estimate. Always resolves — never
- * throws — so the caller can just show whatever it gets.
+ * average. Live coverage comes from free open-government feeds:
+ *  • Italy  — Osservaprezzi Carburanti (via our backend proxy; its feed blocks
+ *             browser CORS, so it must be fetched server-side).
+ *  • France — the national "prix des carburants" instant feed.
+ *  • Germany — Tankerkönig, only when a free API key is configured on the backend.
+ * Everywhere else (incl. Poland, Sweden, Canada — no free feed exists) uses the
+ * editable average estimate. Always resolves — never throws.
  */
 export async function livePrice(lat: number, lng: number, country: string | null, fuel: FuelType): Promise<PriceResult> {
   const fallback = averagePrice(country, fuel);
   const cc = (country || '').toUpperCase();
+
+  // 1. Backend proxy — handles the CORS-blocked / key-gated national feeds.
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 9000);
+    const r = await fetch(`${FUEL_ENDPOINT}?country=${cc}&lat=${lat}&lng=${lng}&fuel=${fuel}`, { signal: ctrl.signal });
+    clearTimeout(t);
+    if (r.ok) {
+      const j = await r.json() as { pricePerLiter?: number; currency?: string; source?: string };
+      if (typeof j.pricePerLiter === 'number' && j.pricePerLiter > 0) {
+        return { pricePerLiter: j.pricePerLiter, currency: j.currency || fallback.currency, source: j.source || `${cc} live` };
+      }
+    }
+  } catch { /* proxy down / not deployed — try direct, then average */ }
+
+  // 2. France's feed is CORS-friendly, so it also works client-side without the
+  //    proxy (keeps live prices even if the backend function isn't deployed).
   try {
     if (cc === 'FR') {
       const p = await franceLive(lat, lng, fuel);
       if (p != null) return { pricePerLiter: p, currency: 'EUR', source: 'FR live' };
     }
-  } catch { /* fall through to the average */ }
+  } catch { /* fall through */ }
+
   return fallback;
 }
 

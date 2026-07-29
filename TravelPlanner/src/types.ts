@@ -246,8 +246,9 @@ export interface ChangeLogEntry {
 }
 
 /* ── Fuel & driving cost ────────────────────────────────────── */
-export type EconomyUnit = 'l100' | 'kml' | 'mpgus' | 'mpguk';
-export type FuelType = 'petrol' | 'diesel' | 'lpg';
+// Liquid-fuel units plus electric energy units (kWh/100km, mi/kWh).
+export type EconomyUnit = 'l100' | 'kml' | 'mpgus' | 'mpguk' | 'kwh100' | 'mikwh';
+export type FuelType = 'petrol' | 'diesel' | 'lpg' | 'electric';
 export interface FuelWaypoint { label: string; lat: number; lng: number }
 export interface FuelRoute extends SyncMeta {
   kind: 'fuelroute';

@@ -11,31 +11,51 @@ import type { EconomyUnit, FuelType } from '../types';
 import { FUEL_ENDPOINT } from './config';
 
 /* ── Economy units ─────────────────────────────────────────────── */
+// Liquid-fuel economy units.
 export const ECONOMY_UNITS: { key: EconomyUnit; label: string; hint: string }[] = [
   { key: 'l100',  label: 'L/100 km',  hint: 'litres per 100 km' },
   { key: 'kml',   label: 'km/L',      hint: 'kilometres per litre' },
   { key: 'mpgus', label: 'MPG (US)',  hint: 'US miles per gallon' },
   { key: 'mpguk', label: 'MPG (UK)',  hint: 'UK miles per gallon' },
 ];
+// Electric energy-use units.
+export const ELEC_UNITS: { key: EconomyUnit; label: string; hint: string }[] = [
+  { key: 'kwh100', label: 'kWh/100 km', hint: 'kWh per 100 km' },
+  { key: 'mikwh',  label: 'mi/kWh',     hint: 'miles per kWh' },
+];
+export const isElectric = (fuel: FuelType) => fuel === 'electric';
+export const isEnergyUnit = (u: EconomyUnit) => u === 'kwh100' || u === 'mikwh';
+/** The unit list appropriate to a fuel type (litres vs kWh). */
+export const unitsForFuel = (fuel: FuelType) => (isElectric(fuel) ? ELEC_UNITS : ECONOMY_UNITS);
+/** Look up any unit's label across both liquid and electric lists. */
+export const unitLabel = (u: EconomyUnit) => [...ECONOMY_UNITS, ...ELEC_UNITS].find(x => x.key === u)?.label ?? '';
 
-/** Convert a fuel-economy figure to canonical litres/100 km. */
+/**
+ * Convert an economy figure to canonical "energy per 100 km" — litres/100 km
+ * for liquid fuels, kWh/100 km for electric. (Kept named `toL100` for its
+ * original callers; it now covers the electric units too.)
+ */
 export function toL100(value: number, unit: EconomyUnit): number {
   if (!(value > 0)) return 0;
   switch (unit) {
-    case 'l100':  return value;
-    case 'kml':   return 100 / value;
-    case 'mpgus': return 235.214583 / value;
-    case 'mpguk': return 282.480936 / value;
+    case 'l100':   return value;
+    case 'kml':    return 100 / value;
+    case 'mpgus':  return 235.214583 / value;
+    case 'mpguk':  return 282.480936 / value;
+    case 'kwh100': return value;
+    case 'mikwh':  return 100 / (value * 1.609344);
   }
 }
 
 /** A sensible starting economy value shown for a fresh vehicle, per unit. */
 export function defaultEconomyFor(unit: EconomyUnit): number {
   switch (unit) {
-    case 'l100':  return 7.5;
-    case 'kml':   return 13.3;
-    case 'mpgus': return 31;
-    case 'mpguk': return 38;
+    case 'l100':   return 7.5;
+    case 'kml':    return 13.3;
+    case 'mpgus':  return 31;
+    case 'mpguk':  return 38;
+    case 'kwh100': return 16;
+    case 'mikwh':  return 3.9;
   }
 }
 
@@ -56,9 +76,10 @@ export const fuelCost = (distanceKm: number, l100: number, pricePerLitre: number
   litresUsed(distanceKm, l100) * pricePerLitre;
 
 export const FUEL_TYPES: { key: FuelType; label: string; emoji: string }[] = [
-  { key: 'petrol', label: 'Petrol', emoji: '⛽' },
-  { key: 'diesel', label: 'Diesel', emoji: '🛢️' },
-  { key: 'lpg',    label: 'LPG',    emoji: '🔵' },
+  { key: 'petrol',   label: 'Petrol',   emoji: '⛽' },
+  { key: 'diesel',   label: 'Diesel',   emoji: '🛢️' },
+  { key: 'lpg',      label: 'LPG',      emoji: '🔵' },
+  { key: 'electric', label: 'Electric', emoji: '⚡' },
 ];
 
 /* ── Country average prices (per litre, local currency) ─────────────
@@ -113,9 +134,30 @@ const WORLD: CountryFuel = { currency: 'USD', petrol: 1.20, diesel: 1.15, lpg: 0
 
 export interface PriceResult { pricePerLiter: number; currency: string; source: string }
 
+/* ── Electricity prices (per kWh, local currency) ──────────────────
+ * Typical public / rental-charging rates — higher than home tariffs, which is
+ * what a hire-car driver actually pays. Editable estimates, not live.         */
+const ELEC_PRICES: Record<string, { currency: string; kwh: number }> = {
+  US: { currency: 'USD', kwh: 0.35 }, CA: { currency: 'CAD', kwh: 0.22 },
+  GB: { currency: 'GBP', kwh: 0.55 }, IE: { currency: 'EUR', kwh: 0.50 },
+  FR: { currency: 'EUR', kwh: 0.45 }, DE: { currency: 'EUR', kwh: 0.55 },
+  ES: { currency: 'EUR', kwh: 0.45 }, IT: { currency: 'EUR', kwh: 0.55 },
+  PT: { currency: 'EUR', kwh: 0.40 }, NL: { currency: 'EUR', kwh: 0.55 },
+  BE: { currency: 'EUR', kwh: 0.50 }, AT: { currency: 'EUR', kwh: 0.50 },
+  CH: { currency: 'CHF', kwh: 0.55 }, DK: { currency: 'DKK', kwh: 4.5 },
+  SE: { currency: 'SEK', kwh: 4.5 },  NO: { currency: 'NOK', kwh: 5.0 },
+  FI: { currency: 'EUR', kwh: 0.45 }, PL: { currency: 'PLN', kwh: 2.4 },
+  AU: { currency: 'AUD', kwh: 0.55 }, NZ: { currency: 'NZD', kwh: 0.55 },
+};
+const ELEC_WORLD = { currency: 'USD', kwh: 0.40 };
+
 /** The built-in average price for a country + fuel type (the offline fallback). */
 export function averagePrice(country: string | null, fuel: FuelType): PriceResult {
   const cc = (country || '').toUpperCase();
+  if (fuel === 'electric') {
+    const e = ELEC_PRICES[cc] ?? ELEC_WORLD;
+    return { pricePerLiter: e.kwh, currency: e.currency, source: cc && ELEC_PRICES[cc] ? `${cc} elec` : 'elec est.' };
+  }
   const row = PRICES[cc];
   if (!row) return { pricePerLiter: WORLD[fuel], currency: WORLD.currency, source: 'world avg' };
   return { pricePerLiter: row[fuel], currency: row.currency, source: `${cc} avg` };
@@ -147,6 +189,8 @@ export async function countryAt(lat: number, lng: number): Promise<string | null
  */
 export async function livePrice(lat: number, lng: number, country: string | null, fuel: FuelType): Promise<PriceResult> {
   const fallback = averagePrice(country, fuel);
+  // No live feed for electricity — use the (editable) local estimate.
+  if (fuel === 'electric') return fallback;
   const cc = (country || '').toUpperCase();
 
   // 1. Backend proxy — handles the CORS-blocked / key-gated national feeds.

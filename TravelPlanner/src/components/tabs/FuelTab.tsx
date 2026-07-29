@@ -10,8 +10,9 @@ import { money1, CURRENCY_SYMBOLS } from '../../types';
 import { todayStr } from '../../utils/format';
 import { convert } from '../../lib/currency';
 import {
-  ECONOMY_UNITS, toL100, defaultEconomyFor, PRICE_UNITS, perLitreFrom, perUnitFrom,
+  toL100, defaultEconomyFor, PRICE_UNITS, perLitreFrom, perUnitFrom,
   litresUsed, fuelCost, FUEL_TYPES, countryAt, livePrice, type PriceUnit,
+  isElectric, isEnergyUnit, unitsForFuel, unitLabel,
 } from '../../lib/fuel';
 import { roadDistanceKm, googleMapsDirections, optimizeRoute, type RoutePoint } from '../../lib/route';
 import { CAR_MODELS, CAR_CLASSES, carById, carEconomy } from '../../lib/cars';
@@ -63,12 +64,13 @@ export function FuelTab() {
   );
 }
 
-/** Live cost for a saved route from its stored figures. */
+/** Live cost for a saved route from its stored figures. Energy is litres for
+ *  liquid fuels, kWh for electric — the maths is identical either way. */
 function costOf(r: FuelRoute, tripCur: string) {
   const total = r.distanceKm * (r.roundTrip ? 2 : 1);
-  const l100 = toL100(r.economy, r.economyUnit);
-  const litres = litresUsed(total, l100);
-  const priceCost = fuelCost(total, l100, r.pricePerLiter);
+  const energy100 = toL100(r.economy, r.economyUnit);
+  const litres = litresUsed(total, energy100);
+  const priceCost = fuelCost(total, energy100, r.pricePerLiter);
   return { total, litres, priceCost, tripCost: convert(priceCost, r.priceCurrency, tripCur) };
 }
 
@@ -111,7 +113,9 @@ function RouteCard({ r, tripCur, onEdit, onDelete }: { r: FuelRoute; tripCur: st
         </div>
         <div className="mt-2.5 grid grid-cols-3 gap-2 text-center">
           <Stat label="Distance" value={`${Math.round(total)} km`} sub={`${Math.round(total / KM_PER_MI)} mi`} />
-          <Stat label="Fuel" value={`${litres.toFixed(1)} L`} sub={`${(litres / 3.785411784).toFixed(1)} gal`} />
+          {isElectric(r.fuelType)
+            ? <Stat label="Energy" value={`${litres.toFixed(1)} kWh`} />
+            : <Stat label="Fuel" value={`${litres.toFixed(1)} L`} sub={`${(litres / 3.785411784).toFixed(1)} gal`} />}
           <Stat label="Cost" value={money1(tripCost, tripCur)} sub={r.priceCurrency !== tripCur ? money1(priceCost, r.priceCurrency) : undefined} accent />
         </div>
         {tripCost > 0 && (
@@ -151,21 +155,33 @@ function RouteSheet({ route, tripCur, onClose }: { route: FuelRoute | null; trip
   const [vehicle, setVehicle] = useState(route?.vehicle ?? '');
   const [modelId, setModelId] = useState(''); // selected preset, '' = custom
 
+  // The right display unit for a fuel: kWh units for electric, litre/MPG units
+  // for liquid — keeping the user's chosen liquid unit where it still applies.
+  const unitFor = (f: FuelType, cur: EconomyUnit): EconomyUnit =>
+    isElectric(f) ? 'kwh100' : (isEnergyUnit(cur) ? 'l100' : cur);
+
   function pickModel(id: string) {
     setModelId(id);
     const c = carById(id);
     if (!c) { setVehicle(''); return; }
+    const u = unitFor(c.fuel, economyUnit);
     setFuelType(c.fuel);
-    setEconomy(String(round2(fromL100(carEconomy(c, c.fuel), economyUnit))));
+    setEconomyUnit(u);
+    setEconomy(String(round2(fromL100(carEconomy(c, c.fuel), u))));
     setVehicle(`${c.make} ${c.model}`);
   }
 
-  // Switching fuel type re-reads the picked model's economy for that fuel, so a
-  // model's diesel variant swaps in its (lower) consumption automatically.
+  // Switching fuel type re-reads the picked model's economy for that fuel (so a
+  // model's diesel variant swaps in its lower consumption), and flips the unit
+  // between litres and kWh for electric.
   function changeFuel(f: FuelType) {
     setFuelType(f);
+    const u = unitFor(f, economyUnit);
+    setEconomyUnit(u);
     const c = carById(modelId);
-    if (c) setEconomy(String(round2(fromL100(carEconomy(c, f), economyUnit))));
+    const fits = c && (c.fuel === f || (!isElectric(f) && !isElectric(c.fuel)));
+    if (fits) setEconomy(String(round2(fromL100(carEconomy(c!, f), u))));
+    else { setEconomy(String(defaultEconomyFor(u))); setModelId(''); }
   }
   const [priceUnit, setPriceUnit] = useState<PriceUnit>('liter');
   const [priceCurrency, setPriceCurrency] = useState(route?.priceCurrency ?? tripCur);
@@ -179,9 +195,11 @@ function RouteSheet({ route, tripCur, onClose }: { route: FuelRoute | null; trip
 
   const routable = waypoints.filter(hasCoords);
   const canRoute = routable.length >= 2;
+  const elec = isElectric(fuelType);
 
-  const pricePerLitre = perLitreFrom(parseFloat(priceInput) || 0, priceUnit);
-  const l100 = toL100(parseFloat(economy) || 0, economyUnit);
+  // Canonical price per energy unit: per litre for liquid fuel, per kWh for electric.
+  const pricePerLitre = elec ? (parseFloat(priceInput) || 0) : perLitreFrom(parseFloat(priceInput) || 0, priceUnit);
+  const l100 = toL100(parseFloat(economy) || 0, economyUnit); // energy per 100 km (L or kWh)
 
   const result = useMemo(() => {
     if (distanceKm == null) return null;
@@ -305,7 +323,7 @@ function RouteSheet({ route, tripCur, onClose }: { route: FuelRoute | null; trip
               return (
                 <optgroup key={region + cl.key} label={`${rlabel} · ${cl.label}`}>
                   {models.map(c => (
-                    <option key={c.id} value={c.id}>{c.make} {c.model} · {econLabel(carEconomy(c, c.fuel), economyUnit)}{c.dieselL100 ? ' · diesel' : ''}</option>
+                    <option key={c.id} value={c.id}>{c.make} {c.model} · {econLabel(carEconomy(c, c.fuel), unitFor(c.fuel, economyUnit))}{c.dieselL100 ? ' · diesel' : ''}</option>
                   ))}
                 </optgroup>
               );
@@ -314,7 +332,7 @@ function RouteSheet({ route, tripCur, onClose }: { route: FuelRoute | null; trip
         </Select>
       </Field>
       <div className="grid grid-cols-2 gap-3">
-        <Field label="Fuel economy"><TextInput type="number" inputMode="decimal" value={economy} onChange={e => { setEconomy(e.target.value); setModelId(''); }} placeholder="0" /></Field>
+        <Field label={elec ? 'Energy use' : 'Fuel economy'}><TextInput type="number" inputMode="decimal" value={economy} onChange={e => { setEconomy(e.target.value); setModelId(''); }} placeholder="0" /></Field>
         <Field label="Units">
           <Select value={economyUnit} onChange={e => {
             const u = e.target.value as EconomyUnit;
@@ -323,7 +341,7 @@ function RouteSheet({ route, tripCur, onClose }: { route: FuelRoute | null; trip
             if (Number.isFinite(cur) && cur > 0) setEconomy(String(round2(fromL100(toL100(cur, economyUnit), u))));
             setEconomyUnit(u);
           }}>
-            {ECONOMY_UNITS.map(u => <option key={u.key} value={u.key}>{u.label}</option>)}
+            {unitsForFuel(fuelType).map(u => <option key={u.key} value={u.key}>{u.label}</option>)}
           </Select>
         </Field>
       </div>
@@ -335,7 +353,7 @@ function RouteSheet({ route, tripCur, onClose }: { route: FuelRoute | null; trip
 
       {/* Price */}
       <div className="flex items-center justify-between mb-1.5 mt-1">
-        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Fuel price</p>
+        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">{elec ? 'Electricity price' : 'Fuel price'}</p>
         <button onClick={autoPrice} disabled={!canRoute || priceBusy}
           className="text-xs font-bold text-teal-600 flex items-center gap-1 disabled:opacity-40">
           {priceBusy ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />} Auto-fill
@@ -344,9 +362,13 @@ function RouteSheet({ route, tripCur, onClose }: { route: FuelRoute | null; trip
       <div className="grid grid-cols-3 gap-2">
         <Field label="Price"><TextInput type="number" inputMode="decimal" value={priceInput} onChange={e => { setPriceInput(e.target.value); setPriceSource('manual'); }} placeholder="0.00" /></Field>
         <Field label="Per">
-          <Select value={priceUnit} onChange={e => setPriceUnit(e.target.value as PriceUnit)}>
-            {PRICE_UNITS.map(u => <option key={u.key} value={u.key}>{u.label}</option>)}
-          </Select>
+          {elec ? (
+            <div className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-slate-100 text-slate-500">per kWh</div>
+          ) : (
+            <Select value={priceUnit} onChange={e => setPriceUnit(e.target.value as PriceUnit)}>
+              {PRICE_UNITS.map(u => <option key={u.key} value={u.key}>{u.label}</option>)}
+            </Select>
+          )}
         </Field>
         <Field label="Currency">
           <Select value={priceCurrency} onChange={e => setPriceCurrency(e.target.value)}>
@@ -358,6 +380,7 @@ function RouteSheet({ route, tripCur, onClose }: { route: FuelRoute | null; trip
         <p className="text-[11px] text-muted -mt-1 mb-3">
           {priceSource === 'manual' ? 'Your price.'
             : priceSource.endsWith('live') ? `Live local price (${priceSource.replace(' live', '')}). Tweak if the pump differs.`
+            : priceSource.includes('elec') ? 'Estimated public-charging rate. Edit to your charger’s price for accuracy.'
             : `Estimated average (${priceSource.replace(' avg', '').replace('world', 'global')}). Edit to today's price for accuracy.`}
         </p>
       )}
@@ -374,7 +397,9 @@ function RouteSheet({ route, tripCur, onClose }: { route: FuelRoute | null; trip
         <div className="rounded-2xl border border-teal-200 bg-teal-50/60 p-3.5 mb-2">
           <div className="grid grid-cols-3 gap-2 text-center">
             <Stat label="Distance" value={`${Math.round(result.total)} km`} sub={`${Math.round(result.total / KM_PER_MI)} mi${distSource === 'estimate' ? ' · est.' : ''}`} />
-            <Stat label="Fuel" value={`${result.litres.toFixed(1)} L`} sub={`${(result.litres / 3.785411784).toFixed(1)} gal`} />
+            {elec
+              ? <Stat label="Energy" value={`${result.litres.toFixed(1)} kWh`} />
+              : <Stat label="Fuel" value={`${result.litres.toFixed(1)} L`} sub={`${(result.litres / 3.785411784).toFixed(1)} gal`} />}
             <Stat label="Cost" value={money1(result.tripCost, tripCur)} sub={priceCurrency !== tripCur ? money1(result.priceCost, priceCurrency) : undefined} accent />
           </div>
           {travelers.length > 1 && (
@@ -400,21 +425,22 @@ function RouteSheet({ route, tripCur, onClose }: { route: FuelRoute | null; trip
 /* ── helpers ─────────────────────────────────────────────────────── */
 const emptyWp = (): FuelWaypoint => ({ label: '', lat: NaN, lng: NaN });
 const round2 = (n: number) => Math.round(n * 100) / 100;
-/** A car's economy shown in the user's chosen unit, e.g. "5.9 L/100km" / "40 MPG". */
+/** A car's economy shown in the given unit, e.g. "5.9 L/100 km" / "16 kWh/100 km". */
 function econLabel(l100: number, unit: EconomyUnit): string {
   const v = fromL100(l100, unit);
-  const u = ECONOMY_UNITS.find(x => x.key === unit)?.label ?? '';
-  return `${Math.round(v * 10) / 10} ${u}`;
+  return `${Math.round(v * 10) / 10} ${unitLabel(unit)}`;
 }
 const round3 = (n: number) => Math.round(n * 1000) / 1000;
-/** Inverse of toL100 — express canonical L/100km in another unit. */
+/** Inverse of toL100 — express canonical energy/100km (L or kWh) in another unit. */
 function fromL100(l100: number, unit: EconomyUnit): number {
   if (!(l100 > 0)) return 0;
   switch (unit) {
-    case 'l100':  return l100;
-    case 'kml':   return 100 / l100;
-    case 'mpgus': return 235.214583 / l100;
-    case 'mpguk': return 282.480936 / l100;
+    case 'l100':   return l100;
+    case 'kml':    return 100 / l100;
+    case 'mpgus':  return 235.214583 / l100;
+    case 'mpguk':  return 282.480936 / l100;
+    case 'kwh100': return l100;
+    case 'mikwh':  return 100 / (l100 * 1.609344);
   }
 }
 function defaultName(ws: FuelWaypoint[]): string {

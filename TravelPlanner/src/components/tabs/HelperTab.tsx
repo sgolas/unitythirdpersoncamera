@@ -1,6 +1,6 @@
 import {
   useTrip, useDocuments, useChecklist, useAccommodation, useExpenses,
-  useTransport, useItinerary,
+  useTransport, useItinerary, useBudgetSheets,
 } from '../../hooks/useTrip';
 import { money, sumExpenses } from '../../types';
 import { daysUntil, dateRange, fmtDate } from '../../utils/format';
@@ -10,6 +10,7 @@ type Insight = { tone: 'alert' | 'warn' | 'tip' | 'good'; icon: string; text: st
 
 export function HelperTab({ onNavigate }: { onNavigate: (v: any) => void }) {
   const trip = useTrip();
+  const sheets = useBudgetSheets();
   const docs = useDocuments();
   const checklist = useChecklist();
   const stays = useAccommodation();
@@ -58,9 +59,10 @@ export function HelperTab({ onNavigate }: { onNavigate: (v: any) => void }) {
 
   // Budget
   const spent = sumExpenses(expenses, trip.tripCurrency);
-  if (trip.totalBudget > 0) {
-    const pct = (spent / trip.totalBudget) * 100;
-    if (pct >= 100) insights.push({ tone: 'alert', icon: '💸', text: `You're over budget by ${money(spent - trip.totalBudget, trip.tripCurrency)}.`, nav: 'budget' });
+  const totalBudget = trip.totalBudget + sheets.reduce((s, x) => s + x.total, 0);
+  if (totalBudget > 0) {
+    const pct = (spent / totalBudget) * 100;
+    if (pct >= 100) insights.push({ tone: 'alert', icon: '💸', text: `You're over budget by ${money(spent - totalBudget, trip.tripCurrency)}.`, nav: 'budget' });
     else if (pct >= 80) insights.push({ tone: 'warn', icon: '💶', text: `You've used ${Math.round(pct)}% of your budget.`, nav: 'budget' });
   } else {
     insights.push({ tone: 'tip', icon: '🐷', text: `Set a total budget to track spending.`, nav: 'budget' });

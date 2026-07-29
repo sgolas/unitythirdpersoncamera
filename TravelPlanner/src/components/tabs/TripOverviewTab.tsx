@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Pencil } from 'lucide-react';
-import { useTrip, useTravelers, useExpenses, useTransport, useAccommodation, useItinerary, useChecklist } from '../../hooks/useTrip';
+import { useTrip, useTravelers, useExpenses, useTransport, useAccommodation, useItinerary, useChecklist, useBudgetSheets } from '../../hooks/useTrip';
 import { put } from '../../db/database';
 import type { TripMeta } from '../../types';
 import { money, CURRENCY_SYMBOLS, sumExpenses } from '../../types';
@@ -15,9 +15,11 @@ export function TripOverviewTab() {
   const stays = useAccommodation();
   const itinerary = useItinerary();
   const checklist = useChecklist();
+  const sheets = useBudgetSheets();
   const [editing, setEditing] = useState(false);
 
   if (!trip) return null;
+  const totalBudget = trip.totalBudget + sheets.reduce((s, x) => s + x.total, 0);
   const spent = sumExpenses(expenses, trip.tripCurrency);
   const days = daysUntil(trip.startDate);
 
@@ -64,10 +66,10 @@ export function TripOverviewTab() {
             <span className="text-slate-500">Total spent so far</span>
             <span className="font-bold text-slate-800">{money(spent, trip.tripCurrency)}</span>
           </div>
-          {trip.totalBudget > 0 && (
+          {totalBudget > 0 && (
             <div className="flex justify-between mt-1">
               <span className="text-slate-500">Budget</span>
-              <span className="font-bold text-slate-800">{money(trip.totalBudget, trip.tripCurrency)}</span>
+              <span className="font-bold text-slate-800">{money(totalBudget, trip.tripCurrency)}</span>
             </div>
           )}
         </div>

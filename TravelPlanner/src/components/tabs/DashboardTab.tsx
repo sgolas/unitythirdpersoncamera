@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import {
   useTrip, useChecklist, useExpenses, useTransport, useAccommodation,
-  useItinerary, useTravelers,
+  useItinerary, useTravelers, useBudgetSheets,
 } from '../../hooks/useTrip';
 import { money, moneyHome, moneyAway, sumExpenses } from '../../types';
 import type { Transport, Accommodation } from '../../types';
@@ -32,6 +32,7 @@ export function DashboardTab({ onNavigate }: { onNavigate: (v: any) => void }) {
   const trip = useTrip();
   const checklist = useChecklist();
   const expenses = useExpenses();
+  const sheets = useBudgetSheets();
   const transport = useTransport();
   const stays = useAccommodation();
   const itinerary = useItinerary();
@@ -41,6 +42,8 @@ export function DashboardTab({ onNavigate }: { onNavigate: (v: any) => void }) {
 
   const days = daysUntil(trip.startDate);
   const spent = sumExpenses(expenses, trip.tripCurrency);
+  // Grand budget = General + every budget sheet.
+  const grandBudget = trip.totalBudget + sheets.reduce((s, x) => s + x.total, 0);
   const done = checklist.filter(c => c.done).length;
   const lastSync = getLastSync();
   const cur = trip.tripCurrency;
@@ -53,7 +56,7 @@ export function DashboardTab({ onNavigate }: { onNavigate: (v: any) => void }) {
   const nextFlight = flights.find(f => f.departDate >= today) ?? flights[0];
   const nextStay = stays.find(s => s.checkOut >= today) ?? stays[0];
 
-  const budgetPct = trip.totalBudget > 0 ? Math.min(100, Math.round((spent / trip.totalBudget) * 100)) : 0;
+  const budgetPct = grandBudget > 0 ? Math.min(100, Math.round((spent / grandBudget) * 100)) : 0;
 
   const countdownLabel =
     days > 0 ? `${days}` : days === 0 ? '0' : daysUntil(trip.endDate) >= 0 ? '•' : '✓';
@@ -181,7 +184,7 @@ export function DashboardTab({ onNavigate }: { onNavigate: (v: any) => void }) {
             <Ring pct={budgetPct} />
             <div className="min-w-0">
               <p className="font-bold text-content leading-tight truncate">{moneyHome(spent, cur)}</p>
-              <p className="text-xs text-muted truncate">{moneyAway(spent, cur)}{trip.totalBudget ? ` · of ${moneyHome(trip.totalBudget, cur)}` : ''}</p>
+              <p className="text-xs text-muted truncate">{moneyAway(spent, cur)}{grandBudget ? ` · of ${moneyHome(grandBudget, cur)}` : ''}</p>
             </div>
           </div>
         </button>

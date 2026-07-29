@@ -138,6 +138,7 @@ export interface Expense extends SyncMeta {
   paidBy: string | null;     // travelerId
   place: string;
   notes: string;
+  sheetId?: string | null;   // budget sheet this expense counts toward (null = General)
 }
 
 /* ── 6. Itinerary Planner ───────────────────────────────────── */
@@ -159,6 +160,15 @@ export interface BudgetLine extends SyncMeta {
   kind: 'budget';
   category: ExpenseCategory;
   planned: number;           // planned amount for this category
+  sheetId?: string | null;   // which budget sheet (undefined/null = General)
+}
+
+/** A named sub-budget, e.g. one per country/stop on a multi-stop trip. */
+export interface BudgetSheet extends SyncMeta {
+  kind: 'budgetsheet';
+  name: string;              // "France", "Italy", …
+  total: number;             // planned total for this sheet (trip currency)
+  order: number;             // display order
 }
 
 /* ── 8. Trip Overview (single meta record, id = 'trip') ─────── */
@@ -270,7 +280,7 @@ export interface FuelRoute extends SyncMeta {
 /* ── Union of all synced records ────────────────────────────── */
 export type AnyRecord =
   | Traveler | TravelDocument | ChecklistItem | Transport
-  | Accommodation | CarRental | Expense | ItineraryEvent | BudgetLine | TripMeta | TripPhoto | MapPin | ChatMessage | Suggestion | FuelRoute;
+  | Accommodation | CarRental | Expense | ItineraryEvent | BudgetLine | BudgetSheet | TripMeta | TripPhoto | MapPin | ChatMessage | Suggestion | FuelRoute;
 
 export type EntityKind = AnyRecord['kind'];
 

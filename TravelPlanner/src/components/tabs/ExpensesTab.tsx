@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useExpenses, useTravelers, useTrip, travelerName } from '../../hooks/useTrip';
+import { useExpenses, useTravelers, useTrip, travelerName, useBudgetSheets } from '../../hooks/useTrip';
 import { put, remove } from '../../db/database';
 import type { Expense, ExpenseCategory } from '../../types';
 import { money, moneyHome, moneyAway, sumExpenses, CURRENCY_SYMBOLS } from '../../types';
@@ -105,6 +105,8 @@ function ExpenseSheet({ expense, travelers, currency, onClose, onDelete }: {
   const [paidBy, setPaidBy] = useState(expense?.paidBy ?? '');
   const [place, setPlace] = useState(expense?.place ?? '');
   const [notes, setNotes] = useState(expense?.notes ?? '');
+  const sheets = useBudgetSheets();
+  const [sheetId, setSheetId] = useState(expense?.sheetId ?? '');
 
   async function save() {
     const amt = parseFloat(amount);
@@ -114,6 +116,7 @@ function ExpenseSheet({ expense, travelers, currency, onClose, onDelete }: {
       kind: 'expense', id: expense?.id ?? crypto.randomUUID(),
       title: title.trim(), amount: amt, currency: curSel, category, date,
       paidBy: paidBy || null, place: place.trim(), notes: notes.trim(),
+      sheetId: sheetId || null,
       updatedAt: '', updatedBy: '',
     }, `${isNew ? 'Added' : 'Updated'} expense: ${title.trim()} (${money(amt, curSel)})`, isNew ? 'create' : 'update');
     onClose();
@@ -146,6 +149,14 @@ function ExpenseSheet({ expense, travelers, currency, onClose, onDelete }: {
           {travelers.map(t => <option key={t.id} value={t.id}>{t.emoji} {t.name}</option>)}
         </Select>
       </Field>
+      {sheets.length > 0 && (
+        <Field label="Budget sheet">
+          <Select value={sheetId} onChange={e => setSheetId(e.target.value)}>
+            <option value="">General</option>
+            {sheets.map(s => <option key={s.id} value={s.id}>📍 {s.name}</option>)}
+          </Select>
+        </Field>
+      )}
       <Field label="Place"><PlaceInput value={place} onChange={setPlace} placeholder="Search a place…" /></Field>
       <Field label="Notes"><TextArea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Optional" /></Field>
       {onDelete && (

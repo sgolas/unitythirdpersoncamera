@@ -67,7 +67,7 @@ export const FUEL_TYPES: { key: FuelType; label: string; emoji: string }[] = [
 interface CountryFuel { currency: string; petrol: number; diesel: number; lpg: number }
 const PRICES: Record<string, CountryFuel> = {
   US: { currency: 'USD', petrol: 0.95, diesel: 1.06, lpg: 0.75 },
-  CA: { currency: 'CAD', petrol: 1.55, diesel: 1.75, lpg: 0.95 },
+  CA: { currency: 'CAD', petrol: 1.60, diesel: 1.78, lpg: 0.95 },
   MX: { currency: 'MXN', petrol: 23.5, diesel: 24.5, lpg: 12 },
   GB: { currency: 'GBP', petrol: 1.45, diesel: 1.52, lpg: 0.85 },
   IE: { currency: 'EUR', petrol: 1.75, diesel: 1.70, lpg: 0.95 },
@@ -81,10 +81,10 @@ const PRICES: Record<string, CountryFuel> = {
   CH: { currency: 'CHF', petrol: 1.80, diesel: 1.90, lpg: 1.00 },
   AT: { currency: 'EUR', petrol: 1.55, diesel: 1.55, lpg: 0.95 },
   DK: { currency: 'DKK', petrol: 14.5, diesel: 13.5, lpg: 8 },
-  SE: { currency: 'SEK', petrol: 18.5, diesel: 20,   lpg: 11 },
+  SE: { currency: 'SEK', petrol: 19.5, diesel: 20.5, lpg: 11 },
   NO: { currency: 'NOK', petrol: 22,   diesel: 21,   lpg: 12 },
   FI: { currency: 'EUR', petrol: 1.85, diesel: 1.80, lpg: 1.00 },
-  PL: { currency: 'PLN', petrol: 6.40, diesel: 6.60, lpg: 2.90 },
+  PL: { currency: 'PLN', petrol: 6.85, diesel: 7.00, lpg: 3.00 },
   CZ: { currency: 'CZK', petrol: 38,   diesel: 38,   lpg: 18 },
   GR: { currency: 'EUR', petrol: 1.85, diesel: 1.70, lpg: 0.95 },
   HR: { currency: 'EUR', petrol: 1.50, diesel: 1.45, lpg: 0.85 },

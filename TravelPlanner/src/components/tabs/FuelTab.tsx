@@ -13,6 +13,7 @@ import {
   litresUsed, fuelCost, FUEL_TYPES, countryAt, livePrice, type PriceUnit,
 } from '../../lib/fuel';
 import { roadDistanceKm, googleMapsDirections, optimizeRoute, type RoutePoint } from '../../lib/route';
+import { CAR_MODELS, carById } from '../../lib/cars';
 import { TabHeader, Sheet, Field, TextInput, Select, FormFooter, Fab, EmptyState, ConfirmDelete } from '../ui';
 import { PlaceInput } from '../PlaceInput';
 
@@ -88,6 +89,7 @@ function RouteCard({ r, tripCur, onEdit, onDelete }: { r: FuelRoute; tripCur: st
             <p className="text-[12px] text-muted mt-0.5 truncate">
               {shortPlace(from)} → {shortPlace(to)}{stops > 0 ? ` · ${stops} stop${stops > 1 ? 's' : ''}` : ''}
             </p>
+            {r.vehicle && <p className="text-[11px] text-muted mt-0.5 truncate">🚗 {r.vehicle}</p>}
           </div>
           <div className="flex items-center gap-1 flex-shrink-0">
             <button onClick={onEdit} className="p-1.5 rounded-lg text-muted active:bg-slate-100" aria-label="Edit"><Pencil size={15} /></button>
@@ -126,6 +128,17 @@ function RouteSheet({ route, tripCur, onClose }: { route: FuelRoute | null; trip
   const [economyUnit, setEconomyUnit] = useState<EconomyUnit>(route?.economyUnit ?? 'l100');
   const [economy, setEconomy] = useState(String(route?.economy ?? defaultEconomyFor(route?.economyUnit ?? 'l100')));
   const [fuelType, setFuelType] = useState<FuelType>(route?.fuelType ?? 'petrol');
+  const [vehicle, setVehicle] = useState(route?.vehicle ?? '');
+  const [modelId, setModelId] = useState(''); // selected preset, '' = custom
+
+  function pickModel(id: string) {
+    setModelId(id);
+    const c = carById(id);
+    if (!c) { setVehicle(''); return; }
+    setEconomy(String(round2(fromL100(c.l100, economyUnit))));
+    setFuelType(c.fuel);
+    setVehicle(`${c.make} ${c.model}`);
+  }
   const [priceUnit, setPriceUnit] = useState<PriceUnit>('liter');
   const [priceCurrency, setPriceCurrency] = useState(route?.priceCurrency ?? tripCur);
   // Price is edited in the chosen price-unit; convert to/from per-litre for storage.
@@ -195,7 +208,7 @@ function RouteSheet({ route, tripCur, onClose }: { route: FuelRoute | null; trip
     await put<FuelRoute>({
       kind: 'fuelroute', id: route?.id ?? crypto.randomUUID(),
       name: name.trim() || defaultName(waypoints),
-      waypoints, roundTrip,
+      waypoints, roundTrip, vehicle: vehicle || undefined,
       economy: parseFloat(economy) || 0, economyUnit, fuelType,
       pricePerLiter: pricePerLitre, priceCurrency, priceSource,
       distanceKm: distanceKm ?? 0, notes: '',
@@ -253,8 +266,23 @@ function RouteSheet({ route, tripCur, onClose }: { route: FuelRoute | null; trip
 
       {/* Vehicle */}
       <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 mt-2">Vehicle</p>
+      <Field label="Car model (optional)">
+        <Select value={modelId} onChange={e => pickModel(e.target.value)}>
+          <option value="">{vehicle ? `${vehicle} (custom)` : 'Custom — enter economy below'}</option>
+          <optgroup label="Europe — top rentals">
+            {CAR_MODELS.filter(c => c.region === 'eu').map(c => (
+              <option key={c.id} value={c.id}>{c.make} {c.model} · {econLabel(c.l100, economyUnit)}</option>
+            ))}
+          </optgroup>
+          <optgroup label="North America — top rentals">
+            {CAR_MODELS.filter(c => c.region === 'na').map(c => (
+              <option key={c.id} value={c.id}>{c.make} {c.model} · {econLabel(c.l100, economyUnit)}</option>
+            ))}
+          </optgroup>
+        </Select>
+      </Field>
       <div className="grid grid-cols-2 gap-3">
-        <Field label="Fuel economy"><TextInput type="number" inputMode="decimal" value={economy} onChange={e => setEconomy(e.target.value)} placeholder="0" /></Field>
+        <Field label="Fuel economy"><TextInput type="number" inputMode="decimal" value={economy} onChange={e => { setEconomy(e.target.value); setModelId(''); }} placeholder="0" /></Field>
         <Field label="Units">
           <Select value={economyUnit} onChange={e => {
             const u = e.target.value as EconomyUnit;
@@ -340,6 +368,12 @@ function RouteSheet({ route, tripCur, onClose }: { route: FuelRoute | null; trip
 /* ── helpers ─────────────────────────────────────────────────────── */
 const emptyWp = (): FuelWaypoint => ({ label: '', lat: NaN, lng: NaN });
 const round2 = (n: number) => Math.round(n * 100) / 100;
+/** A car's economy shown in the user's chosen unit, e.g. "5.9 L/100km" / "40 MPG". */
+function econLabel(l100: number, unit: EconomyUnit): string {
+  const v = fromL100(l100, unit);
+  const u = ECONOMY_UNITS.find(x => x.key === unit)?.label ?? '';
+  return `${Math.round(v * 10) / 10} ${u}`;
+}
 const round3 = (n: number) => Math.round(n * 1000) / 1000;
 /** Inverse of toL100 — express canonical L/100km in another unit. */
 function fromL100(l100: number, unit: EconomyUnit): number {

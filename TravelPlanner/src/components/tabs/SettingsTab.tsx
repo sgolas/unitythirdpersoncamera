@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Smartphone, KeyRound, RefreshCw, Globe, Trash2, Check, Download, Palette, Sun, Moon, Monitor, Coins, AlertTriangle, Github, ShieldCheck, QrCode, CalendarPlus, Bell } from 'lucide-react';
 import { getOtaStatus, runOTA } from '../../lib/ota';
-import { isNative } from '../../lib/platform';
+import { isNative, isDesktop } from '../../lib/platform';
 import { getMode, setMode, getAccent, setAccent, ACCENTS, type ThemeMode, type Accent } from '../../lib/theme';
 import {
   getHomeCurrency, getAwayCurrency, setHomeCurrency, setAwayCurrency,
@@ -318,6 +318,24 @@ export function SettingsTab() {
           </button>
           <p className="text-xs text-slate-400 mt-2">Updates also download automatically each time you open the app.</p>
         </div>
+
+        {/* Windows desktop companion — hidden when already running in the desktop app */}
+        {!isDesktop && (
+          <div className="bg-white rounded-2xl p-4 shadow-sm">
+            <p className="flex items-center gap-2 font-semibold text-slate-800 mb-2"><Monitor size={16} /> Windows desktop app</p>
+            <p className="text-sm text-slate-500 leading-snug">
+              Prefer a full window on your PC? Install the Trip Planner desktop app — it shares the same
+              trip via your sync code and keeps itself up to date automatically.
+            </p>
+            <a href="https://github.com/sgolas/sylsrepo/releases/latest" target="_blank" rel="noopener noreferrer"
+              className="w-full mt-3 py-2.5 rounded-2xl font-semibold text-white bg-ink active:scale-[0.98] transition flex items-center justify-center gap-2">
+              <Download size={16} /> Download for Windows
+            </a>
+            <p className="text-xs text-slate-400 mt-2">
+              Opens the latest release — grab the <b>Setup .exe</b> to install, or the <b>portable .exe</b> to run without installing.
+            </p>
+          </div>
+        )}
 
         {/* Danger zone */}
         <div className="bg-white rounded-2xl p-4 shadow-sm">

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Pencil } from 'lucide-react';
-import { useTrip, useTravelers, useExpenses, useTransport, useAccommodation, useItinerary, useChecklist, useBudgetSheets } from '../../hooks/useTrip';
+import { useTrip, useTravelers, useSpend, useTransport, useAccommodation, useItinerary, useChecklist, useBudgetSheets } from '../../hooks/useTrip';
 import { put } from '../../db/database';
 import type { TripMeta } from '../../types';
 import { money, CURRENCY_SYMBOLS, sumExpenses } from '../../types';
@@ -10,7 +10,7 @@ import { TabHeader, Sheet, Field, TextInput, TextArea, Select, FormFooter } from
 export function TripOverviewTab() {
   const trip = useTrip();
   const travelers = useTravelers();
-  const expenses = useExpenses();
+  const expenses = useSpend();
   const transport = useTransport();
   const stays = useAccommodation();
   const itinerary = useItinerary();

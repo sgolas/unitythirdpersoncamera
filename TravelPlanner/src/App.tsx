@@ -125,7 +125,7 @@ export default function App() {
         {view === 'carrental'     && <CarRentalTab />}
         {view === 'fuel'          && <FuelTab />}
         {view === 'suggestions'   && <SuggestionsTab />}
-        {view === 'expenses'      && <ExpensesTab />}
+        {view === 'expenses'      && <ExpensesTab onNavigate={go} />}
         {view === 'itinerary'     && <ItineraryTab onNavigate={go} />}
         {view === 'budget'        && <BudgetTab />}
         {view === 'helper'        && <HelperTab onNavigate={go} />}

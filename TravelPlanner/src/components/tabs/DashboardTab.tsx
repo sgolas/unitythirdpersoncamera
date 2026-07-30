@@ -4,7 +4,7 @@ import {
   Sparkles, History, Compass, ChevronUp, ChevronDown, CalendarClock, Calculator,
 } from 'lucide-react';
 import {
-  useTrip, useChecklist, useExpenses, useTransport, useAccommodation,
+  useTrip, useChecklist, useSpend, useTransport, useAccommodation,
   useItinerary, useTravelers, useBudgetSheets,
 } from '../../hooks/useTrip';
 import { money, moneyHome, moneyAway, sumExpenses } from '../../types';
@@ -31,7 +31,7 @@ export function DashboardTab({ onNavigate }: { onNavigate: (v: any) => void }) {
   const unreadChat = useUnreadChat();
   const trip = useTrip();
   const checklist = useChecklist();
-  const expenses = useExpenses();
+  const expenses = useSpend();
   const sheets = useBudgetSheets();
   const transport = useTransport();
   const stays = useAccommodation();

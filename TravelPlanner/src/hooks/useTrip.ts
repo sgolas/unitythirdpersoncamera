@@ -3,11 +3,12 @@
  * component automatically whenever the underlying data changes — including
  * after a sync pulls in updates from another device.
  */
+import { useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, activeRows } from '../db/database';
 import type {
   Traveler, TravelDocument, ChecklistItem, Transport, Accommodation, CarRental,
-  Expense, ItineraryEvent, BudgetLine, BudgetSheet, TripMeta, TripPhoto, MapPin, ChatMessage, Suggestion, FuelRoute, ChangeLogEntry,
+  Expense, ExpenseCategory, ItineraryEvent, BudgetLine, BudgetSheet, TripMeta, TripPhoto, MapPin, ChatMessage, Suggestion, FuelRoute, ChangeLogEntry,
 } from '../types';
 
 export const useTrip = () =>
@@ -37,6 +38,50 @@ export const useCarRentals = () =>
 export const useExpenses = () =>
   activeRows<Expense>(useLiveQuery(() => db.expenses.toArray(), []))
     .sort((a, b) => b.date.localeCompare(a.date));
+
+/** An item in the Expenses tally: either a real logged expense, or a read-only
+ *  item derived from a booking's cost (stay / transport / car rental). */
+export type SpendItem = Expense & { auto?: boolean; source?: 'accommodation' | 'transport' | 'carrental' };
+
+const cap = (s: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
+
+/** Turn booking costs (stays, transport, car rentals) into read-only expense
+ *  items so they count toward the Expenses/Budget tally automatically. */
+export function bookingSpend(
+  stays: Accommodation[], transport: Transport[], cars: CarRental[], cur: string,
+): SpendItem[] {
+  const mk = (
+    id: string, source: SpendItem['source'], title: string, amount: number,
+    currency: string, category: ExpenseCategory, date: string, place: string,
+  ): SpendItem => ({
+    kind: 'expense', id, title, amount, currency, category, date,
+    paidBy: null, place, notes: '', sheetId: null, updatedAt: '', updatedBy: '',
+    auto: true, source,
+  });
+  const items: SpendItem[] = [];
+  for (const s of stays) if (s.cost > 0)
+    items.push(mk(`auto-acc-${s.id}`, 'accommodation', s.name || 'Stay', s.cost, s.costCurrency ?? cur, 'lodging', s.checkIn, s.city || s.address || ''));
+  for (const t of transport) if (t.cost > 0)
+    items.push(mk(`auto-trn-${t.id}`, 'transport', t.provider ? `${cap(t.mode)} · ${t.provider}` : cap(t.mode) || 'Transport', t.cost, t.costCurrency ?? cur, 'transport', t.departDate, [t.fromPlace, t.toPlace].filter(Boolean).join(' → ')));
+  for (const c of cars) if (c.cost > 0)
+    items.push(mk(`auto-car-${c.id}`, 'carrental', c.company ? `${c.company} car` : 'Car rental', c.cost, c.costCurrency ?? cur, 'transport', c.pickupDate, c.pickupLocation || ''));
+  return items;
+}
+
+/** All trip spend: real expenses plus booking-derived items, newest first. */
+export function useSpend(): SpendItem[] {
+  const trip = useTrip();
+  const expenses = useExpenses();
+  const stays = useAccommodation();
+  const transport = useTransport();
+  const cars = useCarRentals();
+  const cur = trip?.tripCurrency ?? 'EUR';
+  return useMemo(
+    () => [...(expenses as SpendItem[]), ...bookingSpend(stays, transport, cars, cur)]
+      .sort((a, b) => (b.date || '').localeCompare(a.date || '')),
+    [expenses, stays, transport, cars, cur],
+  );
+}
 
 export const useItinerary = () =>
   activeRows<ItineraryEvent>(useLiveQuery(() => db.itinerary.toArray(), []))

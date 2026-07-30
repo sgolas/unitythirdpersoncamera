@@ -1,5 +1,5 @@
 import {
-  useTrip, useDocuments, useChecklist, useAccommodation, useExpenses,
+  useTrip, useDocuments, useChecklist, useAccommodation, useSpend,
   useTransport, useItinerary, useBudgetSheets,
 } from '../../hooks/useTrip';
 import { money, sumExpenses } from '../../types';
@@ -14,7 +14,7 @@ export function HelperTab({ onNavigate }: { onNavigate: (v: any) => void }) {
   const docs = useDocuments();
   const checklist = useChecklist();
   const stays = useAccommodation();
-  const expenses = useExpenses();
+  const expenses = useSpend();
   const transport = useTransport();
   const itinerary = useItinerary();
 

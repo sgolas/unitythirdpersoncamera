@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Plus, Pencil } from 'lucide-react';
-import { useBudget, useBudgetSheets, useExpenses, useTrip } from '../../hooks/useTrip';
+import { useBudget, useBudgetSheets, useSpend, useTrip } from '../../hooks/useTrip';
 import { put, remove } from '../../db/database';
 import type { BudgetLine, BudgetSheet, ExpenseCategory, TripMeta } from '../../types';
 import { money, moneyHome, moneyAway, sumExpenses } from '../../types';
@@ -26,7 +26,7 @@ type View = 'all' | 'general' | string; // 'all', 'general', or a sheet id
 export function BudgetTab() {
   const budget = useBudget();
   const sheets = useBudgetSheets();
-  const expenses = useExpenses();
+  const expenses = useSpend();
   const trip = useTrip();
   const [view, setView] = useState<View>('general');
   const [editTotal, setEditTotal] = useState(false);

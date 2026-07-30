@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { useExpenses, useTravelers, useTrip, travelerName, useBudgetSheets } from '../../hooks/useTrip';
+import { useSpend, useTravelers, useTrip, travelerName, useBudgetSheets } from '../../hooks/useTrip';
+import { ChevronRight } from 'lucide-react';
 import { put, remove } from '../../db/database';
 import type { Expense, ExpenseCategory } from '../../types';
 import { money, moneyHome, moneyAway, sumExpenses, CURRENCY_SYMBOLS } from '../../types';
@@ -17,8 +18,10 @@ const CATS: { key: ExpenseCategory; label: string; emoji: string; color: string 
 ];
 const catMeta = (k: ExpenseCategory) => CATS.find(c => c.key === k)!;
 
-export function ExpensesTab() {
-  const expenses = useExpenses();
+const SOURCE_LABEL: Record<string, string> = { accommodation: 'Stay', transport: 'Transport', carrental: 'Car rental' };
+
+export function ExpensesTab({ onNavigate }: { onNavigate?: (v: any) => void } = {}) {
+  const expenses = useSpend();
   const travelers = useTravelers();
   const trip = useTrip();
   const [adding, setAdding] = useState(false);
@@ -55,11 +58,13 @@ export function ExpensesTab() {
         <div className="px-4 py-4 space-y-2">
           {expenses.map(e => {
             const m = catMeta(e.category);
-            const meta = [fmtDate(e.date), e.paidBy ? travelerName(travelers, e.paidBy) : '', e.place]
-              .filter(Boolean).join(' · ');
+            const meta = (e.auto
+              ? [`From ${SOURCE_LABEL[e.source ?? ''] ?? 'booking'}`, fmtDate(e.date), e.place]
+              : [fmtDate(e.date), e.paidBy ? travelerName(travelers, e.paidBy) : '', e.place]
+            ).filter(Boolean).join(' · ');
             return (
               <div key={e.id} className="bg-white rounded-2xl px-3.5 py-3 shadow-sm flex items-center gap-3 active:bg-slate-50 transition"
-                onClick={() => setEditing(e)}>
+                onClick={() => (e.auto ? onNavigate?.(e.source!) : setEditing(e))}>
                 <span className="w-10 h-10 rounded-xl flex items-center justify-center text-lg flex-shrink-0"
                   style={{ backgroundColor: m.color + '20' }}>{m.emoji}</span>
                 <div className="flex-1 min-w-0">
@@ -72,6 +77,7 @@ export function ExpensesTab() {
                     <p className="text-xs text-slate-500 whitespace-nowrap flex-shrink-0">{moneyAway(e.amount, e.currency)}</p>
                   </div>
                 </div>
+                {e.auto && <ChevronRight size={16} className="text-slate-300 flex-shrink-0" />}
               </div>
             );
           })}

@@ -46,8 +46,12 @@ type View =
 const MORE_ITEMS = SECTIONS; // shared registry (also used by the dashboard)
 
 export default function App() {
-  const [view, setView] = useState<View>('dashboard');
-  const [stack, setStack] = useState<View[]>([]);
+  // Navigation history — the last entry is the current view. Appending the
+  // *target* through a functional updater keeps back reliable even if two
+  // navigations land in the same render (which previously could push the wrong
+  // page and make Back jump to the home page).
+  const [history, setHistory] = useState<View[]>(['dashboard']);
+  const view = history[history.length - 1];
   const [moreOpen, setMoreOpen] = useState(false);
   const [pinTarget, setPinTarget] = useState<typeof MORE_ITEMS[number] | null>(null);
   const [, bump] = useReducer(x => x + 1, 0);
@@ -68,25 +72,20 @@ export default function App() {
 
   // A tapped chat push (see lib/push) asks us to open the Chat tab.
   useEffect(() => {
-    const openChat = () => { setStack([]); setMoreOpen(false); setView('chat'); };
+    const openChat = () => { setMoreOpen(false); setHistory(h => (h[h.length - 1] === 'chat' ? h : [...h, 'chat'])); };
     window.addEventListener('open-chat', openChat);
     return () => window.removeEventListener('open-chat', openChat);
   }, []);
 
   function go(v: View) {
     setMoreOpen(false);
-    if (v !== view) setStack(s => [...s, view]);
-    setView(v);
+    setHistory(h => (h[h.length - 1] === v ? h : [...h, v]));
     window.scrollTo(0, 0);
   }
 
   function back() {
-    setStack(s => {
-      if (s.length === 0) return s;
-      setView(s[s.length - 1]);
-      window.scrollTo(0, 0);
-      return s.slice(0, -1);
-    });
+    setHistory(h => (h.length > 1 ? h.slice(0, -1) : h));
+    window.scrollTo(0, 0);
   }
 
   // Android hardware back button → go back, or close the More menu, or exit.
@@ -96,14 +95,14 @@ export default function App() {
     import('@capacitor/app').then(({ App: CapApp }) => {
       sub = CapApp.addListener('backButton', () => {
         if (moreOpen) setMoreOpen(false);
-        else if (stack.length > 0) back();
+        else if (history.length > 1) back();
         else CapApp.exitApp();
       });
     });
     return () => { sub?.then?.((h: any) => h.remove()); };
-  }, [stack, moreOpen]);
+  }, [history, moreOpen]);
 
-  const canGoBack = stack.length > 0;
+  const canGoBack = history.length > 1;
 
   // First launch ever → warm welcome tour, then onboarding.
   if (!welcomeSeen) {

@@ -8,6 +8,7 @@
  * shares the same trips as the phone via your sync code.
  */
 const { app, BrowserWindow, protocol, net, shell, session, Menu } = require('electron');
+const { autoUpdater } = require('electron-updater');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 
@@ -77,6 +78,12 @@ app.whenReady().then(() => {
   });
 
   createWindow();
+
+  // Auto-update: in the packaged app, quietly check GitHub Releases, download a
+  // newer version in the background, and install it on next quit.
+  if (app.isPackaged) {
+    autoUpdater.checkForUpdatesAndNotify().catch(() => { /* offline / no release */ });
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

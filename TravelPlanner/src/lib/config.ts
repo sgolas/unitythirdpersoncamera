@@ -57,17 +57,18 @@ export function buildInviteLink(code: string, pass: string): string {
 export function getLastSync(): string | null { return localStorage.getItem(LAST_KEY); }
 export function setLastSync(iso: string) { localStorage.setItem(LAST_KEY, iso); }
 
-import { isNative } from './platform';
+import { isNative, isDesktop } from './platform';
 
 // Where the sync relay lives (Cloudflare Pages Function at /api/sync).
 // - Web portal is served from the same origin, so a relative path works.
-// - The native Android app has no server origin, so it needs the absolute
-//   deployed URL. Update this to the live Cloudflare domain after first deploy.
+// - The native Android app and the Electron desktop app have no server origin
+//   of their own, so they need the absolute deployed URL.
 const NATIVE_SYNC_BASE = 'https://trip-planner-sgolas.pages.dev';
-export const SYNC_ENDPOINT = isNative ? `${NATIVE_SYNC_BASE}/api/sync` : '/api/sync';
-export const PHOTO_ENDPOINT = isNative ? `${NATIVE_SYNC_BASE}/api/photo` : '/api/photo';
-export const BACKUP_ENDPOINT = isNative ? `${NATIVE_SYNC_BASE}/api/backup` : '/api/backup';
-export const PLACES_ENDPOINT = isNative ? `${NATIVE_SYNC_BASE}/api/places` : '/api/places';
-export const TRANSLATE_ENDPOINT = isNative ? `${NATIVE_SYNC_BASE}/api/translate` : '/api/translate';
-export const PUSHREGISTER_ENDPOINT = isNative ? `${NATIVE_SYNC_BASE}/api/pushregister` : '/api/pushregister';
-export const FUEL_ENDPOINT = isNative ? `${NATIVE_SYNC_BASE}/api/fuel` : '/api/fuel';
+const remote = isNative || isDesktop;
+export const SYNC_ENDPOINT = remote ? `${NATIVE_SYNC_BASE}/api/sync` : '/api/sync';
+export const PHOTO_ENDPOINT = remote ? `${NATIVE_SYNC_BASE}/api/photo` : '/api/photo';
+export const BACKUP_ENDPOINT = remote ? `${NATIVE_SYNC_BASE}/api/backup` : '/api/backup';
+export const PLACES_ENDPOINT = remote ? `${NATIVE_SYNC_BASE}/api/places` : '/api/places';
+export const TRANSLATE_ENDPOINT = remote ? `${NATIVE_SYNC_BASE}/api/translate` : '/api/translate';
+export const PUSHREGISTER_ENDPOINT = remote ? `${NATIVE_SYNC_BASE}/api/pushregister` : '/api/pushregister';
+export const FUEL_ENDPOINT = remote ? `${NATIVE_SYNC_BASE}/api/fuel` : '/api/fuel';

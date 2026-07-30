@@ -1,0 +1,35 @@
+name: Build Windows desktop app
+
+# Manual trigger: Actions tab → "Build Windows desktop app" → Run workflow.
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Build the web app
+        working-directory: TravelPlanner
+        run: |
+          npm ci
+          npm run build
+
+      - name: Build the Windows installer
+        working-directory: TravelPlanner/desktop
+        run: |
+          npm install
+          npm run dist
+
+      - name: Upload installer + portable exe
+        uses: actions/upload-artifact@v4
+        with:
+          name: trip-planner-windows
+          path: |
+            TravelPlanner/desktop/release/*.exe
+          if-no-files-found: error

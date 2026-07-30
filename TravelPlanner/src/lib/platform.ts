@@ -9,10 +9,13 @@
 const cap = (window as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor;
 export const isNative = !!cap?.isNativePlatform?.();
 
+/** True in the Electron desktop companion app (a full editor, like native). */
+export const isDesktop = typeof navigator !== 'undefined' && /Electron/i.test(navigator.userAgent);
+
 const forceApp = new URLSearchParams(location.search).has('app');
 
 /** True when running as the sgolas.com view-only web portal. */
-export const isPortal = !isNative && !forceApp;
+export const isPortal = !isNative && !isDesktop && !forceApp;
 
 /** Writes are disabled in portal mode. */
 export const readOnly = isPortal;

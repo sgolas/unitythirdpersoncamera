@@ -1,8 +1,11 @@
 name: Build Windows desktop app
 
-# Manual trigger: Actions tab → "Build Windows desktop app" → Run workflow.
+# Run by pushing a tag like `desktop-v1.0.0`, or manually from the Actions tab.
 on:
   workflow_dispatch:
+  push:
+    tags:
+      - 'desktop-v*'
 
 jobs:
   build:

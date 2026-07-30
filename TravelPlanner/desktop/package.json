@@ -34,7 +34,11 @@
       "oneClick": false,
       "perMachine": false,
       "allowToChangeInstallationDirectory": true,
-      "createDesktopShortcut": true
+      "createDesktopShortcut": true,
+      "artifactName": "TripPlanner-Setup.${ext}"
+    },
+    "portable": {
+      "artifactName": "TripPlanner-Portable.${ext}"
     }
   }
 }

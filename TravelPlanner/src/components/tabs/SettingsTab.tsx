@@ -330,12 +330,13 @@ export function SettingsTab() {
               Prefer a full window on your PC? Install the Trip Planner desktop app — it shares the same
               trip via your sync code and keeps itself up to date automatically.
             </p>
-            <a href="https://github.com/sgolas/sylsrepo/releases/latest" target="_blank" rel="noopener noreferrer"
+            <a href="https://github.com/sgolas/sylsrepo/releases/latest/download/TripPlanner-Setup.exe"
               className="w-full mt-3 py-2.5 rounded-2xl font-semibold text-white bg-ink active:scale-[0.98] transition flex items-center justify-center gap-2">
               <Download size={16} /> Download for Windows
             </a>
             <p className="text-xs text-slate-400 mt-2">
-              Opens the latest release — grab the <b>Setup .exe</b> to install, or the <b>portable .exe</b> to run without installing.
+              Downloads the installer directly. Prefer no install? <a className="underline"
+                href="https://github.com/sgolas/sylsrepo/releases/latest/download/TripPlanner-Portable.exe">Get the portable version</a>.
             </p>
           </div>
         )}

@@ -139,7 +139,11 @@ export interface Expense extends SyncMeta {
   place: string;
   notes: string;
   sheetId?: string | null;   // budget sheet this expense counts toward (null = General)
+  excludeFromBudget?: boolean; // logged, but left out of every budget/spent total
 }
+
+/** True when an item should count toward budget/spent totals (default: yes). */
+export const countsToBudget = (e: { excludeFromBudget?: boolean }): boolean => !e.excludeFromBudget;
 
 /* ── 6. Itinerary Planner ───────────────────────────────────── */
 export interface ItineraryEvent extends SyncMeta {

@@ -8,7 +8,7 @@ import {
   useTrip, useTravelers, useItinerary, useTransport, useAccommodation,
   useDocuments, useExpenses, useChecklist, useBudget, usePhotos, useMapPins, useSpend,
 } from '../hooks/useTrip';
-import { money, sumExpenses } from '../types';
+import { money, sumExpenses, countsToBudget } from '../types';
 import { fmtDate, fmtDateLong, fmtTime, tripLength, daysUntil, dateRange } from '../utils/format';
 
 const SS_CODE = 'portal.code';
@@ -187,7 +187,7 @@ function PortalView() {
     );
   }
   const cur = trip.tripCurrency;
-  const spent = sumExpenses(allSpend, cur);
+  const spent = sumExpenses(allSpend.filter(countsToBudget), cur);
   const days = daysUntil(trip.startDate);
 
   return (

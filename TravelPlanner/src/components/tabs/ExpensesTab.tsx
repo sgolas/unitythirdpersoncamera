@@ -3,7 +3,7 @@ import { useSpend, useTravelers, useTrip, travelerName, useBudgetSheets } from '
 import { ChevronRight, AlertTriangle, Trash2 } from 'lucide-react';
 import { put, remove } from '../../db/database';
 import type { Expense, ExpenseCategory } from '../../types';
-import { money, moneyHome, moneyAway, sumExpenses, CURRENCY_SYMBOLS } from '../../types';
+import { money, moneyHome, moneyAway, sumExpenses, countsToBudget, CURRENCY_SYMBOLS } from '../../types';
 import { fmtDate, todayStr } from '../../utils/format';
 import { TabHeader, Sheet, Field, TextInput, TextArea, Select, FormFooter, Fab, EmptyState, ConfirmDelete } from '../ui';
 import { PlaceInput } from '../PlaceInput';
@@ -29,10 +29,13 @@ export function ExpensesTab({ onNavigate }: { onNavigate?: (v: any) => void } = 
   const [pendingDelete, setPendingDelete] = useState<Expense | null>(null);
 
   const cur = trip?.tripCurrency ?? 'EUR';
-  const total = sumExpenses(expenses, cur);
+  // Totals count only budget-relevant items (items marked "exclude from budget"
+  // still show in the list below, just don't add to any spent figure).
+  const counted = expenses.filter(countsToBudget);
+  const total = sumExpenses(counted, cur);
 
   const byCat = CATS.map(c => ({
-    ...c, sum: sumExpenses(expenses.filter(e => e.category === c.key), cur),
+    ...c, sum: sumExpenses(counted.filter(e => e.category === c.key), cur),
   })).filter(c => c.sum > 0);
 
   // A manually-logged expense that matches a booking-derived item (same amount,
@@ -85,6 +88,11 @@ export function ExpensesTab({ onNavigate }: { onNavigate?: (v: any) => void } = 
                     <p className="text-xs text-slate-400 truncate flex-1 min-w-0">{meta}</p>
                     <p className="text-xs text-slate-500 whitespace-nowrap flex-shrink-0">{moneyAway(e.amount, e.currency)}</p>
                   </div>
+                  {e.excludeFromBudget && (
+                    <p className="mt-1 inline-flex items-center gap-1 text-[11px] font-semibold text-slate-500 bg-slate-100 rounded-full px-2 py-0.5">
+                      Not in budget
+                    </p>
+                  )}
                   {looksDuplicated(e) && (
                     <p className="mt-1 inline-flex items-center gap-1 text-[11px] font-semibold text-amber-600 bg-amber-50 rounded-full px-2 py-0.5">
                       <AlertTriangle size={11} /> Possible duplicate of a booking
@@ -133,6 +141,7 @@ function ExpenseSheet({ expense, travelers, currency, onClose, onDelete }: {
   const [notes, setNotes] = useState(expense?.notes ?? '');
   const sheets = useBudgetSheets();
   const [sheetId, setSheetId] = useState(expense?.sheetId ?? '');
+  const [exclude, setExclude] = useState(expense?.excludeFromBudget ?? false);
 
   async function save() {
     const amt = parseFloat(amount);
@@ -142,7 +151,7 @@ function ExpenseSheet({ expense, travelers, currency, onClose, onDelete }: {
       kind: 'expense', id: expense?.id ?? crypto.randomUUID(),
       title: title.trim(), amount: amt, currency: curSel, category, date,
       paidBy: paidBy || null, place: place.trim(), notes: notes.trim(),
-      sheetId: sheetId || null,
+      sheetId: sheetId || null, excludeFromBudget: exclude,
       updatedAt: '', updatedBy: '',
     }, `${isNew ? 'Added' : 'Updated'} expense: ${title.trim()} (${money(amt, curSel)})`, isNew ? 'create' : 'update');
     onClose();
@@ -185,6 +194,14 @@ function ExpenseSheet({ expense, travelers, currency, onClose, onDelete }: {
       )}
       <Field label="Place"><PlaceInput value={place} onChange={setPlace} placeholder="Search a place…" /></Field>
       <Field label="Notes"><TextArea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Optional" /></Field>
+      <label className="flex items-center gap-3 py-1 cursor-pointer select-none">
+        <input type="checkbox" checked={exclude} onChange={e => setExclude(e.target.checked)}
+          className="w-5 h-5 rounded border-slate-300" style={{ accentColor: 'var(--accent)' }} />
+        <span className="text-sm">
+          <span className="font-semibold text-slate-800">Exclude from budget</span>
+          <span className="block text-xs text-slate-400">Keep it in the list, but leave it out of every spent/budget total.</span>
+        </span>
+      </label>
       {onDelete && (
         <button onClick={onDelete}
           className="mt-2 w-full py-2.5 rounded-2xl font-semibold text-sunset border-2 border-line active:bg-rose-50 transition">

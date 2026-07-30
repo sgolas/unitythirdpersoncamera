@@ -3,7 +3,7 @@ import { Plus, Pencil } from 'lucide-react';
 import { useBudget, useBudgetSheets, useSpend, useTrip } from '../../hooks/useTrip';
 import { put, remove } from '../../db/database';
 import type { BudgetLine, BudgetSheet, ExpenseCategory, TripMeta } from '../../types';
-import { money, moneyHome, moneyAway, sumExpenses } from '../../types';
+import { money, moneyHome, moneyAway, sumExpenses, countsToBudget } from '../../types';
 import { convert, getHomeCurrency } from '../../lib/currency';
 import { TabHeader, Sheet, Field, TextInput, FormFooter, GhostButton } from '../ui';
 
@@ -43,7 +43,7 @@ export function BudgetTab() {
   const inView = <T extends { sheetId?: string | null }>(r: T) =>
     key === 'all' ? true : (r.sheetId ?? null) === key;
 
-  const viewExpenses = expenses.filter(inView);
+  const viewExpenses = expenses.filter(e => inView(e) && countsToBudget(e));
   const plannedFor = (c: ExpenseCategory) =>
     budget.filter(b => inView(b) && b.category === c).reduce((s, b) => s + b.planned, 0);
   const spentFor = (c: ExpenseCategory) => sumExpenses(viewExpenses.filter(e => e.category === c), cur);
@@ -136,7 +136,7 @@ export function BudgetTab() {
           <p className="text-xs font-bold text-slate-400 uppercase tracking-wide px-1">By sheet</p>
           {[{ id: 'general', name: 'General', total: trip.totalBudget }, ...sheets].map(s => {
             const sk = s.id === 'general' ? null : s.id;
-            const sSpent = sumExpenses(expenses.filter(e => (e.sheetId ?? null) === sk), cur);
+            const sSpent = sumExpenses(expenses.filter(e => (e.sheetId ?? null) === sk && countsToBudget(e)), cur);
             return (
               <div key={s.id} className="bg-white rounded-2xl p-4 shadow-sm" onClick={() => setView(s.id === 'general' ? 'general' : s.id)}>
                 <div className="flex items-center justify-between gap-2">

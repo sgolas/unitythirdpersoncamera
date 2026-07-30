@@ -71,6 +71,11 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
+      // The bundled site runs on app://local and calls the trip relay
+      // cross-origin. This is a trusted first-party window that only ever loads
+      // our bundled build (external links open in the system browser), so we
+      // relax the same-origin policy for the API calls to work reliably.
+      webSecurity: false,
     },
   });
 
@@ -117,7 +122,18 @@ app.whenReady().then(() => {
   // so echo permissive CORS headers for this trusted first-party window. (Reads
   // only — the app never sends cookies/credentials.)
   session.defaultSession.webRequest.onHeadersReceived((details, cb) => {
-    const h = details.responseHeaders || {};
+    // Rebuild the header set, dropping any CORS headers the server already sent
+    // (in ANY casing) so our single permissive value can't collide with theirs
+    // and produce a duplicate header — which Chromium rejects, surfacing in the
+    // app as "No connection".
+    const drop = new Set([
+      'access-control-allow-origin', 'access-control-allow-headers',
+      'access-control-allow-methods', 'access-control-allow-credentials',
+    ]);
+    const h = {};
+    for (const [k, v] of Object.entries(details.responseHeaders || {})) {
+      if (!drop.has(k.toLowerCase())) h[k] = v;
+    }
     h['Access-Control-Allow-Origin'] = ['*'];
     h['Access-Control-Allow-Headers'] = ['*'];
     h['Access-Control-Allow-Methods'] = ['GET,POST,PUT,DELETE,OPTIONS'];

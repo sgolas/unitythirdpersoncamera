@@ -5,7 +5,7 @@ import type { TripMeta, Traveler } from '../types';
 import { CURRENCY_SYMBOLS } from '../types';
 import { setHomeCurrency, setAwayCurrency } from '../lib/currency';
 import { ensureSyncCredentials } from '../lib/config';
-import { scanToJoin } from '../lib/join';
+import { scanToJoin, joinByCode } from '../lib/join';
 import { isNative } from '../lib/platform';
 import { todayStr } from '../utils/format';
 import { Field, TextInput, Select } from './ui';
@@ -37,6 +37,10 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
   const [saving, setSaving] = useState(false);
   const [joining, setJoining] = useState(false);
   const [joinErr, setJoinErr] = useState('');
+  const [joinCode, setJoinCode] = useState('');
+  const [joinPass, setJoinPass] = useState('');
+  const [joiningCode, setJoiningCode] = useState(false);
+  const [joinCodeErr, setJoinCodeErr] = useState('');
 
   async function join() {
     setJoining(true); setJoinErr('');
@@ -44,6 +48,14 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
     if (res.ok) { onDone(); return; } // synced trip now exists → app renders it
     setJoinErr(res.message);
     setJoining(false);
+  }
+
+  async function joinCodeSubmit() {
+    setJoiningCode(true); setJoinCodeErr('');
+    const res = await joinByCode(joinCode, joinPass);
+    if (res.ok) { onDone(); return; } // synced trip now exists → app renders it
+    setJoinCodeErr(res.message);
+    setJoiningCode(false);
   }
 
   const namedRows = rows.filter(r => r.name.trim());
@@ -101,7 +113,7 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
       </div>
 
       <div className="px-4 py-5 space-y-5 max-w-md mx-auto" style={{ paddingBottom: 'calc(96px + env(safe-area-inset-bottom, 0px))' }}>
-        {/* Join an existing trip via QR */}
+        {/* Join an existing trip via QR (native) */}
         {isNative && (
           <div className="bg-accent/5 border border-accent/20 rounded-2xl p-4">
             <p className="font-semibold text-content mb-0.5">Invited to a trip?</p>
@@ -112,6 +124,26 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
             </button>
             {joinErr && <p className="text-sunset text-sm mt-2">{joinErr}</p>}
             <p className="text-[11px] text-muted mt-2 text-center">or set up your own trip below</p>
+          </div>
+        )}
+
+        {/* Join an existing trip by code (desktop / web — no camera to scan) */}
+        {!isNative && (
+          <div className="bg-accent/5 border border-accent/20 rounded-2xl p-4">
+            <p className="font-semibold text-content mb-0.5">Already have a trip?</p>
+            <p className="text-xs text-muted mb-3">Enter your trip code and password to load it here and sync — or paste an invite link.</p>
+            <Field label="Trip code or invite link">
+              <TextInput value={joinCode} onChange={e => setJoinCode(e.target.value)} placeholder="e.g. trip-abcdef-ghij" autoCapitalize="none" />
+            </Field>
+            <Field label="Password">
+              <TextInput type="password" value={joinPass} onChange={e => setJoinPass(e.target.value)} placeholder="Shared password" />
+            </Field>
+            <button onClick={joinCodeSubmit} disabled={joiningCode || !joinCode.trim()}
+              className="w-full py-2.5 rounded-2xl font-semibold text-white bg-accent active:scale-[0.98] disabled:opacity-50 transition flex items-center justify-center gap-2">
+              {joiningCode ? <><Loader size={16} className="animate-spin" /> Loading…</> : <><Check size={16} /> Load my trip</>}
+            </button>
+            {joinCodeErr && <p className="text-sunset text-sm mt-2">{joinCodeErr}</p>}
+            <p className="text-[11px] text-muted mt-2 text-center">or set up a new trip below</p>
           </div>
         )}
 

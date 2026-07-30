@@ -7,10 +7,48 @@
  * trip data syncs through the existing Cloudflare relay — so the desktop app
  * shares the same trips as the phone via your sync code.
  */
-const { app, BrowserWindow, protocol, net, shell, session, Menu } = require('electron');
+const { app, BrowserWindow, protocol, net, shell, session, Menu, dialog } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
+
+let checking = false;
+// Check GitHub Releases for a newer version. When `manual` (from the menu) we
+// show the result; the background check on launch stays silent unless an update
+// actually downloads.
+function checkForUpdates(manual) {
+  if (!app.isPackaged || checking) return;
+  checking = true;
+  autoUpdater.once('update-not-available', () => {
+    checking = false;
+    if (manual) dialog.showMessageBox({ type: 'info', message: 'You’re up to date', detail: `Trip Planner ${app.getVersion()} is the latest version.` });
+  });
+  autoUpdater.once('update-available', () => {
+    checking = false;
+    if (manual) dialog.showMessageBox({ type: 'info', message: 'Update available', detail: 'A newer version is downloading in the background — you’ll be asked to restart when it’s ready.' });
+  });
+  autoUpdater.once('error', (err) => {
+    checking = false;
+    if (manual) dialog.showMessageBox({ type: 'error', message: 'Update check failed', detail: String(err) });
+  });
+  autoUpdater.checkForUpdates().catch(() => { checking = false; });
+}
+
+function buildMenu() {
+  Menu.setApplicationMenu(Menu.buildFromTemplate([
+    { label: 'File', submenu: [{ role: 'quit' }] },
+    { label: 'View', submenu: [
+      { role: 'reload' }, { role: 'forceReload' }, { role: 'toggleDevTools' },
+      { type: 'separator' }, { role: 'resetZoom' }, { role: 'zoomIn' }, { role: 'zoomOut' },
+      { type: 'separator' }, { role: 'togglefullscreen' },
+    ] },
+    { label: 'Help', submenu: [
+      { label: 'Check for updates…', click: () => checkForUpdates(true) },
+      { label: `About Trip Planner (v${app.getVersion()})`,
+        click: () => dialog.showMessageBox({ type: 'info', message: 'Trip Planner', detail: `Desktop companion · version ${app.getVersion()}\nSyncs with your phone via your trip’s sync code.` }) },
+    ] },
+  ]));
+}
 
 // Where the built web app lives: packaged into resources/app, or ../dist in dev.
 const distDir = () => (app.isPackaged ? path.join(process.resourcesPath, 'app') : path.join(__dirname, '..', 'dist'));
@@ -49,7 +87,16 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
-  Menu.setApplicationMenu(null);
+  buildMenu();
+
+  // When an update finishes downloading, offer to restart into it.
+  autoUpdater.on('update-downloaded', async () => {
+    const { response } = await dialog.showMessageBox({
+      type: 'info', buttons: ['Restart now', 'Later'], defaultId: 0, cancelId: 1,
+      message: 'Update ready', detail: 'Restart Trip Planner to finish updating.',
+    });
+    if (response === 0) autoUpdater.quitAndInstall();
+  });
 
   // Serve the bundled build over app://local, with SPA fallback to index.html.
   protocol.handle('app', async (request) => {
@@ -79,11 +126,9 @@ app.whenReady().then(() => {
 
   createWindow();
 
-  // Auto-update: in the packaged app, quietly check GitHub Releases, download a
-  // newer version in the background, and install it on next quit.
-  if (app.isPackaged) {
-    autoUpdater.checkForUpdatesAndNotify().catch(() => { /* offline / no release */ });
-  }
+  // Auto-update: quietly check GitHub Releases on launch (silent unless a new
+  // version downloads, then we prompt to restart). Also available from Help menu.
+  checkForUpdates(false);
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

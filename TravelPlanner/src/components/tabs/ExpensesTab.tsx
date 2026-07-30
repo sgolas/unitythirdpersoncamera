@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useSpend, useTravelers, useTrip, travelerName, useBudgetSheets } from '../../hooks/useTrip';
-import { ChevronRight, AlertTriangle } from 'lucide-react';
+import { ChevronRight, AlertTriangle, Trash2 } from 'lucide-react';
 import { put, remove } from '../../db/database';
 import type { Expense, ExpenseCategory } from '../../types';
 import { money, moneyHome, moneyAway, sumExpenses, CURRENCY_SYMBOLS } from '../../types';
@@ -91,7 +91,13 @@ export function ExpensesTab({ onNavigate }: { onNavigate?: (v: any) => void } = 
                     </p>
                   )}
                 </div>
-                {e.auto && <ChevronRight size={16} className="text-slate-300 flex-shrink-0" />}
+                {e.auto
+                  ? <ChevronRight size={16} className="text-slate-300 flex-shrink-0" />
+                  : <button aria-label={`Delete ${e.title}`}
+                      onClick={ev => { ev.stopPropagation(); setPendingDelete(e); }}
+                      className="p-1.5 -mr-1 rounded-lg text-slate-300 hover:text-sunset hover:bg-rose-50 active:bg-rose-100 transition flex-shrink-0">
+                      <Trash2 size={16} />
+                    </button>}
               </div>
             );
           })}

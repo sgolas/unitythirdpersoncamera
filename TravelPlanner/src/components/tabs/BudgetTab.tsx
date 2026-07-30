@@ -1,11 +1,14 @@
 import { useState } from 'react';
-import { Plus, Pencil } from 'lucide-react';
-import { useBudget, useBudgetSheets, useSpend, useTrip } from '../../hooks/useTrip';
+import { Plus, Pencil, ChevronRight } from 'lucide-react';
+import { useBudget, useBudgetSheets, useSpend, useTrip, type SpendItem } from '../../hooks/useTrip';
 import { put, remove } from '../../db/database';
 import type { BudgetLine, BudgetSheet, ExpenseCategory, TripMeta } from '../../types';
 import { money, moneyHome, moneyAway, sumExpenses, countsToBudget } from '../../types';
 import { convert, getHomeCurrency } from '../../lib/currency';
-import { TabHeader, Sheet, Field, TextInput, FormFooter, GhostButton } from '../ui';
+import { fmtDate } from '../../utils/format';
+import { TabHeader, Sheet, Field, TextInput, FormFooter, GhostButton, EmptyState } from '../ui';
+
+const SOURCE_LABEL: Record<string, string> = { accommodation: 'Stay', transport: 'Transport', carrental: 'Car rental' };
 
 const CATS: { key: ExpenseCategory; label: string; emoji: string; color: string }[] = [
   { key: 'food',       label: 'Food',       emoji: '🍽️', color: '#fb7185' },
@@ -23,7 +26,7 @@ export function grandBudget(trip: TripMeta, sheets: BudgetSheet[]): number {
 
 type View = 'all' | 'general' | string; // 'all', 'general', or a sheet id
 
-export function BudgetTab() {
+export function BudgetTab({ onNavigate }: { onNavigate?: (v: any) => void } = {}) {
   const budget = useBudget();
   const sheets = useBudgetSheets();
   const expenses = useSpend();
@@ -32,6 +35,7 @@ export function BudgetTab() {
   const [editTotal, setEditTotal] = useState(false);
   const [editLine, setEditLine] = useState<ExpenseCategory | null>(null);
   const [editSheet, setEditSheet] = useState<BudgetSheet | 'new' | null>(null);
+  const [detailCat, setDetailCat] = useState<ExpenseCategory | null>(null);
 
   if (!trip) return null;
   const cur = trip.tripCurrency;
@@ -166,7 +170,7 @@ export function BudgetTab() {
           const linePct = planned > 0 ? Math.min(100, (spent / planned) * 100) : 0;
           const over = planned > 0 && spent > planned;
           return (
-            <div key={c.key} className="bg-white rounded-2xl p-4 shadow-sm" onClick={() => canEditLines && setEditLine(c.key)}>
+            <div key={c.key} className="bg-white rounded-2xl p-4 shadow-sm cursor-pointer active:bg-slate-50 transition" onClick={() => setDetailCat(c.key)}>
               <div className="flex items-center justify-between gap-2">
                 <span className="font-semibold text-slate-800">{c.emoji} {c.label}</span>
                 <span className="text-right leading-tight">
@@ -183,7 +187,7 @@ export function BudgetTab() {
                   <div className="h-full rounded-full" style={{ width: `${linePct}%`, backgroundColor: over ? '#fb7185' : c.color }} />
                 </div>
               )}
-              {planned === 0 && canEditLines && <p className="text-xs text-slate-400 mt-1">Tap to set a plan</p>}
+              <p className="text-xs text-slate-400 mt-1">Tap to see items{planned === 0 && canEditLines ? ' & set a plan' : ''}</p>
             </div>
           );
         })}
@@ -211,7 +215,77 @@ export function BudgetTab() {
           onClose={() => setEditSheet(null)}
           onDeleted={() => { setEditSheet(null); setView('general'); }} />
       )}
+      {detailCat && (() => {
+        const c = CATS.find(x => x.key === detailCat)!;
+        return (
+          <CategoryDetail cat={c} currency={cur}
+            items={viewExpenses.filter(e => e.category === detailCat)}
+            planned={plannedFor(detailCat)} spent={spentFor(detailCat)}
+            canEditPlan={canEditLines}
+            onEditPlan={() => { setDetailCat(null); setEditLine(detailCat); }}
+            onOpenItem={(it) => { setDetailCat(null); onNavigate?.(it.auto ? it.source : 'expenses'); }}
+            onClose={() => setDetailCat(null)} />
+        );
+      })()}
     </div>
+  );
+}
+
+/** Lists every item that rolls up into one budget category (real expenses plus
+ *  the stay/transport/car costs folded in), with the option to set its plan. */
+function CategoryDetail({ cat, items, currency, planned, spent, canEditPlan, onEditPlan, onOpenItem, onClose }: {
+  cat: { key: ExpenseCategory; label: string; emoji: string; color: string };
+  items: SpendItem[]; currency: string; planned: number; spent: number;
+  canEditPlan: boolean; onEditPlan: () => void; onOpenItem: (it: SpendItem) => void; onClose: () => void;
+}) {
+  const pct = planned > 0 ? Math.min(100, (spent / planned) * 100) : 0;
+  const over = planned > 0 && spent > planned;
+  return (
+    <Sheet title={`${cat.emoji} ${cat.label}`} onClose={onClose}>
+      <div className="flex items-baseline justify-between">
+        <span className="text-sm text-slate-500">Spent</span>
+        <span className="text-right leading-tight">
+          <span className="block font-bold text-slate-800">{moneyHome(spent, currency)}{planned > 0 && <span className="text-slate-400 font-normal"> / {moneyHome(planned, currency)}</span>}</span>
+          <span className="block text-xs text-slate-400">{moneyAway(spent, currency)}</span>
+        </span>
+      </div>
+      {planned > 0 && (
+        <div className="h-1.5 bg-slate-100 rounded-full mt-2 overflow-hidden">
+          <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: over ? '#fb7185' : cat.color }} />
+        </div>
+      )}
+      {canEditPlan && (
+        <button onClick={onEditPlan}
+          className="mt-3 w-full py-2.5 rounded-2xl font-semibold text-slate-700 bg-slate-100 active:bg-slate-200 transition text-sm">
+          {planned > 0 ? 'Edit planned amount' : 'Set a planned amount'}
+        </button>
+      )}
+
+      <p className="text-xs font-bold text-slate-400 uppercase tracking-wide mt-5 mb-2">{items.length} item{items.length === 1 ? '' : 's'}</p>
+      {items.length === 0 ? (
+        <EmptyState emoji={cat.emoji} title="Nothing here yet" hint={`No ${cat.label.toLowerCase()} spending recorded.`} />
+      ) : (
+        <div className="space-y-2 -mx-1">
+          {items.map(it => {
+            const meta = (it.auto
+              ? [`From ${SOURCE_LABEL[it.source ?? ''] ?? 'booking'}`, fmtDate(it.date), it.place]
+              : [fmtDate(it.date), it.place]
+            ).filter(Boolean).join(' · ');
+            return (
+              <button key={it.id} onClick={() => onOpenItem(it)}
+                className="w-full flex items-center gap-3 bg-slate-50 rounded-xl px-3 py-2.5 text-left active:bg-slate-100 transition">
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-slate-800 truncate">{it.title}</p>
+                  {meta && <p className="text-xs text-slate-400 truncate">{meta}</p>}
+                </div>
+                <span className="font-bold text-slate-800 whitespace-nowrap">{moneyHome(it.amount, it.currency)}</span>
+                <ChevronRight size={16} className="text-slate-300 flex-shrink-0" />
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </Sheet>
   );
 }
 

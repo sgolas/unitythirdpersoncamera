@@ -126,7 +126,7 @@ export default function App() {
       {view === 'suggestions'   && <SuggestionsTab />}
       {view === 'expenses'      && <ExpensesTab onNavigate={go} />}
       {view === 'itinerary'     && <ItineraryTab onNavigate={go} />}
-      {view === 'budget'        && <BudgetTab />}
+      {view === 'budget'        && <BudgetTab onNavigate={go} />}
       {view === 'helper'        && <HelperTab onNavigate={go} />}
       {view === 'changelog'     && <ChangeLogTab />}
       {view === 'settings'      && <SettingsTab />}

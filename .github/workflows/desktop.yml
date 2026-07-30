@@ -1,11 +1,17 @@
 name: Build Windows desktop app
 
-# Run by pushing a tag like `desktop-v1.0.0`, or manually from the Actions tab.
+# Runs when desktop files change on the dev branch, on a `desktop-v*` tag, or
+# manually from the Actions tab.
 on:
   workflow_dispatch:
   push:
     tags:
       - 'desktop-v*'
+    branches:
+      - 'claude/vacation-budget-android-app-7ibjoc'
+    paths:
+      - '.github/workflows/desktop.yml'
+      - 'TravelPlanner/desktop/**'
 
 jobs:
   build:

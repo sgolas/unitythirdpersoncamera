@@ -253,7 +253,7 @@ export function SettingsTab() {
         <div className="bg-white rounded-2xl p-4 shadow-sm">
           <p className="flex items-center gap-2 font-semibold text-slate-800 mb-2"><Globe size={16} /> Web portal</p>
           <p className="text-sm text-slate-500 leading-snug">
-            View your trip read-only at <b>sgolas.com</b>. Open the site, enter the same trip code and password,
+            View your trip read-only at <b>trip.sgolas.com</b>. Open the site, enter the same trip code and password,
             and you'll see everything (no editing from the web).
           </p>
           {isSyncConfigured() && (

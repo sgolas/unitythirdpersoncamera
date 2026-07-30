@@ -47,6 +47,15 @@ export function Sheet({ title, onClose, children, footer }: {
     return () => window.removeEventListener('keydown', h);
   }, [onClose]);
 
+  // A "back" gesture (Android hardware back, or the app's Back button) should
+  // close this sheet, not navigate the whole app away. App dispatches a
+  // cancelable 'app-back'; we claim it by preventing default.
+  useEffect(() => {
+    const onBack = (e: Event) => { e.preventDefault(); onClose(); };
+    window.addEventListener('app-back', onBack);
+    return () => window.removeEventListener('app-back', onBack);
+  }, [onClose]);
+
   return (
     <Overlay>
     <div

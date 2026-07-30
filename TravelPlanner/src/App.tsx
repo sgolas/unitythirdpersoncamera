@@ -83,7 +83,14 @@ export default function App() {
     window.scrollTo(0, 0);
   }
 
+  // Give any open sheet/modal the first chance to handle "back" (it closes
+  // itself). Returns true if something claimed it, so we don't also navigate.
+  function backClaimedByModal(): boolean {
+    return !window.dispatchEvent(new CustomEvent('app-back', { cancelable: true }));
+  }
+
   function back() {
+    if (backClaimedByModal()) return;
     setHistory(h => (h.length > 1 ? h.slice(0, -1) : h));
     window.scrollTo(0, 0);
   }
@@ -95,7 +102,8 @@ export default function App() {
     import('@capacitor/app').then(({ App: CapApp }) => {
       sub = CapApp.addListener('backButton', () => {
         if (moreOpen) setMoreOpen(false);
-        else if (history.length > 1) back();
+        else if (backClaimedByModal()) { /* an open sheet closed itself */ }
+        else if (history.length > 1) setHistory(h => h.slice(0, -1));
         else CapApp.exitApp();
       });
     });

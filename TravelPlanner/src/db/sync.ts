@@ -10,7 +10,8 @@ import { db, tableFor, getDeviceName } from './database';
 import { scheduleBackup, deleteBackup, cancelScheduledBackup } from '../lib/persist';
 import type { AnyRecord, EntityKind, ChatMessage } from '../types';
 import {
-  getSyncCode, getSyncPass, isSyncConfigured, setLastSync, SYNC_ENDPOINT, BACKUP_ENDPOINT,
+  getSyncCode, getSyncPass, isSyncConfigured, setSyncCredentials, setLastSync,
+  SYNC_ENDPOINT, BACKUP_ENDPOINT, PASSWORD_ENDPOINT,
 } from '../lib/config';
 
 const ENTITY_KINDS: EntityKind[] = [
@@ -153,6 +154,43 @@ export async function syncNow(): Promise<SyncResult> {
 export function resetPushWatermark() {
   localStorage.removeItem(LAST_PUSH_KEY);
   localStorage.removeItem(CURSOR_KEY);
+}
+
+/**
+ * Change the shared password for the current trip code. Authenticates with the
+ * current password server-side, rotates the stored hash, and — on success —
+ * saves the new password on this device so it keeps syncing. Other devices just
+ * re-enter the new password once.
+ */
+export async function changePassword(currentPass: string, newPass: string): Promise<{ ok: boolean; message: string }> {
+  const code = getSyncCode();
+  if (!code) return { ok: false, message: 'Set a trip code first.' };
+  if (newPass.length < 6) return { ok: false, message: 'New password must be at least 6 characters.' };
+  if (newPass === currentPass) return { ok: false, message: 'New password is the same as the current one.' };
+
+  let res: Response;
+  try {
+    res = await fetch(PASSWORD_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tripCode: code, password: currentPass, newPassword: newPass }),
+    });
+  } catch {
+    return { ok: false, message: 'No connection. Try again when online.' };
+  }
+
+  if (res.status === 401) return { ok: false, message: 'Current password is wrong — enter the password this trip was set up with.' };
+  if (res.status === 404) return { ok: false, message: 'No trip found with that code yet. Sync once first, then change the password.' };
+  if (res.status === 429) return { ok: false, message: 'Too many attempts — wait a few minutes and try again.' };
+  if (res.status === 400) {
+    const d = await res.json().catch(() => ({} as { error?: string }));
+    return { ok: false, message: d.error || 'Check the passwords and try again.' };
+  }
+  if (!res.ok) return { ok: false, message: 'Server error. Try again shortly.' };
+
+  // Store the new password locally so this device keeps syncing seamlessly.
+  setSyncCredentials(code, newPass);
+  return { ok: true, message: 'Password changed ✓ Tell your family the new password so their devices update too.' };
 }
 
 // Throttle for the fire-and-forget GitHub backup triggered from syncNow.

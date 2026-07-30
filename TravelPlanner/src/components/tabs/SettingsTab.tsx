@@ -13,7 +13,7 @@ import { getDeviceName, setDeviceName, put } from '../../db/database';
 import { TravelersManager } from '../TravelersManager';
 import { InvitePanel } from '../InvitePanel';
 import { getSyncCode, getSyncPass, setSyncCredentials, getLastSync, isSyncConfigured } from '../../lib/config';
-import { syncNow, wipeLocal, backupToGitHub } from '../../db/sync';
+import { syncNow, wipeLocal, backupToGitHub, changePassword } from '../../db/sync';
 import { saveBackup, restoreFromFile, backupExists } from '../../lib/persist';
 import { exportCalendar } from '../../lib/ics';
 import { remindersEnabled, setRemindersEnabled, ensureNotifyPermission, scheduleTripNotifications } from '../../lib/notify';
@@ -249,6 +249,9 @@ export function SettingsTab() {
           {msg && <p className="text-center text-sm mt-2 text-slate-600">{msg}</p>}
         </div>
 
+        {/* Change the shared password (rotates it on the server for everyone) */}
+        <ChangePasswordPanel />
+
         {/* Web portal */}
         <div className="bg-white rounded-2xl p-4 shadow-sm">
           <p className="flex items-center gap-2 font-semibold text-slate-800 mb-2"><Globe size={16} /> Web portal</p>
@@ -391,6 +394,58 @@ function WipeConfirm({ synced, onCancel, onConfirm }: {
       </div>
     </div>
     </Overlay>
+  );
+}
+
+/* ── Change shared password ─────────────────────────────────── */
+function ChangePasswordPanel() {
+  const [open, setOpen] = useState(false);
+  const [current, setCurrent] = useState(getSyncPass());
+  const [next, setNext] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState('');
+  const [ok, setOk] = useState(false);
+
+  async function submit() {
+    setMsg('');
+    if (next !== confirm) { setMsg('New passwords don’t match.'); return; }
+    setBusy(true);
+    const res = await changePassword(current, next);
+    setBusy(false);
+    setOk(res.ok);
+    setMsg(res.message);
+    if (res.ok) { setNext(''); setConfirm(''); setCurrent(next); }
+  }
+
+  return (
+    <div className="bg-white rounded-2xl p-4 shadow-sm">
+      <button onClick={() => setOpen(o => !o)} className="w-full flex items-center gap-2 font-semibold text-slate-800">
+        <KeyRound size={16} /> Change shared password
+        <span className="ml-auto text-slate-400 text-sm">{open ? '▲' : '▼'}</span>
+      </button>
+      {open && (
+        <div className="mt-3">
+          <p className="text-xs text-slate-400 mb-3">
+            Updates the password on the server for the whole trip. Enter the password the trip is set up
+            with now, then choose a new one — this device updates itself and the others just re-enter it once.
+          </p>
+          <Field label="Current password">
+            <TextInput type="password" value={current} onChange={e => setCurrent(e.target.value)} placeholder="Password in use now" />
+          </Field>
+          <Field label="New password">
+            <TextInput type="password" value={next} onChange={e => setNext(e.target.value)} placeholder="At least 6 characters" />
+          </Field>
+          <Field label="Confirm new password">
+            <TextInput type="password" value={confirm} onChange={e => setConfirm(e.target.value)} placeholder="Type it again" />
+          </Field>
+          <PrimaryButton onClick={submit} disabled={busy || !current || !next || !confirm}>
+            {busy ? 'Changing…' : 'Change password'}
+          </PrimaryButton>
+          {msg && <p className={`text-center text-sm mt-2 ${ok ? 'text-emerald-600' : 'text-sunset'}`}>{msg}</p>}
+        </div>
+      )}
+    </div>
   );
 }
 

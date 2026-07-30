@@ -1,6 +1,6 @@
 import { useState, useEffect, useReducer } from 'react';
 import { initCurrency } from '../lib/currency';
-import { Lock, RefreshCw, Plane, BedDouble, FileText, Wallet, ListChecks, CalendarRange, MapPin, Clock, Compass, Map as MapIcon, Images } from 'lucide-react';
+import { Lock, RefreshCw, Plane, BedDouble, FileText, Wallet, ListChecks, CalendarRange, MapPin, Clock, Compass, Map as MapIcon, Images, Download } from 'lucide-react';
 import { pullOnly } from '../db/sync';
 import { computeStops, StringMap } from '../components/tripMap';
 import { TripLeafletMap } from '../components/TripLeafletMap';
@@ -103,6 +103,10 @@ function PortalLogin({ onDone }: { onDone: () => void }) {
           {busy ? 'Loading…' : 'View trip'}
         </button>
         <p className="text-center text-xs text-slate-300 mt-4">View only · changes are made in the app</p>
+        <a href="https://github.com/sgolas/sylsrepo/releases/latest" target="_blank" rel="noopener noreferrer"
+          className="mt-5 flex items-center justify-center gap-2 text-sm font-semibold text-slate-500 hover:text-ink transition">
+          <Download size={15} /> Download the Windows desktop app
+        </a>
       </div>
     </div>
   );
@@ -343,7 +347,13 @@ function PortalView() {
       </div>
       )}
 
-      <p className="text-center text-xs text-slate-300 py-6">Trip Planner · read-only portal · sgolas.com</p>
+      <div className="text-center py-6 space-y-2">
+        <a href="https://github.com/sgolas/sylsrepo/releases/latest" target="_blank" rel="noopener noreferrer"
+          className="inline-flex items-center gap-2 text-sm font-semibold text-slate-400 hover:text-slate-600 transition">
+          <Download size={14} /> Get the Windows desktop app
+        </a>
+        <p className="text-xs text-slate-300">Trip Planner · read-only portal · trip.sgolas.com</p>
+      </div>
     </div>
   );
 }

@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import { SyncStatus } from './components/SyncStatus';
 import { StitchIcon } from './components/StitchIcon';
-import { isNative } from './lib/platform';
+import { isNative, isDesktop } from './lib/platform';
 import { SECTIONS } from './lib/sections';
 import { isPinned, toggleShortcut } from './lib/dashShortcuts';
 import { useUnreadChat } from './lib/chatUnread';
@@ -113,30 +113,96 @@ export default function App() {
   if (tripState === undefined) return <div className="min-h-screen bg-bg" />;
   if (tripState === null) return <Onboarding onDone={() => bump()} />;
 
+  const content = (
+    <>
+      {view === 'dashboard'     && <DashboardTab onNavigate={go} />}
+      {view === 'overview'      && <TripOverviewTab />}
+      {view === 'documents'     && <DocumentsTab />}
+      {view === 'checklist'     && <ChecklistTab />}
+      {view === 'transport'     && <TransportTab />}
+      {view === 'accommodation' && <AccommodationTab />}
+      {view === 'carrental'     && <CarRentalTab />}
+      {view === 'fuel'          && <FuelTab />}
+      {view === 'suggestions'   && <SuggestionsTab />}
+      {view === 'expenses'      && <ExpensesTab onNavigate={go} />}
+      {view === 'itinerary'     && <ItineraryTab onNavigate={go} />}
+      {view === 'budget'        && <BudgetTab />}
+      {view === 'helper'        && <HelperTab onNavigate={go} />}
+      {view === 'changelog'     && <ChangeLogTab />}
+      {view === 'settings'      && <SettingsTab />}
+      {view === 'map'           && <MapTab />}
+      {view === 'photos'        && <PhotosTab />}
+      {view === 'converter'     && <ConverterTab />}
+      {view === 'chat'          && <ChatTab />}
+      {view === 'translate'     && <TranslateTab />}
+      {view === 'artillery'     && <ArtilleryTab />}
+    </>
+  );
+
+  // Desktop (Electron): a proper windowed app — left sidebar nav + a toolbar,
+  // content filling the window — instead of the phone column + bottom bar.
+  if (isDesktop) {
+    const primary = [
+      { key: 'dashboard' as View, label: 'Home',      icon: <LayoutDashboard size={20} />, color: '#6366f1' },
+      { key: 'itinerary' as View, label: 'Itinerary', icon: <CalendarRange size={20} />,   color: '#38bdf8' },
+      { key: 'expenses'  as View, label: 'Expenses',  icon: <Wallet size={20} />,          color: '#f59e0b' },
+      { key: 'map'       as View, label: 'Map',       icon: <MapIcon size={20} />,         color: '#10b981' },
+      { key: 'chat'      as View, label: 'Chat',      icon: <MessageCircle size={20} />,   color: '#06b6d4' },
+    ];
+    const current = [...primary, ...MORE_ITEMS].find(n => n.key === view);
+    return (
+      <div className="h-screen flex bg-bg text-content overflow-hidden">
+        {/* Sidebar */}
+        <aside className="w-64 shrink-0 flex flex-col border-r border-line bg-surface">
+          <div className="h-14 px-4 flex items-center gap-2.5 border-b border-line">
+            <span className="w-9 h-9 rounded-xl accent-gradient flex items-center justify-center text-white text-lg">🌍</span>
+            <div className="min-w-0">
+              <p className="font-bold text-sm truncate leading-tight">{tripState.name}</p>
+              <p className="text-[11px] text-muted leading-tight">Trip Planner</p>
+            </div>
+          </div>
+          <nav className="flex-1 overflow-y-auto py-2 px-2 space-y-0.5">
+            {primary.map(it => (
+              <SideItem key={it.key} icon={it.icon} label={it.label} color={it.color}
+                active={view === it.key} badge={it.key === 'chat' ? unreadChat : 0} onClick={() => go(it.key)} />
+            ))}
+            <div className="my-2 mx-2 border-t border-line" />
+            {MORE_ITEMS.map(it => (
+              <SideItem key={it.key} icon={it.icon} label={it.label} color={it.color}
+                active={view === it.key} onClick={() => go(it.key as View)} />
+            ))}
+          </nav>
+          <div className="p-3 border-t border-line flex items-center justify-between gap-2">
+            <SyncStatus onSetup={() => go('settings')} />
+            <StitchIcon size={30} />
+          </div>
+        </aside>
+
+        {/* Main area */}
+        <div className="flex-1 min-w-0 flex flex-col">
+          <header className="h-12 shrink-0 flex items-center gap-3 px-4 border-b border-line bg-surface">
+            {canGoBack && (
+              <button onClick={back} aria-label="Back"
+                className="w-8 h-8 rounded-lg flex items-center justify-center text-content/70 hover:bg-slate-100 transition">
+                <ChevronLeft size={20} />
+              </button>
+            )}
+            <h1 className="font-semibold">{current?.label ?? ''}</h1>
+          </header>
+          <main className="flex-1 overflow-y-auto">
+            <div className="mx-auto w-full max-w-6xl">
+              {content}
+            </div>
+          </main>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={`min-h-screen bg-bg text-content mx-auto max-w-md relative app-frame ${canGoBack ? 'with-back' : ''}`}>
       <main style={{ paddingBottom: 'calc(74px + env(safe-area-inset-bottom, 0px))' }}>
-        {view === 'dashboard'     && <DashboardTab onNavigate={go} />}
-        {view === 'overview'      && <TripOverviewTab />}
-        {view === 'documents'     && <DocumentsTab />}
-        {view === 'checklist'     && <ChecklistTab />}
-        {view === 'transport'     && <TransportTab />}
-        {view === 'accommodation' && <AccommodationTab />}
-        {view === 'carrental'     && <CarRentalTab />}
-        {view === 'fuel'          && <FuelTab />}
-        {view === 'suggestions'   && <SuggestionsTab />}
-        {view === 'expenses'      && <ExpensesTab onNavigate={go} />}
-        {view === 'itinerary'     && <ItineraryTab onNavigate={go} />}
-        {view === 'budget'        && <BudgetTab />}
-        {view === 'helper'        && <HelperTab onNavigate={go} />}
-        {view === 'changelog'     && <ChangeLogTab />}
-        {view === 'settings'      && <SettingsTab />}
-        {view === 'map'           && <MapTab />}
-        {view === 'photos'        && <PhotosTab />}
-        {view === 'converter'     && <ConverterTab />}
-        {view === 'chat'          && <ChatTab />}
-        {view === 'translate'     && <TranslateTab />}
-        {view === 'artillery'     && <ArtilleryTab />}
+        {content}
       </main>
 
       {/* Floating top controls — anchored to the app column (not the viewport)
@@ -241,6 +307,25 @@ function MoreItem({ item, onOpen, onHold }: {
         style={{ backgroundColor: item.color }}>{item.icon}</span>
       <span className="text-xs font-semibold text-slate-600 text-center">{item.label}</span>
       {isPinned(item.key) && <span className="absolute top-1.5 right-1.5"><Pin size={12} className="text-accent" /></span>}
+    </button>
+  );
+}
+
+/** A row in the desktop sidebar. */
+function SideItem({ icon, label, color, active, badge = 0, onClick }: {
+  icon: React.ReactNode; label: string; color: string; active: boolean; badge?: number; onClick: () => void;
+}) {
+  return (
+    <button onClick={onClick}
+      className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition ${
+        active ? 'bg-accent/10 text-accent font-semibold' : 'text-content/80 hover:bg-slate-100 font-medium'}`}>
+      <span className="w-6 h-6 flex items-center justify-center shrink-0" style={{ color: active ? undefined : color }}>{icon}</span>
+      <span className="flex-1 text-left truncate">{label}</span>
+      {badge > 0 && (
+        <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center">
+          {badge > 9 ? '9+' : badge}
+        </span>
+      )}
     </button>
   );
 }

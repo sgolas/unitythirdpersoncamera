@@ -79,6 +79,10 @@ function createWindow() {
     },
   });
 
+  // Open maximised — a desktop app should fill the screen, not sit in a small
+  // phone-sized window. (Users can still restore/resize.)
+  win.maximize();
+
   win.loadURL('app://local/index.html');
 
   // Open real web links (http/https/mailto) in the system browser, never in-app.

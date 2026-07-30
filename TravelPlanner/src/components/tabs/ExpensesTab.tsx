@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useSpend, useTravelers, useTrip, travelerName, useBudgetSheets } from '../../hooks/useTrip';
-import { ChevronRight } from 'lucide-react';
+import { ChevronRight, AlertTriangle } from 'lucide-react';
 import { put, remove } from '../../db/database';
 import type { Expense, ExpenseCategory } from '../../types';
 import { money, moneyHome, moneyAway, sumExpenses, CURRENCY_SYMBOLS } from '../../types';
@@ -34,6 +34,15 @@ export function ExpensesTab({ onNavigate }: { onNavigate?: (v: any) => void } = 
   const byCat = CATS.map(c => ({
     ...c, sum: sumExpenses(expenses.filter(e => e.category === c.key), cur),
   })).filter(c => c.sum > 0);
+
+  // A manually-logged expense that matches a booking-derived item (same amount,
+  // currency and category) is probably double-counted — flag it so the user can
+  // delete the manual copy.
+  const autoItems = expenses.filter(e => e.auto);
+  const looksDuplicated = (e: typeof expenses[number]) =>
+    !e.auto && autoItems.some(a =>
+      a.category === e.category && a.currency === e.currency &&
+      Math.round(a.amount * 100) === Math.round(e.amount * 100));
 
   return (
     <div className="animate-fadeUp">
@@ -76,6 +85,11 @@ export function ExpensesTab({ onNavigate }: { onNavigate?: (v: any) => void } = 
                     <p className="text-xs text-slate-400 truncate flex-1 min-w-0">{meta}</p>
                     <p className="text-xs text-slate-500 whitespace-nowrap flex-shrink-0">{moneyAway(e.amount, e.currency)}</p>
                   </div>
+                  {looksDuplicated(e) && (
+                    <p className="mt-1 inline-flex items-center gap-1 text-[11px] font-semibold text-amber-600 bg-amber-50 rounded-full px-2 py-0.5">
+                      <AlertTriangle size={11} /> Possible duplicate of a booking
+                    </p>
+                  )}
                 </div>
                 {e.auto && <ChevronRight size={16} className="text-slate-300 flex-shrink-0" />}
               </div>

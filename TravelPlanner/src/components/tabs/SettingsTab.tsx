@@ -206,6 +206,26 @@ export function SettingsTab() {
           </p>
         </div>
 
+        {/* Sync light legend */}
+        <div className="bg-white rounded-2xl p-4 shadow-sm">
+          <p className="font-semibold text-slate-800 mb-1">🚦 The sync light</p>
+          <p className="text-xs text-slate-400 mb-3">The small light at the top of the screen shows sync status.</p>
+          <ul className="space-y-2 text-sm text-slate-600">
+            {([
+              ['#22c55e', false, 'Green', 'Synced & up to date'],
+              ['#3b82f6', true, 'Blue flashing', 'Syncing right now'],
+              ['#ef4444', true, 'Red flashing', 'A problem — tap it to fix'],
+              ['#f59e0b', true, 'Amber flashing', 'Offline — catches up when back online'],
+            ] as const).map(([c, flash, name, desc]) => (
+              <li key={name} className="flex items-center gap-2.5">
+                <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${flash ? 'sync-flash' : ''}`}
+                  style={{ background: c, boxShadow: `0 0 5px ${c}` }} />
+                <span><b className="text-slate-700">{name}</b> — {desc}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+
         {/* Device name */}
         <div className="bg-white rounded-2xl p-4 shadow-sm">
           <p className="flex items-center gap-2 font-semibold text-slate-800 mb-3"><Smartphone size={16} /> This device</p>

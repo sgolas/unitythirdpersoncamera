@@ -37,6 +37,11 @@ const SLIDES: Slide[] = [
     body: 'Share one QR code and family joins in a tap. Prefer a browser? Send a view-only link — no app needed.',
   },
   {
+    emoji: '🚦', from: '#22c55e', to: '#3b82f6',
+    title: 'Your sync light',
+    body: 'The little light up top shows where things stand: 🟢 green = synced and up to date, 🔵 blue flashing = syncing now, 🔴 red flashing = a problem to fix (tap it), 🟠 amber = offline (it catches up automatically when you’re back online).',
+  },
+  {
     emoji: '🗂️', from: '#ec4899', to: '#f59e0b',
     title: 'Keep what matters',
     body: 'Save documents, tickets, bills and recipes as photos — stored on your device and shared with the group.',

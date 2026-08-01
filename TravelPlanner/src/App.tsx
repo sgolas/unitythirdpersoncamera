@@ -1,4 +1,4 @@
-import { useState, useEffect, useReducer, useRef } from 'react';
+import { useState, useEffect, useReducer } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from './db/database';
 import { initCurrency } from './lib/currency';
@@ -6,15 +6,14 @@ import { Onboarding } from './components/Onboarding';
 import { WelcomeSlides } from './components/WelcomeSlides';
 import {
   LayoutDashboard, CalendarRange, Wallet, LayoutGrid,
-  Map as MapIcon, ChevronLeft, MessageCircle, Pin, PinOff,
+  Map as MapIcon, ChevronLeft, MessageCircle, Pin, Plus,
 } from 'lucide-react';
 import { SyncStatus } from './components/SyncStatus';
-import { StitchIcon } from './components/StitchIcon';
+import { SortableGrid } from './components/SortableGrid';
 import { isNative, isDesktop } from './lib/platform';
 import { SECTIONS } from './lib/sections';
-import { isPinned, toggleShortcut } from './lib/dashShortcuts';
+import { toggleShortcut, useShortcuts } from './lib/dashShortcuts';
 import { useUnreadChat } from './lib/chatUnread';
-import { Overlay } from './components/ui';
 
 import { DashboardTab } from './components/tabs/DashboardTab';
 import { TripOverviewTab } from './components/tabs/TripOverviewTab';
@@ -53,7 +52,6 @@ export default function App() {
   const [history, setHistory] = useState<View[]>(['dashboard']);
   const view = history[history.length - 1];
   const [moreOpen, setMoreOpen] = useState(false);
-  const [pinTarget, setPinTarget] = useState<typeof MORE_ITEMS[number] | null>(null);
   const [, bump] = useReducer(x => x + 1, 0);
   const [welcomeSeen, setWelcomeSeen] = useState(() => localStorage.getItem('welcome.seen') === '1');
   const unreadChat = useUnreadChat();
@@ -179,9 +177,9 @@ export default function App() {
                 active={view === it.key} onClick={() => go(it.key as View)} />
             ))}
           </nav>
-          <div className="p-3 border-t border-line flex items-center justify-between gap-2">
+          <div className="p-3 border-t border-line flex items-center gap-2">
             <SyncStatus onSetup={() => go('settings')} />
-            <StitchIcon size={30} />
+            <span className="text-xs text-muted">Sync status</span>
           </div>
         </aside>
 
@@ -226,7 +224,6 @@ export default function App() {
           )}
         </div>
         <div className="pointer-events-auto flex items-start gap-1.5">
-          <StitchIcon />
           <SyncStatus onSetup={() => go('settings')} />
         </div>
       </div>
@@ -237,39 +234,13 @@ export default function App() {
           <div className="bg-white w-full max-w-md mx-auto rounded-t-3xl p-5 animate-fadeUp"
             style={{ paddingBottom: 'calc(88px + env(safe-area-inset-bottom, 0px))' }} onClick={e => e.stopPropagation()}>
             <div className="w-10 h-1 rounded-full bg-slate-200 mx-auto mb-4" />
-            <h2 className="font-bold text-slate-800 text-lg mb-4">All sections</h2>
-            <p className="text-xs text-slate-400 mb-3">Tap to open · press and hold any item to pin it to Home.</p>
-            <div className="grid grid-cols-3 gap-3">
-              {MORE_ITEMS.map(m => (
-                <MoreItem key={m.key} item={m} onOpen={() => go(m.key)} onHold={() => setPinTarget(m)} />
-              ))}
-            </div>
+            <h2 className="font-bold text-slate-800 text-lg mb-1">All sections</h2>
+            <p className="text-xs text-slate-400 mb-3">Tap to open. Press and hold to rearrange — then tap a corner ⊕ to pin a shortcut to Home.</p>
+            <SortableGrid storageKey="more.order" className="grid grid-cols-3 gap-3" hint={false}
+              items={MORE_ITEMS.map(m => ({ key: m.key, node: <MoreTile item={m} onOpen={() => go(m.key)} /> }))}
+              badge={(key, editing) => (editing ? <PinBadge k={key} /> : null)} />
           </div>
         </div>
-      )}
-
-      {/* Pin/unpin action popup (from long-pressing a More item) */}
-      {pinTarget && (
-        <Overlay>
-          <div className="fixed inset-0 z-[200] bg-black/40 flex items-center justify-center p-8 animate-fadeIn" onClick={() => setPinTarget(null)}>
-            <div className="bg-white rounded-3xl p-5 w-full max-w-[16rem] shadow-2xl text-center" onClick={e => e.stopPropagation()}>
-              <span className="w-14 h-14 rounded-2xl flex items-center justify-center text-white mx-auto mb-3"
-                style={{ backgroundColor: pinTarget.color }}>{pinTarget.icon}</span>
-              <p className="font-bold text-slate-800">{pinTarget.label}</p>
-              <button
-                onClick={() => { toggleShortcut(pinTarget.key); setPinTarget(null); }}
-                className="mt-4 w-full py-3 rounded-2xl font-bold text-white accent-gradient active:scale-[0.98] transition flex items-center justify-center gap-2">
-                {isPinned(pinTarget.key)
-                  ? <><PinOff size={17} /> Remove from Home</>
-                  : <><Pin size={17} /> Add shortcut to Home</>}
-              </button>
-              <button onClick={() => setPinTarget(null)}
-                className="mt-2 w-full py-2.5 rounded-2xl font-semibold text-slate-500 active:bg-slate-50 transition">
-                Cancel
-              </button>
-            </div>
-          </div>
-        </Overlay>
       )}
 
       {/* Bottom nav — glassmorphism, padded above the system bar */}
@@ -285,35 +256,30 @@ export default function App() {
   );
 }
 
-/** A More-menu tile: tap opens the section; press-and-hold (3s) offers to
- *  pin/unpin it to the dashboard. */
-function MoreItem({ item, onOpen, onHold }: {
-  item: typeof MORE_ITEMS[number]; onOpen: () => void; onHold: () => void;
-}) {
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const held = useRef(false);
-  const [holding, setHolding] = useState(false);
-
-  const clear = () => { if (timer.current) { clearTimeout(timer.current); timer.current = null; } setHolding(false); };
-  const start = () => {
-    held.current = false;
-    setHolding(true);
-    timer.current = setTimeout(() => { held.current = true; setHolding(false); onHold(); }, 3000);
-  };
-
+/** A More-menu tile: tap opens the section. (Reordering + pinning are handled
+ *  by the surrounding SortableGrid / PinBadge in edit mode.) */
+function MoreTile({ item, onOpen }: { item: typeof MORE_ITEMS[number]; onOpen: () => void }) {
+  const pins = useShortcuts();
   return (
-    <button
-      onPointerDown={start}
-      onPointerUp={clear}
-      onPointerLeave={clear}
-      onPointerCancel={clear}
-      onContextMenu={e => e.preventDefault()}
-      onClick={() => { if (held.current) { held.current = false; return; } onOpen(); }}
-      className={`relative flex flex-col items-center gap-2 py-4 rounded-2xl bg-slate-50 active:bg-slate-100 transition ${holding ? 'ring-2 ring-accent scale-95' : ''}`}>
+    <button onClick={onOpen}
+      className="relative w-full flex flex-col items-center gap-2 py-4 rounded-2xl bg-slate-50 active:bg-slate-100 transition">
       <span className="w-11 h-11 rounded-2xl flex items-center justify-center text-white"
         style={{ backgroundColor: item.color }}>{item.icon}</span>
       <span className="text-xs font-semibold text-slate-600 text-center">{item.label}</span>
-      {isPinned(item.key) && <span className="absolute top-1.5 right-1.5"><Pin size={12} className="text-accent" /></span>}
+      {pins.includes(item.key) && <span className="absolute top-1.5 right-1.5"><Pin size={12} className="text-accent" /></span>}
+    </button>
+  );
+}
+
+/** In-edit pin toggle overlaid on a More tile (add/remove a Home shortcut). */
+function PinBadge({ k }: { k: string }) {
+  const pins = useShortcuts();
+  const pinned = pins.includes(k);
+  return (
+    <button data-no-drag onClick={() => toggleShortcut(k)}
+      aria-label={pinned ? 'Remove Home shortcut' : 'Pin to Home'}
+      className="absolute -top-2 -left-2 w-6 h-6 rounded-full bg-white shadow-md border border-line flex items-center justify-center z-10 active:scale-90 transition">
+      {pinned ? <Pin size={12} className="text-accent" /> : <Plus size={12} className="text-slate-400" />}
     </button>
   );
 }

@@ -1,8 +1,7 @@
-import { useState, useRef, useEffect } from 'react';
 import {
   Plane, BedDouble, CalendarRange, PiggyBank,
   Sparkles, History, Compass, CalendarClock, Calculator, ChevronRight,
-  MessageCircle, GripVertical,
+  MessageCircle,
 } from 'lucide-react';
 import {
   useTrip, useSpend, useTransport, useAccommodation,
@@ -14,7 +13,7 @@ import { daysUntil, fmtDate, fmtStamp, fmtTime, todayStr, tripLength } from '../
 import { getLastSync } from '../../lib/config';
 import { computeStops } from '../tripMap';
 import { WeatherWidget } from '../WeatherWidget';
-import { Overlay } from '../ui';
+import { SortableGrid } from '../SortableGrid';
 import { sectionByKey } from '../../lib/sections';
 import { useShortcuts } from '../../lib/dashShortcuts';
 import { useUnreadChat } from '../../lib/chatUnread';
@@ -147,7 +146,7 @@ export function DashboardTab({ onNavigate }: { onNavigate: (v: any) => void }) {
       )}
 
       {/* Reorderable widget boxes — press and hold a card to rearrange */}
-      <Reorderable items={[
+      <SortableGrid storageKey="dash.widgetOrder" className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start" items={[
         { key: 'flight', node: (
           <Card title="Next flight" icon={<Plane size={13} />} action="All transport" onAction={() => onNavigate('transport')}>
             <FlightBody flight={nextFlight} />
@@ -223,129 +222,6 @@ export function DashboardTab({ onNavigate }: { onNavigate: (v: any) => void }) {
         className="w-full flex items-center justify-center gap-2 text-muted text-xs py-1 press">
         <History size={13} /> {lastSync ? `Last synced ${fmtStamp(lastSync)}` : 'Syncs automatically when online'}
       </button>
-    </div>
-  );
-}
-
-const ORDER_KEY = 'dash.widgetOrder';
-
-/**
- * Home-screen style reorderable boxes: press and hold a card to enter edit mode
- * (the cards wiggle), then drag it to a new spot. The order is saved per device.
- */
-function Reorderable({ items }: { items: { key: string; node: React.ReactNode }[] }) {
-  const all = items.map(i => i.key);
-  const [order, setOrder] = useState<string[]>(() => {
-    try {
-      const saved = JSON.parse(localStorage.getItem(ORDER_KEY) || 'null');
-      if (Array.isArray(saved)) {
-        const kept = saved.filter((k: string) => all.includes(k));
-        return [...kept, ...all.filter(k => !kept.includes(k))];
-      }
-    } catch { /* ignore */ }
-    return all;
-  });
-  const [edit, setEdit] = useState(false);
-  const [dragKey, setDragKey] = useState<string | null>(null);
-  const [pt, setPt] = useState({ x: 0, y: 0 });
-  const grab = useRef<{ ox: number; oy: number; w: number } | null>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const orderRef = useRef(order); orderRef.current = order;
-  const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const start = useRef<{ x: number; y: number } | null>(null);
-  const byKey = new Map(items.map(i => [i.key, i.node]));
-
-  // Keep the saved order in step if the set of widgets ever changes.
-  useEffect(() => {
-    setOrder(o => {
-      const next = [...o.filter(k => all.includes(k)), ...all.filter(k => !o.includes(k))];
-      return next.length === o.length && next.every((k, i) => k === o[i]) ? o : next;
-    });
-  }, [all.join('|')]);
-
-  // While a card is held, follow the pointer and slot it between the others.
-  useEffect(() => {
-    if (!dragKey) return;
-    const move = (e: PointerEvent) => {
-      e.preventDefault();
-      setPt({ x: e.clientX, y: e.clientY });
-      const others = orderRef.current.filter(k => k !== dragKey);
-      let best = others.length, bestDist = Infinity, before = false;
-      others.forEach((k, i) => {
-        const el = containerRef.current?.querySelector(`[data-sk="${k}"]`) as HTMLElement | null;
-        if (!el) return;
-        const r = el.getBoundingClientRect();
-        const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
-        const d = (e.clientX - cx) ** 2 + (e.clientY - cy) ** 2;
-        if (d < bestDist) { bestDist = d; best = i; before = e.clientY < cy; }
-      });
-      const pos = before ? best : best + 1;
-      const next = [...others.slice(0, pos), dragKey, ...others.slice(pos)];
-      setOrder(prev => (prev.length === next.length && prev.every((k, i) => k === next[i]) ? prev : next));
-    };
-    const up = () => {
-      try { localStorage.setItem(ORDER_KEY, JSON.stringify(orderRef.current)); } catch { /* ignore */ }
-      setDragKey(null);
-    };
-    window.addEventListener('pointermove', move, { passive: false });
-    window.addEventListener('pointerup', up);
-    window.addEventListener('pointercancel', up);
-    return () => {
-      window.removeEventListener('pointermove', move);
-      window.removeEventListener('pointerup', up);
-      window.removeEventListener('pointercancel', up);
-    };
-  }, [dragKey]);
-
-  function onDown(key: string, e: React.PointerEvent) {
-    const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    grab.current = { ox: e.clientX - r.left, oy: e.clientY - r.top, w: r.width };
-    start.current = { x: e.clientX, y: e.clientY };
-    setPt({ x: e.clientX, y: e.clientY });
-    if (edit) { setDragKey(key); return; }
-    pressTimer.current = setTimeout(() => { setEdit(true); setDragKey(key); }, 380);
-  }
-  function onMovePre(e: React.PointerEvent) {
-    if (pressTimer.current && start.current &&
-      (Math.abs(e.clientX - start.current.x) > 8 || Math.abs(e.clientY - start.current.y) > 8)) {
-      clearTimeout(pressTimer.current); pressTimer.current = null;
-    }
-  }
-  const clearPress = () => { if (pressTimer.current) { clearTimeout(pressTimer.current); pressTimer.current = null; } };
-
-  return (
-    <div>
-      {edit && (
-        <div className="flex items-center justify-between mb-2 px-1 animate-fadeIn">
-          <span className="text-xs text-muted flex items-center gap-1.5"><GripVertical size={13} /> Drag the cards to rearrange</span>
-          <button onClick={() => setEdit(false)} className="text-sm font-bold accent-text press">Done</button>
-        </div>
-      )}
-      <div ref={containerRef} className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
-        {order.map(key => (
-          <div key={key} data-sk={key}
-            onPointerDown={e => onDown(key, e)}
-            onPointerMove={onMovePre}
-            onPointerUp={clearPress}
-            onPointerLeave={clearPress}
-            onContextMenu={e => { if (edit) e.preventDefault(); }}
-            onClickCapture={e => { if (edit) { e.preventDefault(); e.stopPropagation(); } }}
-            className={`${edit ? 'select-none cursor-grab' : ''} ${edit && key !== dragKey ? 'animate-wiggle' : ''} ${key === dragKey ? 'opacity-0' : ''}`}
-            style={{ touchAction: edit ? 'none' : undefined }}>
-            {byKey.get(key)}
-          </div>
-        ))}
-      </div>
-      {!edit && <p className="text-center text-[11px] text-muted/70 mt-2.5">Press and hold a card to rearrange</p>}
-
-      {dragKey && grab.current && (
-        <Overlay>
-          <div style={{ position: 'fixed', left: pt.x - grab.current.ox, top: pt.y - grab.current.oy, width: grab.current.w, zIndex: 120, pointerEvents: 'none' }}
-            className="rotate-[1.5deg] scale-[1.03] drop-shadow-2xl select-none">
-            {byKey.get(dragKey)}
-          </div>
-        </Overlay>
-      )}
     </div>
   );
 }

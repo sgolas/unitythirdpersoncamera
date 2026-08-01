@@ -278,6 +278,9 @@ export interface FuelRoute extends SyncMeta {
   priceCurrency: string;        // currency of the price (e.g. EUR, USD)
   priceSource: string;          // where the price came from ('FR live', 'DE avg', 'manual')
   distanceKm: number;           // last computed road distance (cache for display)
+  avoidTolls?: boolean;         // prefer a toll-free route
+  tollCost?: number;            // last computed one-way toll, in `tollCurrency`
+  tollCurrency?: string;        // currency of `tollCost`
   notes: string;
 }
 

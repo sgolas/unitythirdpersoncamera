@@ -16,6 +16,7 @@ import {
 } from '../../lib/fuel';
 import type { CarModel } from '../../lib/cars';
 import { roadDistanceKm, googleMapsDirections, optimizeRoute, type RoutePoint } from '../../lib/route';
+import { fetchTolls } from '../../lib/tolls';
 import { carById, carEconomy } from '../../lib/cars';
 import { TabHeader, Sheet, Field, TextInput, Select, FormFooter, Fab, EmptyState, ConfirmDelete } from '../ui';
 import { PlaceInput } from '../PlaceInput';
@@ -73,11 +74,15 @@ function costOf(r: FuelRoute, tripCur: string) {
   const energy100 = toL100(r.economy, r.economyUnit);
   const litres = litresUsed(total, energy100);
   const priceCost = fuelCost(total, energy100, r.pricePerLiter);
-  return { total, litres, priceCost, tripCost: convert(priceCost, r.priceCurrency, tripCur) };
+  const fuelTrip = convert(priceCost, r.priceCurrency, tripCur);
+  // Tolls are stored one-way (like distance); double for a round trip.
+  const tollNative = (r.tollCost ?? 0) * (r.roundTrip ? 2 : 1);
+  const tollTrip = tollNative ? convert(tollNative, r.tollCurrency || tripCur, tripCur) : 0;
+  return { total, litres, priceCost, tripCost: fuelTrip, tollNative, tollTrip, grandTotal: fuelTrip + tollTrip };
 }
 
 function RouteCard({ r, tripCur, onEdit, onDelete }: { r: FuelRoute; tripCur: string; onEdit: () => void; onDelete: () => void }) {
-  const { total, litres, priceCost, tripCost } = costOf(r, tripCur);
+  const { total, litres, priceCost, tripCost, tollNative, tollTrip, grandTotal } = costOf(r, tripCur);
   const [logged, setLogged] = useState(false);
   async function addExpense() {
     await put<Expense>({
@@ -88,6 +93,16 @@ function RouteCard({ r, tripCur, onEdit, onDelete }: { r: FuelRoute; tripCur: st
       notes: `${r.vehicle ? r.vehicle + ' · ' : ''}${Math.round(total)} km${r.roundTrip ? ' round trip' : ''}`,
       updatedAt: '', updatedBy: '',
     }, `Added fuel expense: ${r.name || 'drive'}`, 'create');
+    if (tollNative > 0) {
+      await put<Expense>({
+        kind: 'expense', id: crypto.randomUUID(),
+        title: `Tolls — ${r.name || 'drive'}`,
+        amount: Math.round(tollNative * 100) / 100, currency: r.tollCurrency || r.priceCurrency, category: 'transport',
+        date: todayStr(), paidBy: null, place: '',
+        notes: `${Math.round(total)} km${r.roundTrip ? ' round trip' : ''}`,
+        updatedAt: '', updatedBy: '',
+      }, `Added toll expense: ${r.name || 'drive'}`, 'create');
+    }
     setLogged(true);
   }
   const from = r.waypoints[0]?.label || 'Start';
@@ -118,13 +133,19 @@ function RouteCard({ r, tripCur, onEdit, onDelete }: { r: FuelRoute; tripCur: st
           {isElectric(r.fuelType)
             ? <Stat label="Energy" value={`${litres.toFixed(1)} kWh`} />
             : <Stat label="Fuel" value={`${litres.toFixed(1)} L`} sub={`${(litres / 3.785411784).toFixed(1)} gal`} />}
-          <Stat label="Cost" value={money1(tripCost, tripCur)} sub={r.priceCurrency !== tripCur ? money1(priceCost, r.priceCurrency) : undefined} accent />
+          <Stat label={tollTrip > 0 ? 'Fuel' : 'Cost'} value={money1(tripCost, tripCur)} sub={r.priceCurrency !== tripCur ? money1(priceCost, r.priceCurrency) : undefined} accent />
         </div>
-        {tripCost > 0 && (
+        {tollTrip > 0 && (
+          <div className="mt-2 flex items-center justify-between bg-teal-50 rounded-xl px-3 py-2">
+            <span className="text-xs text-teal-700 flex items-center gap-1">🛣️ Tolls{r.avoidTolls ? ' (avoided)' : ''} {money1(tollTrip, tripCur)}</span>
+            <span className="text-sm font-extrabold text-teal-700">Total {money1(grandTotal, tripCur)}</span>
+          </div>
+        )}
+        {grandTotal > 0 && (
           <button onClick={addExpense} disabled={logged}
             className={`w-full mt-2.5 py-2 rounded-xl text-sm font-semibold flex items-center justify-center gap-1.5 border transition ${
               logged ? 'bg-emerald-50 border-emerald-200 text-emerald-600' : 'bg-white border-line text-slate-600 active:bg-slate-50'}`}>
-            {logged ? <><Check size={14} /> Added to expenses</> : <><Coins size={14} /> Add to expenses</>}
+            {logged ? <><Check size={14} /> Added to expenses</> : <><Coins size={14} /> Add {tollTrip > 0 ? 'fuel + tolls' : ''} to expenses</>}
           </button>
         )}
       </div>
@@ -151,6 +172,9 @@ function RouteSheet({ route, tripCur, onClose }: { route: FuelRoute | null; trip
   const [waypoints, setWaypoints] = useState<FuelWaypoint[]>(
     route?.waypoints?.length ? route.waypoints : [emptyWp(), emptyWp()]);
   const [roundTrip, setRoundTrip] = useState(route?.roundTrip ?? false);
+  const [avoidTolls, setAvoidTolls] = useState(route?.avoidTolls ?? false);
+  const [toll, setToll] = useState<{ cost: number; currency: string } | null>(
+    route?.tollCost != null && route.tollCost > 0 ? { cost: route.tollCost, currency: route.tollCurrency || tripCur } : null);
   const [economyUnit, setEconomyUnit] = useState<EconomyUnit>(route?.economyUnit ?? 'l100');
   const [economy, setEconomy] = useState(String(route?.economy ?? defaultEconomyFor(route?.economyUnit ?? 'l100')));
   const [fuelType, setFuelType] = useState<FuelType>(route?.fuelType ?? 'petrol');
@@ -227,6 +251,10 @@ function RouteSheet({ route, tripCur, onClose }: { route: FuelRoute | null; trip
     return { total, litres, priceCost, tripCost };
   }, [distanceKm, roundTrip, l100, pricePerLitre, priceCurrency, tripCur]);
 
+  // Tolls (stored one-way; doubled for a round trip) added on top of fuel.
+  const tollTripCost = toll ? convert(toll.cost * (roundTrip ? 2 : 1), toll.currency, tripCur) : 0;
+  const grandTotal = (result?.tripCost ?? 0) + tollTripCost;
+
   function setWp(i: number, w: FuelWaypoint) { setWaypoints(ws => ws.map((x, j) => j === i ? w : x)); }
   function addStop() { setWaypoints(ws => [...ws.slice(0, -1), emptyWp(), ws[ws.length - 1]]); }
   function removeWp(i: number) { setWaypoints(ws => ws.filter((_, j) => j !== i)); }
@@ -234,12 +262,21 @@ function RouteSheet({ route, tripCur, onClose }: { route: FuelRoute | null; trip
   async function calc() {
     if (!canRoute) return;
     setCalcBusy(true);
-    const pts: RoutePoint[] = routable.map(w => ({ label: w.label, lat: w.lat, lng: w.lng }));
-    if (roundTrip) pts.push(pts[0]); // close the loop for an accurate return leg
-    const r = await roadDistanceKm(pts);
+    const oneWay: RoutePoint[] = routable.map(w => ({ label: w.label, lat: w.lat, lng: w.lng }));
+    const osrmPts = roundTrip ? [...oneWay, oneWay[0]] : oneWay; // close the loop for OSRM
+    const [r, tollRes] = await Promise.all([
+      roadDistanceKm(osrmPts),
+      fetchTolls(oneWay.map(p => ({ lat: p.lat, lng: p.lng })), { avoidTolls }),
+    ]);
     // We store the one-way base; round trip is applied when displaying.
-    setDistanceKm(roundTrip ? r.km / 2 : r.km);
-    setDistSource(r.source);
+    let oneWayKm = roundTrip ? r.km / 2 : r.km;
+    let src = r.source;
+    // Avoiding tolls reroutes the drive; use the toll router's own distance so
+    // the fuel estimate reflects the (usually longer) toll-free road.
+    if (avoidTolls && tollRes?.distanceKm && tollRes.distanceKm > 0) { oneWayKm = tollRes.distanceKm; src = 'road'; }
+    setDistanceKm(oneWayKm);
+    setDistSource(src);
+    setToll(tollRes ? { cost: tollRes.toll, currency: tollRes.currency } : null);
     setCalcBusy(false);
   }
 
@@ -274,7 +311,9 @@ function RouteSheet({ route, tripCur, onClose }: { route: FuelRoute | null; trip
       waypoints, roundTrip, vehicle: vehicle || undefined, year: parseInt(year) || undefined,
       economy: parseFloat(economy) || 0, economyUnit, fuelType,
       pricePerLiter: pricePerLitre, priceCurrency, priceSource,
-      distanceKm: distanceKm ?? 0, notes: '',
+      distanceKm: distanceKm ?? 0,
+      avoidTolls, tollCost: toll?.cost ?? 0, tollCurrency: toll?.currency,
+      notes: '',
       updatedAt: '', updatedBy: '',
     }, `${route ? 'Updated' : 'Added'} route: ${name.trim() || defaultName(waypoints)}`, route ? 'update' : 'create');
     onClose();
@@ -325,6 +364,12 @@ function RouteSheet({ route, tripCur, onClose }: { route: FuelRoute | null; trip
       <label className="flex items-center justify-between py-2 mb-1">
         <span className="text-sm font-medium text-content flex items-center gap-2"><Repeat size={16} className="text-slate-400" /> Round trip (return to start)</span>
         <input type="checkbox" checked={roundTrip} onChange={e => { setRoundTrip(e.target.checked); }} className="w-5 h-5 accent-teal-600" />
+      </label>
+      <label className="flex items-center justify-between py-2 mb-1">
+        <span className="text-sm font-medium text-content flex items-center gap-2"><RouteIcon size={16} className="text-slate-400" /> Avoid tolls</span>
+        <input type="checkbox" checked={avoidTolls}
+          onChange={e => { setAvoidTolls(e.target.checked); setDistanceKm(null); setDistSource(null); setToll(null); }}
+          className="w-5 h-5 accent-teal-600" />
       </label>
 
       {/* Vehicle */}
@@ -414,11 +459,23 @@ function RouteSheet({ route, tripCur, onClose }: { route: FuelRoute | null; trip
             {elec
               ? <Stat label="Energy" value={`${result.litres.toFixed(1)} kWh`} />
               : <Stat label="Fuel" value={`${result.litres.toFixed(1)} L`} sub={`${(result.litres / 3.785411784).toFixed(1)} gal`} />}
-            <Stat label="Cost" value={money1(result.tripCost, tripCur)} sub={priceCurrency !== tripCur ? money1(result.priceCost, priceCurrency) : undefined} accent />
+            <Stat label={toll ? 'Fuel' : 'Cost'} value={money1(result.tripCost, tripCur)} sub={priceCurrency !== tripCur ? money1(result.priceCost, priceCurrency) : undefined} accent />
           </div>
+          {toll && (
+            <>
+              <div className="mt-2 flex items-center justify-between px-1 text-sm">
+                <span className="text-teal-800 flex items-center gap-1.5">🛣️ Tolls{avoidTolls ? ' (avoided)' : ''}</span>
+                <span className="font-semibold text-content">{money1(tollTripCost, tripCur)}</span>
+              </div>
+              <div className="mt-1.5 pt-2 border-t border-teal-200 flex items-center justify-between px-1">
+                <span className="text-sm font-bold text-content">Total (fuel + tolls)</span>
+                <span className="text-base font-extrabold text-teal-700">{money1(grandTotal, tripCur)}</span>
+              </div>
+            </>
+          )}
           {travelers.length > 1 && (
             <p className="text-center text-xs text-teal-700 font-semibold mt-2 flex items-center justify-center gap-1">
-              <Coins size={12} /> {money1(result.tripCost / travelers.length, tripCur)} each · {travelers.length} travellers
+              <Coins size={12} /> {money1(grandTotal / travelers.length, tripCur)} each · {travelers.length} travellers
             </p>
           )}
           {canRoute && (

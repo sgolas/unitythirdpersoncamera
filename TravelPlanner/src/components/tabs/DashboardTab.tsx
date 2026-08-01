@@ -1,7 +1,8 @@
+import { useState, useRef, useEffect } from 'react';
 import {
-  Plane, BedDouble, Wallet, CalendarRange, PiggyBank,
+  Plane, BedDouble, CalendarRange, PiggyBank,
   Sparkles, History, Compass, CalendarClock, Calculator, ChevronRight,
-  Map as MapIcon, Languages, Images, FileText, MessageCircle,
+  MessageCircle, GripVertical,
 } from 'lucide-react';
 import {
   useTrip, useSpend, useTransport, useAccommodation,
@@ -13,6 +14,7 @@ import { daysUntil, fmtDate, fmtStamp, fmtTime, todayStr, tripLength } from '../
 import { getLastSync } from '../../lib/config';
 import { computeStops } from '../tripMap';
 import { WeatherWidget } from '../WeatherWidget';
+import { Overlay } from '../ui';
 import { sectionByKey } from '../../lib/sections';
 import { useShortcuts } from '../../lib/dashShortcuts';
 import { useUnreadChat } from '../../lib/chatUnread';
@@ -75,15 +77,6 @@ export function DashboardTab({ onNavigate }: { onNavigate: (v: any) => void }) {
   ].filter(x => x.date).sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
   const future = upAll.filter(x => x.date >= today);
   const upcoming = (future.length ? future : upAll).slice(0, 4);
-
-  const jump = [
-    { key: 'itinerary',     label: 'Itinerary',  color: '#a78bfa', icon: <CalendarRange size={18} /> },
-    { key: 'expenses',      label: 'Expenses',   color: '#10b981', icon: <Wallet size={18} /> },
-    { key: 'map',           label: 'Map',        color: '#0ea5a3', icon: <MapIcon size={18} /> },
-    { key: 'documents',     label: 'Documents',  color: '#64748b', icon: <FileText size={18} /> },
-    { key: 'translate',     label: 'Translate',  color: '#7c3aed', icon: <Languages size={18} /> },
-    { key: 'photos',        label: 'Photos',     color: '#ec4899', icon: <Images size={18} /> },
-  ];
 
   return (
     <div className="animate-fadeUp px-3 sm:px-4 pb-5 space-y-4"
@@ -153,16 +146,41 @@ export function DashboardTab({ onNavigate }: { onNavigate: (v: any) => void }) {
         </div>
       )}
 
-      {/* Main grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
-        {/* Left column */}
-        <div className="lg:col-span-2 space-y-4">
+      {/* Reorderable widget boxes — press and hold a card to rearrange */}
+      <Reorderable items={[
+        { key: 'flight', node: (
           <Card title="Next flight" icon={<Plane size={13} />} action="All transport" onAction={() => onNavigate('transport')}>
             <FlightBody flight={nextFlight} />
           </Card>
+        ) },
+        { key: 'stay', node: (
           <Card title="Next stay" icon={<BedDouble size={13} />} action="All stays" onAction={() => onNavigate('accommodation')}>
             <StayBody stay={nextStay} />
           </Card>
+        ) },
+        { key: 'budget', node: (
+          <Card title="Budget" icon={<PiggyBank size={13} />} action="Breakdown" onAction={() => onNavigate('budget')}>
+            <div className="flex items-center gap-4">
+              <Ring pct={budgetPct} />
+              <div className="flex-1 min-w-0 space-y-2">
+                {catSums.length === 0 ? (
+                  <p className="text-sm text-muted">No spending yet.</p>
+                ) : catSums.slice(0, 3).map(c => (
+                  <div key={c.k}>
+                    <div className="flex justify-between text-xs mb-1">
+                      <span className="text-muted">{c.label}</span>
+                      <span className="font-bold text-content">{moneyHome(c.sum, cur)}</span>
+                    </div>
+                    <div className="h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--border)' }}>
+                      <div className="h-full rounded-full" style={{ width: `${Math.round((c.sum / maxCat) * 100)}%`, background: c.color }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </Card>
+        ) },
+        { key: 'upcoming', node: (
           <Card title="Upcoming" icon={<CalendarRange size={13} />} action="Full itinerary" onAction={() => onNavigate('itinerary')}>
             {upcoming.length === 0 ? (
               <p className="text-sm text-muted">Nothing scheduled yet — add flights, stays or activities.</p>
@@ -191,46 +209,9 @@ export function DashboardTab({ onNavigate }: { onNavigate: (v: any) => void }) {
               </div>
             )}
           </Card>
-        </div>
-
-        {/* Right column */}
-        <div className="space-y-4">
-          <Card title="Budget" icon={<PiggyBank size={13} />} action="Breakdown" onAction={() => onNavigate('budget')}>
-            <div className="flex items-center gap-4">
-              <Ring pct={budgetPct} />
-              <div className="flex-1 min-w-0 space-y-2">
-                {catSums.length === 0 ? (
-                  <p className="text-sm text-muted">No spending yet.</p>
-                ) : catSums.slice(0, 3).map(c => (
-                  <div key={c.k}>
-                    <div className="flex justify-between text-xs mb-1">
-                      <span className="text-muted">{c.label}</span>
-                      <span className="font-bold text-content">{moneyHome(c.sum, cur)}</span>
-                    </div>
-                    <div className="h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--border)' }}>
-                      <div className="h-full rounded-full" style={{ width: `${Math.round((c.sum / maxCat) * 100)}%`, background: c.color }} />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </Card>
-
-          <WeatherWidget location={weatherLoc} />
-
-          <Card title="Jump to" icon={<Compass size={13} />}>
-            <div className="grid grid-cols-3 gap-2.5">
-              {jump.map(j => (
-                <button key={j.key} onClick={() => onNavigate(j.key)}
-                  className="flex flex-col items-center gap-1.5 py-2.5 rounded-xl bg-bg border border-line press">
-                  <span className="w-8 h-8 rounded-lg flex items-center justify-center text-white" style={{ background: j.color }}>{j.icon}</span>
-                  <span className="text-[11px] font-semibold text-content">{j.label}</span>
-                </button>
-              ))}
-            </div>
-          </Card>
-        </div>
-      </div>
+        ) },
+        { key: 'weather', node: <WeatherWidget location={weatherLoc} /> },
+      ]} />
 
       <div className="grid grid-cols-3 gap-3">
         <QuickLink onClick={() => onNavigate('overview')} icon={<Compass size={18} />} label="Overview" />
@@ -242,6 +223,129 @@ export function DashboardTab({ onNavigate }: { onNavigate: (v: any) => void }) {
         className="w-full flex items-center justify-center gap-2 text-muted text-xs py-1 press">
         <History size={13} /> {lastSync ? `Last synced ${fmtStamp(lastSync)}` : 'Syncs automatically when online'}
       </button>
+    </div>
+  );
+}
+
+const ORDER_KEY = 'dash.widgetOrder';
+
+/**
+ * Home-screen style reorderable boxes: press and hold a card to enter edit mode
+ * (the cards wiggle), then drag it to a new spot. The order is saved per device.
+ */
+function Reorderable({ items }: { items: { key: string; node: React.ReactNode }[] }) {
+  const all = items.map(i => i.key);
+  const [order, setOrder] = useState<string[]>(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(ORDER_KEY) || 'null');
+      if (Array.isArray(saved)) {
+        const kept = saved.filter((k: string) => all.includes(k));
+        return [...kept, ...all.filter(k => !kept.includes(k))];
+      }
+    } catch { /* ignore */ }
+    return all;
+  });
+  const [edit, setEdit] = useState(false);
+  const [dragKey, setDragKey] = useState<string | null>(null);
+  const [pt, setPt] = useState({ x: 0, y: 0 });
+  const grab = useRef<{ ox: number; oy: number; w: number } | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const orderRef = useRef(order); orderRef.current = order;
+  const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const start = useRef<{ x: number; y: number } | null>(null);
+  const byKey = new Map(items.map(i => [i.key, i.node]));
+
+  // Keep the saved order in step if the set of widgets ever changes.
+  useEffect(() => {
+    setOrder(o => {
+      const next = [...o.filter(k => all.includes(k)), ...all.filter(k => !o.includes(k))];
+      return next.length === o.length && next.every((k, i) => k === o[i]) ? o : next;
+    });
+  }, [all.join('|')]);
+
+  // While a card is held, follow the pointer and slot it between the others.
+  useEffect(() => {
+    if (!dragKey) return;
+    const move = (e: PointerEvent) => {
+      e.preventDefault();
+      setPt({ x: e.clientX, y: e.clientY });
+      const others = orderRef.current.filter(k => k !== dragKey);
+      let best = others.length, bestDist = Infinity, before = false;
+      others.forEach((k, i) => {
+        const el = containerRef.current?.querySelector(`[data-sk="${k}"]`) as HTMLElement | null;
+        if (!el) return;
+        const r = el.getBoundingClientRect();
+        const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+        const d = (e.clientX - cx) ** 2 + (e.clientY - cy) ** 2;
+        if (d < bestDist) { bestDist = d; best = i; before = e.clientY < cy; }
+      });
+      const pos = before ? best : best + 1;
+      const next = [...others.slice(0, pos), dragKey, ...others.slice(pos)];
+      setOrder(prev => (prev.length === next.length && prev.every((k, i) => k === next[i]) ? prev : next));
+    };
+    const up = () => {
+      try { localStorage.setItem(ORDER_KEY, JSON.stringify(orderRef.current)); } catch { /* ignore */ }
+      setDragKey(null);
+    };
+    window.addEventListener('pointermove', move, { passive: false });
+    window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', up);
+    return () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', up);
+    };
+  }, [dragKey]);
+
+  function onDown(key: string, e: React.PointerEvent) {
+    const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    grab.current = { ox: e.clientX - r.left, oy: e.clientY - r.top, w: r.width };
+    start.current = { x: e.clientX, y: e.clientY };
+    setPt({ x: e.clientX, y: e.clientY });
+    if (edit) { setDragKey(key); return; }
+    pressTimer.current = setTimeout(() => { setEdit(true); setDragKey(key); }, 380);
+  }
+  function onMovePre(e: React.PointerEvent) {
+    if (pressTimer.current && start.current &&
+      (Math.abs(e.clientX - start.current.x) > 8 || Math.abs(e.clientY - start.current.y) > 8)) {
+      clearTimeout(pressTimer.current); pressTimer.current = null;
+    }
+  }
+  const clearPress = () => { if (pressTimer.current) { clearTimeout(pressTimer.current); pressTimer.current = null; } };
+
+  return (
+    <div>
+      {edit && (
+        <div className="flex items-center justify-between mb-2 px-1 animate-fadeIn">
+          <span className="text-xs text-muted flex items-center gap-1.5"><GripVertical size={13} /> Drag the cards to rearrange</span>
+          <button onClick={() => setEdit(false)} className="text-sm font-bold accent-text press">Done</button>
+        </div>
+      )}
+      <div ref={containerRef} className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+        {order.map(key => (
+          <div key={key} data-sk={key}
+            onPointerDown={e => onDown(key, e)}
+            onPointerMove={onMovePre}
+            onPointerUp={clearPress}
+            onPointerLeave={clearPress}
+            onContextMenu={e => { if (edit) e.preventDefault(); }}
+            onClickCapture={e => { if (edit) { e.preventDefault(); e.stopPropagation(); } }}
+            className={`${edit ? 'select-none cursor-grab' : ''} ${edit && key !== dragKey ? 'animate-wiggle' : ''} ${key === dragKey ? 'opacity-0' : ''}`}
+            style={{ touchAction: edit ? 'none' : undefined }}>
+            {byKey.get(key)}
+          </div>
+        ))}
+      </div>
+      {!edit && <p className="text-center text-[11px] text-muted/70 mt-2.5">Press and hold a card to rearrange</p>}
+
+      {dragKey && grab.current && (
+        <Overlay>
+          <div style={{ position: 'fixed', left: pt.x - grab.current.ox, top: pt.y - grab.current.oy, width: grab.current.w, zIndex: 120, pointerEvents: 'none' }}
+            className="rotate-[1.5deg] scale-[1.03] drop-shadow-2xl select-none">
+            {byKey.get(dragKey)}
+          </div>
+        </Overlay>
+      )}
     </div>
   );
 }

@@ -73,4 +73,3 @@ export const TRANSLATE_ENDPOINT = remote ? `${NATIVE_SYNC_BASE}/api/translate` :
 export const PUSHREGISTER_ENDPOINT = remote ? `${NATIVE_SYNC_BASE}/api/pushregister` : '/api/pushregister';
 export const FUEL_ENDPOINT = remote ? `${NATIVE_SYNC_BASE}/api/fuel` : '/api/fuel';
 export const PASSWORD_ENDPOINT = remote ? `${NATIVE_SYNC_BASE}/api/password` : '/api/password';
-export const TOLLS_ENDPOINT = remote ? `${NATIVE_SYNC_BASE}/api/tolls` : '/api/tolls';

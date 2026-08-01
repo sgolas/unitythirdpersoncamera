@@ -1,13 +1,13 @@
 import {
-  ListChecks, Plane, BedDouble, Wallet, CalendarRange, PiggyBank,
+  Plane, BedDouble, Wallet, CalendarRange, PiggyBank,
   Sparkles, History, Compass, CalendarClock, Calculator, ChevronRight,
   Map as MapIcon, Languages, Images, FileText, MessageCircle,
 } from 'lucide-react';
 import {
-  useTrip, useChecklist, useSpend, useTransport, useAccommodation,
+  useTrip, useSpend, useTransport, useAccommodation,
   useItinerary, useTravelers, useBudgetSheets,
 } from '../../hooks/useTrip';
-import { money, moneyHome, moneyAway, sumExpenses, countsToBudget } from '../../types';
+import { money, moneyHome, sumExpenses, countsToBudget } from '../../types';
 import type { Transport, Accommodation, ExpenseCategory } from '../../types';
 import { daysUntil, fmtDate, fmtStamp, fmtTime, todayStr, tripLength } from '../../utils/format';
 import { getLastSync } from '../../lib/config';
@@ -32,7 +32,6 @@ export function DashboardTab({ onNavigate }: { onNavigate: (v: any) => void }) {
   const pinned = useShortcuts();
   const unreadChat = useUnreadChat();
   const trip = useTrip();
-  const checklist = useChecklist();
   const expenses = useSpend();
   const sheets = useBudgetSheets();
   const transport = useTransport();
@@ -49,7 +48,6 @@ export function DashboardTab({ onNavigate }: { onNavigate: (v: any) => void }) {
   const spent = sumExpenses(counted, cur);
   const grandBudget = trip.totalBudget + sheets.reduce((s, x) => s + x.total, 0);
   const budgetPct = grandBudget > 0 ? Math.min(100, Math.round((spent / grandBudget) * 100)) : 0;
-  const done = checklist.filter(c => c.done).length;
   const lastSync = getLastSync();
 
   const stops = computeStops(transport, stays, itinerary);
@@ -136,23 +134,6 @@ export function DashboardTab({ onNavigate }: { onNavigate: (v: any) => void }) {
           <span className="text-white/80 text-xs font-semibold">Open ›</span>
         </button>
       )}
-
-      {/* KPI row */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <Kpi color="#6366f1" icon={<CalendarClock size={14} />} label="Countdown"
-          value={countdownLabel} cap={countdownSub} onClick={() => onNavigate('itinerary')} />
-        <Kpi color="#f59e0b" icon={<PiggyBank size={14} />} label="Budget used"
-          value={grandBudget > 0 ? `${budgetPct}%` : moneyHome(spent, cur)}
-          cap={grandBudget > 0 ? `${moneyHome(spent, cur)} of ${moneyHome(grandBudget, cur)}` : 'no budget set'}
-          pct={grandBudget > 0 ? budgetPct : undefined} pctColor={budgetPct >= 100 ? '#fb7185' : '#10b981'}
-          onClick={() => onNavigate('budget')} />
-        <Kpi color="#10b981" icon={<Wallet size={14} />} label="Spent"
-          value={moneyHome(spent, cur)} cap={moneyAway(spent, cur)} onClick={() => onNavigate('expenses')} />
-        <Kpi color="#34d399" icon={<ListChecks size={14} />} label="Checklist"
-          value={`${done}/${checklist.length}`} cap="packing & to-dos"
-          pct={checklist.length ? Math.round((done / checklist.length) * 100) : undefined} pctColor="var(--accent)"
-          onClick={() => onNavigate('checklist')} />
-      </div>
 
       {/* Pinned shortcuts (long-press items in More to pin) */}
       {pinned.length > 0 && (
@@ -262,28 +243,6 @@ export function DashboardTab({ onNavigate }: { onNavigate: (v: any) => void }) {
         <History size={13} /> {lastSync ? `Last synced ${fmtStamp(lastSync)}` : 'Syncs automatically when online'}
       </button>
     </div>
-  );
-}
-
-/** A KPI stat tile. */
-function Kpi({ icon, color, label, value, cap, pct, pctColor, onClick }: {
-  icon: React.ReactNode; color: string; label: string; value: string;
-  cap?: string; pct?: number; pctColor?: string; onClick?: () => void;
-}) {
-  return (
-    <button onClick={onClick} className="bg-surface rounded-2xl border border-line shadow-soft p-3.5 text-left press">
-      <span className="flex items-center gap-2 text-muted">
-        <span className="w-6 h-6 rounded-lg grid place-items-center text-white flex-shrink-0" style={{ background: color }}>{icon}</span>
-        <span className="text-[11px] font-bold uppercase tracking-wider truncate">{label}</span>
-      </span>
-      <p className="text-2xl font-extrabold tracking-tight mt-2 leading-none text-content tabular-nums truncate">{value}</p>
-      {cap && <p className="text-xs text-muted mt-1 truncate">{cap}</p>}
-      {pct != null && (
-        <div className="h-1.5 rounded-full mt-2 overflow-hidden" style={{ background: 'var(--border)' }}>
-          <div className="h-full rounded-full" style={{ width: `${pct}%`, background: pctColor }} />
-        </div>
-      )}
-    </button>
   );
 }
 

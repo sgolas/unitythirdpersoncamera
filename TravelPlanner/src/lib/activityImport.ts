@@ -66,46 +66,68 @@ export function parseActivity(text: string): ParsedActivity {
   const year = new Date().getFullYear();
   const found: string[] = [];
 
-  const provider = PROVIDERS.find(([re]) => re.test(flat))?.[1] ?? '';
+  // Provider — a known brand, or "operated by X" / a booking email domain.
+  let provider = PROVIDERS.find(([re]) => re.test(flat))?.[1] ?? '';
+  if (!provider) {
+    const op = flat.match(/operated by\s+([A-Z][\w&'. -]{1,30})/i);
+    if (op) provider = op[1].replace(/\s+/g, ' ').trim();
+  }
   if (provider) found.push('provider');
 
-  // Date — prefer one near a date/when label, else the first date in the file
-  // (activities are usually a single day).
-  let date = allDates(after(lines, /\b(?:date|when|activity date|travel date|day)\b/i), year)[0] || '';
+  // Date — prefer one near a date/when label, else the first real date in the
+  // file (activities are usually a single day).
+  let date = allDates(after(lines, /\b(?:date|when|activity date|travel date|day|visit)\b/i), year)[0] || '';
   if (!date) date = allDates(flat, year)[0] || '';
   if (date) found.push('date');
 
-  // Times — prefer a labelled start time; a range fills end time too.
-  const timeWin = after(lines, /\b(?:time|start|starts|begins|when|entry|departure|check[\s-]?in|arriv)\b/i);
-  const startTime = findTime(timeWin) || findTime(flat);
+  // Times — only trust a labelled start time, or a time on a short "data" line;
+  // never a time buried in a policy/warning sentence (e.g. "bookings at 6:00 PM").
+  const timeWin = after(lines, /\b(?:time|start|starts|begins|when|entry|departure|check[\s-]?in|arriv|pick[\s-]?up)\b/i);
+  let startTime = findTime(timeWin);
+  if (!startTime) {
+    const shortTimeLine = lines.find(l => l.length < 42 && /\b\d{1,2}:\d{2}\b/.test(l)
+      && !/valid|policy|warning|slot|within|prior|before|after\b|hours?\b|instruction/i.test(l) && findTime(l));
+    if (shortTimeLine) startTime = findTime(shortTimeLine);
+  }
   let endTime = '';
   const range = timeWin.match(/(\d{1,2}:\d{2}\s*(?:a\.?m\.?|p\.?m\.?)?)\s*[–\-—to]+\s*(\d{1,2}:\d{2}\s*(?:a\.?m\.?|p\.?m\.?)?)/i);
   if (range) endTime = findTime(range[2]);
   if (startTime) found.push('time');
 
-  // Confirmation / booking reference / order number.
+  // Confirmation / booking reference. Must contain a digit (so plain words like
+  // "INCLUDES" are never mistaken for a code); prefer a "TIE-900647" style ref.
   let confirmation = '';
-  let m = flat.match(/(?:confirmation|booking|reservation|order|reference|ticket)\s*(?:code|number|reference|ref|id|no\.?|#)?\s*[:#]?\s*\n?\s*([A-Z0-9][A-Z0-9-]{4,15})\b/i)
-    || flat.match(/\b([A-Z]{2,4}-?\d{5,10})\b/);
-  if (m) { confirmation = m[1].toUpperCase(); found.push('confirmation'); }
+  let m = flat.match(/\b([A-Z]{2,6}-\d{3,10})\b/)
+    || flat.match(/(?:confirmation|booking|reservation|order|reference|voucher|ticket)\s*(?:code|number|reference|ref|id|no\.?|#)?\s*[:#]?\s*\n?\s*([A-Z]{0,4}-?\d[A-Z0-9-]{3,14})\b/i)
+    || flat.match(/\b([A-Z]{2,4}\d{5,10})\b/);
+  if (m && /\d/.test(m[1])) { confirmation = m[1].toUpperCase(); found.push('confirmation'); }
 
-  // Location — reuse the stay address finder (labels, street words, postal code).
-  const location = findAddress(lines);
+  // Location — an explicit address (label/street/postal), else a "City, Country"
+  // line or a bare city that shows up under a Destinations/Where heading.
+  let location = findAddress(lines);
+  if (!location) {
+    m = flat.match(/\b([A-Z][\p{L}'’.\s-]{2,28}),\s*(?:Italy|France|Spain|Portugal|Germany|Greece|Austria|Netherlands|Belgium|Switzerland|Croatia|USA|United States|UK|United Kingdom|Canada|Mexico|Japan|Thailand)\b/u);
+    if (m) location = `${m[1].trim()}, ${m[0].slice(m[1].length + 1).trim()}`;
+  }
   if (location) found.push('location');
 
-  // Title. Restaurant reservations → "reservation at <name>"; otherwise a line
-  // with an activity keyword; otherwise the first prominent non-boilerplate line.
+  // Title. In priority: restaurant "reservation at X"; a "Visit <Attraction>"
+  // phrase; an "Activity/Experience: X" label; a keyword line; a prominent
+  // early line. Count/boilerplate lines ("1 Experience") are rejected.
+  const clean = (s: string) => s.replace(/\s+/g, ' ').replace(/[\s:–-]+$/, '').trim();
+  const BOILER = /confirm|receipt|booking (?:reference|number)|order|thank|hello|^hi\b|dear |your (?:booking|order|reservation|trip)|policy|refund|support|invoice|documentation|glossary|itinerary|^total|^\d|^\d+\s+(?:destination|experience|adult|child|hour|day|night|participant|point)/i;
   let title = '';
-  m = flat.match(/reservation (?:at|for)\s+([^\n,]{2,60})/i) || flat.match(/table for\s+\d+\b.*?\bat\s+([^\n,]{2,60})/i);
-  if (m) title = m[1].trim();
-  const KW = /\b(tour|tickets?|experience|admission|entry|entrance|pass|cruise|class|workshop|tasting|show|concert|museum|gallery|guided|skip[- ]the[- ]line|day trip|excursion|safari|dinner|lunch|brunch|walking|visit|activity)\b/i;
-  const BOILER = /confirm|receipt|booking (?:reference|number)|order|thank|hello|^hi\b|dear |your (?:booking|order|reservation|trip)|policy|refund|support|invoice|^total|^\d/i;
+  m = flat.match(/reservation (?:at|for)\s+([^\n,]{2,60})/i)
+    || flat.match(/\bvisit(?:\s+to)?\s+([A-Z][^,.\n]{3,48})/)
+    || flat.match(/\b(?:activit(?:y|ies)|experiences?|service|attraction|excursion|tour)\s*[:\-–]\s*([^\n]{2,50})/i);
+  if (m) title = clean(m[1]);
+  const KW = /\b(tour|tickets?|experience|admission|entry|entrance|pass|cruise|class|workshop|tasting|show|concert|museum|gallery|guided|skip[- ]the[- ]line|day trip|excursion|safari|dinner|lunch|brunch|walking|basilica|cathedral|palace|castle|park|garden)\b/i;
   if (!title) {
-    const line = lines.find(l => KW.test(l) && l.length >= 6 && l.length <= 80 && !BOILER.test(l));
-    if (line) title = line.replace(/\s+/g, ' ').trim();
+    const line = lines.find(l => KW.test(l) && l.length >= 5 && l.length <= 70 && !BOILER.test(l));
+    if (line) title = clean(line);
   }
   if (!title) {
-    title = lines.slice(0, 10).find(l => l.length >= 6 && l.length <= 80 && !BOILER.test(l) && allDates(l, year).length === 0 && !findTime(l)) || '';
+    title = clean(lines.slice(0, 12).find(l => l.length >= 5 && l.length <= 70 && !BOILER.test(l) && allDates(l, year).length === 0 && !findTime(l)) || '');
   }
   if (!title && provider) title = `${provider} activity`;
   if (title) found.push('title');

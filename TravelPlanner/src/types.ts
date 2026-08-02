@@ -102,6 +102,11 @@ export interface Accommodation extends SyncMeta {
   costCurrency?: string;     // currency of `cost` (defaults to trip currency)
   contact: string;           // phone / email
   notes: string;
+  // Optional attachment — e.g. the original booking-confirmation PDF kept with
+  // the stay (synced to the family). Viewable + saveable from the stay detail.
+  fileData?: string;         // base64 data URL of the file
+  fileName?: string;         // original filename, used when saving
+  fileMime?: string;         // e.g. 'application/pdf'
 }
 
 /* ── 4b. Car Rentals ────────────────────────────────────────── */

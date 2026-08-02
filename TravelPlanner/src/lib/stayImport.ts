@@ -60,25 +60,25 @@ const MONTHS: Record<string, number> = {
 const iso = (y: number, m: number, d: number) =>
   `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
 
-/** Find the first parseable date inside a chunk of text; returns ISO or ''. */
+/** All parseable dates in a chunk of text, in order, as ISO strings. Handles
+ *  "Sep 8, 2025", "8 September", "Mon, Oct 6", "2025-09-08" and "09/08/2025". */
+function allDates(text: string, year: number): string[] {
+  const out: string[] = [];
+  const re = /(20\d{2})-(\d{1,2})-(\d{1,2})|([A-Za-z]{3,9})\.?\s+(\d{1,2})(?:st|nd|rd|th)?(?:,?\s*(20\d{2}))?|(\d{1,2})(?:st|nd|rd|th)?\s+([A-Za-z]{3,9})\.?(?:,?\s*(20\d{2}))?|(\d{1,2})\/(\d{1,2})\/(20\d{2})/g;
+  let m: RegExpExecArray | null;
+  const mon = (s: string) => MONTHS[s.slice(0, 3).toLowerCase()];
+  while ((m = re.exec(text))) {
+    if (m[1]) out.push(iso(+m[1], +m[2], +m[3]));
+    else if (m[4] && mon(m[4])) out.push(iso(m[6] ? +m[6] : year, mon(m[4]), +m[5]));
+    else if (m[8] && mon(m[8])) out.push(iso(m[9] ? +m[9] : year, mon(m[8]), +m[7]));
+    else if (m[10]) out.push(iso(+m[12], +m[10], +m[11]));
+  }
+  return out;
+}
+
+/** First parseable date inside a chunk of text; returns ISO or ''. */
 function findDate(text: string, fallbackYear: number): string {
-  // 2025-09-08
-  let m = text.match(/(20\d{2})-(\d{1,2})-(\d{1,2})/);
-  if (m) return iso(+m[1], +m[2], +m[3]);
-  // "Sep 8, 2025" / "September 8 2025" / "Sep 8"
-  m = text.match(/\b([A-Za-z]{3,9})\.?\s+(\d{1,2})(?:st|nd|rd|th)?(?:,?\s*(20\d{2}))?/);
-  if (m && MONTHS[m[1].slice(0, 3).toLowerCase()]) {
-    return iso(m[3] ? +m[3] : fallbackYear, MONTHS[m[1].slice(0, 3).toLowerCase()], +m[2]);
-  }
-  // "8 September 2025" / "8 Sep"
-  m = text.match(/\b(\d{1,2})(?:st|nd|rd|th)?\s+([A-Za-z]{3,9})\.?(?:,?\s*(20\d{2}))?/);
-  if (m && MONTHS[m[2].slice(0, 3).toLowerCase()]) {
-    return iso(m[3] ? +m[3] : fallbackYear, MONTHS[m[2].slice(0, 3).toLowerCase()], +m[1]);
-  }
-  // 09/08/2025 (assume M/D/Y — most confirmation emails are US-format)
-  m = text.match(/\b(\d{1,2})\/(\d{1,2})\/(20\d{2})\b/);
-  if (m) return iso(+m[3], +m[1], +m[2]);
-  return '';
+  return allDates(text, fallbackYear)[0] || '';
 }
 
 /** Grab the text window right after the first keyword hit (same line + next). */
@@ -120,17 +120,37 @@ export function parseStay(text: string): ParsedStay {
       : /booking\.com/i.test(flat) ? 'booking'
         : /vrbo|homeaway/i.test(flat) ? 'vrbo' : 'generic';
 
-  // Dates — prefer labelled check-in / check-out.
-  let checkIn = findDate(windowAfter(lines, /check[\s-]?in|arrive|arrival/i), year);
-  let checkOut = findDate(windowAfter(lines, /check[\s-]?out|depart|departure/i), year);
-  // Fallback: a "Sep 5 – Sep 8" style range anywhere.
+  // Dates. Airbnb often prints check-in and checkout as two columns —
+  // "CHECK-IN   CHECKOUT" on one line, the two dates on the next — so when both
+  // labels share a line we take the first two dates that follow; otherwise we
+  // read each label's own region.
+  const inRe = /check[\s-]?in|arriv/i;
+  const outRe = /check[\s-]?out|depart/i;
+  const ciIdx = lines.findIndex(l => inRe.test(l));
+  const coIdx = lines.findIndex(l => outRe.test(l));
+  let checkIn = '', checkOut = '';
+  if (ciIdx >= 0 && ciIdx === coIdx) {
+    // Combined header — dates are on the following line(s), first = in, second = out.
+    const ds = allDates(`${lines[ciIdx + 1] ?? ''} ${lines[ciIdx + 2] ?? ''} ${lines[ciIdx + 3] ?? ''}`, year);
+    checkIn = ds[0] || ''; checkOut = ds[1] || '';
+  } else {
+    checkIn = findDate(windowAfter(lines, inRe), year);
+    checkOut = findDate(windowAfter(lines, outRe), year);
+  }
+  // Fallback: a "Sep 5 – Sep 8" / "Oct 6 – 9" style range anywhere.
   if (!checkIn || !checkOut) {
-    const range = flat.match(/([A-Za-z]{3,9}\.?\s+\d{1,2}(?:,?\s*20\d{2})?)\s*[–\-—to]+\s*([A-Za-z]{3,9}\.?\s+\d{1,2}(?:,?\s*20\d{2})?|\d{1,2}(?:,?\s*20\d{2})?)/);
+    const range = flat.match(/([A-Za-z]{3,9}\.?\s+\d{1,2}(?:,?\s*20\d{2})?)\s*[–\-—]+\s*([A-Za-z]{3,9}\.?\s+\d{1,2}(?:,?\s*20\d{2})?|\d{1,2}(?:,?\s*20\d{2})?)/);
     if (range) {
       checkIn = checkIn || findDate(range[1], year);
       // second half may omit the month ("Sep 5 – 8") — borrow the first month.
       checkOut = checkOut || findDate(/[A-Za-z]/.test(range[2]) ? range[2] : `${range[1].split(/\d/)[0]} ${range[2]}`, year);
     }
+  }
+  // Last resort: if we have a check-in but no checkout, take the next distinct
+  // date that comes after it anywhere in the document.
+  if (checkIn && !checkOut) {
+    const later = allDates(flat, year).filter(d => d > checkIn).sort();
+    if (later[0]) checkOut = later[0];
   }
   if (checkIn) found.push('check-in');
   if (checkOut) found.push('check-out');
@@ -147,11 +167,16 @@ export function parseStay(text: string): ParsedStay {
   m = flat.match(/\b(?:in|·)\s+([A-Z][A-Za-zÀ-ÿ .'-]+),\s*([A-Z][A-Za-zÀ-ÿ .'-]{2,})/);
   if (m) { city = m[1].trim(); found.push('city'); }
 
-  // Address — a line carrying a street-type word (many languages) and a number.
-  // Handles US "12 Baker Street" and EU "Rua Garrett 12, 1200-273 Lisboa".
+  // Address — a line carrying a street-type word (many languages) and a number,
+  // e.g. US "12 Baker Street", PT "Rua Garrett 12, 1200-273 Lisboa",
+  // FR "10 Rue de Rivoli", ES "Calle Mayor 5". Falls back to a line with a
+  // recognisable postal code (UK/CA/EU/US) when no street word is present.
   let address = '';
-  const STREET = /\b(?:street|st|road|rd|ave|avenue|boulevard|blvd|lane|ln|drive|dr|way|court|ct|place|pl|square|sq|rua|avenida|calle|carrer|carrera|via|viale|strada|stra(?:ss|ß)e|platz|weg|gasse|plein|gata|dam)\b/i;
-  const addrLine = lines.find(l => l.length <= 90 && /\d/.test(l) && STREET.test(l) && !/check|total|confirm|night|fee|guest/i.test(l));
+  const STREET = /\b(?:street|st|road|rd|avenue|ave|boulevard|blvd|lane|ln|drive|dr|way|court|ct|place|pl|square|sq|terrace|crescent|close|parade|rua|avenida|travessa|largo|pra(?:ç|c)a|calle|carrer|carrera|avda|paseo|plaza|ronda|camino|rue|avenue|quai|impasse|chemin|all[ée]e|boulevard|via|viale|piazza|corso|strada|contrada|stra(?:ss|ß)e|platz|weg|gasse|allee|ring|damm|ufer|straat|gracht|plein|kade|gata|gate|vei|vej|plads|katu|sokak|cadde)\b/i;
+  const KEYWORD = /check|total|subtotal|confirm|night|fee|guest|reservation|hosted|www\.|http|@/i;
+  const POSTAL = /\b(?:\d{5}(?:-\d{4})?|\d{4}\s?[A-Z]{2}|\d{4}-\d{3}|[A-Z]{1,2}\d[A-Z\d]?\s?\d[A-Z]{2}|[A-Z]\d[A-Z]\s?\d[A-Z]\d)\b/;
+  let addrLine = lines.find(l => l.length <= 90 && /\d/.test(l) && STREET.test(l) && !KEYWORD.test(l));
+  if (!addrLine) addrLine = lines.find(l => l.length <= 90 && l.includes(',') && POSTAL.test(l) && !KEYWORD.test(l));
   if (addrLine) { address = addrLine.replace(/\s+/g, ' ').trim(); found.push('address'); }
 
   // Listing / property name.

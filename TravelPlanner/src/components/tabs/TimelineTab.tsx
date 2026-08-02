@@ -6,9 +6,10 @@
  * through put()/remove() so they log + sync like everything else.
  */
 import { useEffect } from 'react';
-import { useAccommodation, useTimelineStops, useTimelineLegend } from '../../hooks/useTrip';
+import { useAccommodation, useTimelineStops, useTimelineLegend, useFuelRoutes } from '../../hooks/useTrip';
 import { db, put, remove } from '../../db/database';
 import type { TimelineStop, TimelineLegendItem } from '../../types';
+import { driveDuration, arrivalDateTime } from '../../lib/route';
 import { TabHeader } from '../ui';
 import { TripTimeline, SEED_LEGEND, type UnifiedStop, type StopPatch } from '../TripTimeline';
 
@@ -18,17 +19,18 @@ export function TimelineTab() {
   const stays = useAccommodation();
   const extras = useTimelineStops();
   const legend = useTimelineLegend();
+  const routes = useFuelRoutes();
 
-  // Seed the built-in legend once (overnight / day / end / buffer). Guarded by
-  // a flag so we don't recreate it after the user clears the list.
+  // Seed the built-in legend once, and make sure every built-in type exists
+  // (so upgrades that add a built-in — e.g. "Drive" — get it too).
   useEffect(() => {
-    if (localStorage.getItem(SEED_FLAG)) return;
     (async () => {
-      const count = await db.timelinelegend.count();
-      if (count === 0) {
-        for (const l of SEED_LEGEND) {
-          await put<TimelineLegendItem>({ ...l, id: crypto.randomUUID() }, `Added timeline type: ${l.label}`, 'create');
-        }
+      const existing = new Set((await db.timelinelegend.toArray()).filter(l => !l.deleted).map(l => l.key));
+      const firstRun = !localStorage.getItem(SEED_FLAG) && existing.size === 0;
+      for (const l of SEED_LEGEND) {
+        if (existing.has(l.key)) continue;
+        if (!l.builtin && !firstRun) continue; // only auto-add built-ins after first run
+        await put<TimelineLegendItem>({ ...l, id: crypto.randomUUID() }, `Added timeline type: ${l.label}`, 'create');
       }
       localStorage.setItem(SEED_FLAG, '1');
     })();
@@ -51,7 +53,31 @@ export function TimelineTab() {
     id: s.id, city: s.city, startDate: s.startDate, endDate: s.endDate,
     type: s.type, tags: s.tags, locked: false, source: 'extra' as const,
   }));
-  const stops = [...stayStops, ...extraStops];
+  // Drives from the Fuel & Driving planner that have a departure date show as
+  // read-only "travel" stops on the line (edit them on that page).
+  const routeStops: UnifiedStop[] = routes
+    .filter(r => r.departDate)
+    .map(r => {
+      const from = r.waypoints[0]?.label?.split(',')[0] || '';
+      const to = r.waypoints[r.waypoints.length - 1]?.label?.split(',')[0] || '';
+      const km = Math.round(r.distanceKm * (r.roundTrip ? 2 : 1));
+      const arr = r.departTime && r.durationMin ? arrivalDateTime(r.departDate!, r.departTime, r.durationMin) : null;
+      const tags: string[] = [];
+      if (km > 0) tags.push(`${km} km`);
+      if (r.durationMin) tags.push(driveDuration(r.durationMin * (r.roundTrip ? 2 : 1)));
+      if (r.departTime) tags.push(arr ? `${r.departTime}→${arr.time}` : r.departTime);
+      return {
+        id: `route-${r.id}`,
+        city: r.name || (from && to ? `${from} → ${to}` : from || to || 'Drive'),
+        startDate: r.departDate!,
+        endDate: arr && arr.date !== r.departDate ? arr.date : null,
+        type: 'travel',
+        tags,
+        locked: true,
+        source: 'route' as const,
+      };
+    });
+  const stops = [...stayStops, ...extraStops, ...routeStops];
 
   const nextOrder = () => (extras.reduce((m, s) => Math.max(m, s.order), 0) + 1);
 

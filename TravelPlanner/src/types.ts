@@ -304,6 +304,9 @@ export interface FuelRoute extends SyncMeta {
   priceCurrency: string;        // currency of the price (e.g. EUR, USD)
   priceSource: string;          // where the price came from ('FR live', 'DE avg', 'manual')
   distanceKm: number;           // last computed road distance (cache for display)
+  durationMin?: number;         // one-way driving time in minutes (from the router)
+  departDate?: ISODate;         // when the drive starts (optional; used for the timeline)
+  departTime?: ISOTime;         // departure time → arrival is departure + durationMin
   notes: string;
 }
 

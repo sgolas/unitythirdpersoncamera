@@ -15,7 +15,8 @@ import {
   isElectric, isEnergyUnit, unitsForFuel, unitLabel, adjustForYear,
 } from '../../lib/fuel';
 import type { CarModel } from '../../lib/cars';
-import { roadDistanceKm, googleMapsDirections, optimizeRoute, type RoutePoint } from '../../lib/route';
+import { roadDistanceKm, googleMapsDirections, optimizeRoute, driveDuration, arrivalDateTime, type RoutePoint } from '../../lib/route';
+import { fmtDate, fmtTime } from '../../utils/format';
 import { carById, carEconomy } from '../../lib/cars';
 import { TabHeader, Sheet, Field, TextInput, Select, FormFooter, Fab, EmptyState, ConfirmDelete } from '../ui';
 import { PlaceInput } from '../PlaceInput';
@@ -207,8 +208,11 @@ function RouteSheet({ route, tripCur, onClose }: { route: FuelRoute | null; trip
   const [priceSource, setPriceSource] = useState(route?.priceSource ?? '');
   const [priceBusy, setPriceBusy] = useState(false);
   const [distanceKm, setDistanceKm] = useState<number | null>(route?.distanceKm ?? null);
+  const [durationMin, setDurationMin] = useState<number | null>(route?.durationMin ?? null);
   const [distSource, setDistSource] = useState<'road' | 'estimate' | null>(route ? 'road' : null);
   const [calcBusy, setCalcBusy] = useState(false);
+  const [departDate, setDepartDate] = useState(route?.departDate ?? '');
+  const [departTime, setDepartTime] = useState(route?.departTime ?? '');
 
   const routable = waypoints.filter(hasCoords);
   const canRoute = routable.length >= 2;
@@ -239,6 +243,7 @@ function RouteSheet({ route, tripCur, onClose }: { route: FuelRoute | null; trip
     const r = await roadDistanceKm(pts);
     // We store the one-way base; round trip is applied when displaying.
     setDistanceKm(roundTrip ? r.km / 2 : r.km);
+    setDurationMin(roundTrip ? Math.round(r.durationMin / 2) : r.durationMin);
     setDistSource(r.source);
     setCalcBusy(false);
   }
@@ -251,7 +256,7 @@ function RouteSheet({ route, tripCur, onClose }: { route: FuelRoute | null; trip
     const ordered = optimizeRoute(pts.slice(1), pts[0]);
     const byLabel = new Map(waypoints.map(w => [w.label, w] as const));
     setWaypoints(ordered.map(p => byLabel.get(p.label) ?? { label: p.label, lat: p.lat, lng: p.lng }));
-    setDistanceKm(null); setDistSource(null);
+    setDistanceKm(null); setDurationMin(null); setDistSource(null);
   }
 
   async function autoPrice() {
@@ -274,7 +279,8 @@ function RouteSheet({ route, tripCur, onClose }: { route: FuelRoute | null; trip
       waypoints, roundTrip, vehicle: vehicle || undefined, year: parseInt(year) || undefined,
       economy: parseFloat(economy) || 0, economyUnit, fuelType,
       pricePerLiter: pricePerLitre, priceCurrency, priceSource,
-      distanceKm: distanceKm ?? 0, notes: '',
+      distanceKm: distanceKm ?? 0, durationMin: durationMin ?? undefined,
+      departDate: departDate || undefined, departTime: departTime || undefined, notes: '',
       updatedAt: '', updatedBy: '',
     }, `${route ? 'Updated' : 'Added'} route: ${name.trim() || defaultName(waypoints)}`, route ? 'update' : 'create');
     onClose();
@@ -399,6 +405,13 @@ function RouteSheet({ route, tripCur, onClose }: { route: FuelRoute | null; trip
         </p>
       )}
 
+      {/* Departure — enables an arrival estimate and puts the drive on the timeline */}
+      <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 mt-1">Departure <span className="normal-case font-normal text-slate-400">(optional)</span></p>
+      <div className="grid grid-cols-2 gap-3 mb-3">
+        <Field label="Date"><TextInput type="date" value={departDate} onChange={e => setDepartDate(e.target.value)} /></Field>
+        <Field label="Time"><TextInput type="time" value={departTime} onChange={e => setDepartTime(e.target.value)} /></Field>
+      </div>
+
       {/* Calculate + result */}
       <button onClick={calc} disabled={!canRoute || calcBusy}
         className="w-full mt-1 mb-3 py-3 rounded-2xl font-bold text-white bg-teal-600 active:scale-[0.98] disabled:opacity-40 transition flex items-center justify-center gap-2">
@@ -416,6 +429,18 @@ function RouteSheet({ route, tripCur, onClose }: { route: FuelRoute | null; trip
               : <Stat label="Fuel" value={`${result.litres.toFixed(1)} L`} sub={`${(result.litres / 3.785411784).toFixed(1)} gal`} />}
             <Stat label="Cost" value={money1(result.tripCost, tripCur)} sub={priceCurrency !== tripCur ? money1(result.priceCost, priceCurrency) : undefined} accent />
           </div>
+          {durationMin != null && (() => {
+            const total = durationMin * (roundTrip ? 2 : 1);
+            const arr = arrivalDateTime(departDate || todayStr(), departTime, durationMin);
+            return (
+              <div className="grid grid-cols-2 gap-2 text-center mt-2 pt-2 border-t border-teal-200/70">
+                <Stat label={roundTrip ? 'Drive time (both ways)' : 'Drive time'} value={driveDuration(total)} />
+                <Stat label="Arrival"
+                  value={arr ? fmtTime(arr.time) : '—'}
+                  sub={arr && departDate && arr.date !== departDate ? fmtDate(arr.date) : (arr ? undefined : 'set a time')} />
+              </div>
+            );
+          })()}
           {travelers.length > 1 && (
             <p className="text-center text-xs text-teal-700 font-semibold mt-2 flex items-center justify-center gap-1">
               <Coins size={12} /> {money1(result.tripCost / travelers.length, tripCur)} each · {travelers.length} travellers

@@ -29,7 +29,25 @@ export function pathLengthKm(points: RoutePoint[]): number {
 /** Roads wind ~30% longer than the straight line — used for the offline estimate. */
 const WINDING = 1.3;
 
-export interface RoadDistance { km: number; source: 'road' | 'estimate' }
+export interface RoadDistance { km: number; durationMin: number; source: 'road' | 'estimate' }
+
+/** Rough drive time from distance when the router doesn't give one (~75 km/h). */
+const estMinutes = (km: number) => Math.round((km / 75) * 60);
+
+/** A minutes count as "3h 20m" / "45m". */
+export function driveDuration(min: number): string {
+  const h = Math.floor(min / 60), m = Math.round(min % 60);
+  return h ? `${h}h${m ? ` ${m}m` : ''}` : `${m}m`;
+}
+
+/** Arrival = departure + drive time. Returns ISO date + "HH:MM", or null. */
+export function arrivalDateTime(departDate: string, departTime: string, durationMin: number): { date: string; time: string } | null {
+  if (!departTime || !durationMin) return null;
+  const base = new Date(`${departDate || new Date().toISOString().slice(0, 10)}T${departTime}:00`);
+  if (isNaN(base.getTime())) return null;
+  const a = new Date(base.getTime() + durationMin * 60000);
+  return { date: a.toISOString().slice(0, 10), time: `${String(a.getHours()).padStart(2, '0')}:${String(a.getMinutes()).padStart(2, '0')}` };
+}
 
 /**
  * Driving distance through the points in order. Asks the public OSRM road
@@ -38,8 +56,9 @@ export interface RoadDistance { km: number; source: 'road' | 'estimate' }
  * so a number always comes back. Never throws.
  */
 export async function roadDistanceKm(points: RoutePoint[]): Promise<RoadDistance> {
-  const estimate: RoadDistance = { km: pathLengthKm(points) * WINDING, source: 'estimate' };
-  if (points.length < 2) return { km: 0, source: 'road' };
+  const estKm = pathLengthKm(points) * WINDING;
+  const estimate: RoadDistance = { km: estKm, durationMin: estMinutes(estKm), source: 'estimate' };
+  if (points.length < 2) return { km: 0, durationMin: 0, source: 'road' };
   try {
     const coords = points.map(p => `${p.lng},${p.lat}`).join(';');
     const ctrl = new AbortController();
@@ -48,7 +67,11 @@ export async function roadDistanceKm(points: RoutePoint[]): Promise<RoadDistance
     clearTimeout(t);
     const j = await r.json();
     const meters = j?.routes?.[0]?.distance;
-    if (typeof meters === 'number' && meters > 0) return { km: meters / 1000, source: 'road' };
+    const seconds = j?.routes?.[0]?.duration;
+    if (typeof meters === 'number' && meters > 0) {
+      const km = meters / 1000;
+      return { km, durationMin: typeof seconds === 'number' && seconds > 0 ? Math.round(seconds / 60) : estMinutes(km), source: 'road' };
+    }
   } catch { /* fall back to the estimate */ }
   return estimate;
 }

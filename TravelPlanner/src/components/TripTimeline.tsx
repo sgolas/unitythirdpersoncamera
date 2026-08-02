@@ -24,8 +24,8 @@ export interface UnifiedStop {
   endDate: string | null;
   type: string;
   tags: string[];
-  locked: boolean;               // true = derived from a Stay, not editable here
-  source: 'stay' | 'extra';
+  locked: boolean;               // true = derived elsewhere (Stay/route), not editable here
+  source: 'stay' | 'extra' | 'route';
 }
 
 export interface StopPatch {
@@ -133,7 +133,8 @@ export const SEED_LEGEND: TimelineLegendItem[] = [
   { kind: 'timelinelegend', id: 'lg-overnight', key: 'overnight', label: 'Overnight', swatch: { fill: 'route' }, order: 0, builtin: true, updatedAt: '', updatedBy: '' },
   { kind: 'timelinelegend', id: 'lg-day', key: 'day', label: 'Day stop', swatch: { fill: 'paper', border: 'accent', borderWidth: 3 }, order: 1, builtin: true, updatedAt: '', updatedBy: '' },
   { kind: 'timelinelegend', id: 'lg-end', key: 'end', label: 'End', swatch: { fill: 'ink' }, order: 2, builtin: true, updatedAt: '', updatedBy: '' },
-  { kind: 'timelinelegend', id: 'lg-buffer', key: 'buffer', label: 'Buffer', swatch: { fill: 'paper', border: 'muted', borderWidth: 3 }, order: 3, updatedAt: '', updatedBy: '' },
+  { kind: 'timelinelegend', id: 'lg-travel', key: 'travel', label: 'Drive', swatch: { fill: 'paper', border: 'route', borderWidth: 3 }, order: 3, builtin: true, updatedAt: '', updatedBy: '' },
+  { kind: 'timelinelegend', id: 'lg-buffer', key: 'buffer', label: 'Buffer', swatch: { fill: 'paper', border: 'muted', borderWidth: 3 }, order: 4, updatedAt: '', updatedBy: '' },
 ];
 export const SEED_STOPS: UnifiedStop[] = [
   { id: 's1', city: 'Lisbon', startDate: '2026-09-02', endDate: '2026-09-05', type: 'overnight', tags: [], locked: false, source: 'extra' },
@@ -249,8 +250,8 @@ export function TripTimeline(props: TripTimelineProps) {
                       if (stop.locked) setLockedInfo(stop);
                       else if (!readOnly) setEditing(stop);
                     }}
-                    aria-label={`${stop.city}, ${fmtRange(stop.startDate, stop.endDate)}${stop.locked ? ', from Stays' : ''}`}
-                    title={stop.locked ? 'From Stays — edit on the Stays page' : 'Edit stop'}
+                    aria-label={`${stop.city}, ${fmtRange(stop.startDate, stop.endDate)}${stop.locked ? `, from ${stop.source === 'route' ? 'Fuel & Driving' : 'Stays'}` : ''}`}
+                    title={stop.locked ? `From ${stop.source === 'route' ? 'Fuel & Driving' : 'Stays'} — edit there` : 'Edit stop'}
                   >
                     <Dot swatch={sw} />
                   </button>
@@ -260,7 +261,7 @@ export function TripTimeline(props: TripTimelineProps) {
                 {(stop.tags.length > 0 || stop.locked) && (
                   <div className="tl-tags">
                     {stop.tags.map(t => <span key={t} className="tl-pill">{t}</span>)}
-                    {stop.locked && <span className="tl-pill tl-pill--muted">stay</span>}
+                    {stop.locked && <span className="tl-pill tl-pill--muted">{stop.source === 'route' ? 'drive' : 'stay'}</span>}
                   </div>
                 )}
                 {!readOnly && !stop.locked && (
@@ -328,8 +329,14 @@ export function TripTimeline(props: TripTimelineProps) {
       {lockedInfo && (
         <InfoSheet title={lockedInfo.city} onClose={() => setLockedInfo(null)}>
           <p>{fmtRange(lockedInfo.startDate, lockedInfo.endDate)}</p>
-          <p className="tl-note">This stop comes from your <strong>Stays</strong>. To change its
-            city or dates, edit or remove that stay on the Stays page.</p>
+          {lockedInfo.tags.length > 0 && <p className="tl-note">{lockedInfo.tags.join(' · ')}</p>}
+          {lockedInfo.source === 'route' ? (
+            <p className="tl-note">This is a drive from your <strong>Fuel &amp; Driving</strong> route
+              planner. To change it, edit the route there.</p>
+          ) : (
+            <p className="tl-note">This stop comes from your <strong>Stays</strong>. To change its
+              city or dates, edit or remove that stay on the Stays page.</p>
+          )}
         </InfoSheet>
       )}
       {legendOpen && (

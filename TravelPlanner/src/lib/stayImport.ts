@@ -91,6 +91,23 @@ function windowAfter(lines: string[], re: RegExp): string {
 
 const CUR: Record<string, string> = { '$': 'USD', '€': 'EUR', '£': 'GBP', '¥': 'JPY' };
 
+/** Last array element matching a predicate (avoids relying on Array.findLast). */
+function findLast<T>(arr: T[], pred: (x: T) => boolean): T | undefined {
+  for (let i = arr.length - 1; i >= 0; i--) if (pred(arr[i])) return arr[i];
+  return undefined;
+}
+
+/** The last monetary value on a line, e.g. "Total (CAD)  $1,234.00" → 1234. */
+function lastMoney(line: string): { num: number; cur: string } | null {
+  const re = /([$€£¥])\s?(\d[\d.,]*)|(\d[\d.,]*)\s?(USD|EUR|GBP|CAD|AUD|JPY|CHF|NZD)\b/gi;
+  let m: RegExpExecArray | null, last: RegExpExecArray | null = null;
+  while ((m = re.exec(line))) last = m;
+  if (!last) return null;
+  return last[1]
+    ? { num: parseNumber(last[2]), cur: CUR[last[1]] || '' }
+    : { num: parseNumber(last[3]), cur: (last[4] || '').toUpperCase() };
+}
+
 /* ── The parser ─────────────────────────────────────────────── */
 export function parseStay(text: string): ParsedStay {
   const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
@@ -145,16 +162,26 @@ export function parseStay(text: string): ParsedStay {
   if (!name && city) name = `Stay in ${city}`;
   if (name) found.push('name');
 
-  // Total cost + currency. Try, in order: "$1,234.00", "USD 1,234", "1.234,56 EUR".
+  // Total cost + currency. Read the *grand-total* line only, so any discounts
+  // are already applied. Airbnb prints "Total (CAD)  $1,234.00" — we prefer
+  // that line and take the currency from the (CAD) code, not the $ symbol
+  // (which is ambiguous). We deliberately skip "Subtotal" and item lines like
+  // "$214 x 3 nights" / "Weekly discount -$50" so the pre-discount amount and
+  // the discount itself are never picked up.
   let cost = 0; let costCurrency = '';
-  const totalWin = windowAfter(lines, /total(?:\s*\(.*?\))?|amount (?:paid|due)|grand total/i) || flat;
-  let cm = totalWin.match(/([$€£¥])\s?([\d.,]{2,})/);
-  if (cm) { costCurrency = CUR[cm[1]] || ''; cost = parseNumber(cm[2]); }
-  if (cost <= 0 && (cm = totalWin.match(/\b(USD|EUR|GBP|CAD|AUD|JPY)\s?([\d.,]{2,})/i))) {
-    costCurrency = cm[1].toUpperCase(); cost = parseNumber(cm[2]);
+  // 1) The explicit "Total (CUR)" line (last one wins), with its currency code.
+  let parenCur = '';
+  let totalLine = findLast(lines, l => /\btotal\s*\(([a-z]{3})\)/i.test(l) && !/sub-?total/i.test(l));
+  if (totalLine) parenCur = (totalLine.match(/\btotal\s*\(([a-z]{3})\)/i)![1]).toUpperCase();
+  // 2) Otherwise a plain grand-total line — never "Subtotal".
+  if (!totalLine) {
+    totalLine = findLast(lines, l => /\b(?:grand\s+)?total\b/i.test(l) && !/sub-?total/i.test(l));
   }
-  if (cost <= 0 && (cm = totalWin.match(/([\d.,]{2,})\s?(USD|EUR|GBP|CAD|AUD)\b/i))) {
-    costCurrency = cm[2].toUpperCase(); cost = parseNumber(cm[1]);
+  if (totalLine) {
+    // Amount is normally on the total line; occasionally on the next line.
+    let mv = lastMoney(totalLine);
+    if (!mv) { const i = lines.indexOf(totalLine); mv = i >= 0 && lines[i + 1] ? lastMoney(lines[i + 1]) : null; }
+    if (mv && mv.num > 0) { cost = mv.num; costCurrency = parenCur || mv.cur; }
   }
   if (cost > 0) { found.push('cost'); if (costCurrency) found.push('currency'); }
 

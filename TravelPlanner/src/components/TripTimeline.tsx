@@ -26,6 +26,8 @@ export interface UnifiedStop {
   tags: string[];
   locked: boolean;               // true = derived elsewhere (Stay/route), not editable here
   source: 'stay' | 'extra' | 'route';
+  time?: string;                 // 'HH:MM' — refines chronological order within a day
+  completed?: boolean;           // marked done → shown green
 }
 
 export interface StopPatch {
@@ -48,6 +50,8 @@ export interface TripTimelineProps {
   order?: string[];
   /** Persist a new manual order after a drag (or [] to reset to date order). */
   onReorder?: (orderedIds: string[]) => void;
+  /** Toggle an item's "completed" (green) state. */
+  onToggleComplete?: (id: string) => void;
   onSaveLegend?: (item: TimelineLegendItem) => void;
   onAddLegend?: (item: TimelineLegendItem) => void;
   onDeleteLegend?: (id: string) => void;
@@ -83,6 +87,14 @@ const SWATCH_PRESETS: { name: string; swatch: TimelineSwatch }[] = [
   { name: 'Accent', swatch: { fill: 'accent' } },
 ];
 
+/* Little icons for the built-in types: a house for stays, a car for drives,
+ * a sun for day stops (plus a flag for the end). Keyed by legend key so it
+ * needs no data migration for existing trips. */
+const TYPE_EMOJI: Record<string, string> = {
+  overnight: '🏠', day: '☀️', travel: '🚗', end: '🏁',
+};
+const GREEN = '#22c55e';
+
 /* Render a single dot from a swatch. `size` is the circle diameter. */
 function Dot({ swatch, size = 14, ring = true }: { swatch: TimelineSwatch; size?: number; ring?: boolean }) {
   return (
@@ -93,6 +105,27 @@ function Dot({ swatch, size = 14, ring = true }: { swatch: TimelineSwatch; size?
       // 5px --paper ring lets the dot punch through the route line behind it.
       boxShadow: ring ? '0 0 0 5px var(--tl-paper)' : 'none',
     }} />
+  );
+}
+
+/* A timeline point: a house/car/sun icon for known types (else a coloured dot),
+ * turning solid green with a check when the item is completed. */
+function Point({ type, swatch, completed, size = 26, ring = true }: {
+  type: string; swatch: TimelineSwatch; completed?: boolean; size?: number; ring?: boolean;
+}) {
+  const emoji = TYPE_EMOJI[type];
+  const border = completed ? GREEN : col(swatch.border ?? swatch.fill);
+  const bg = completed ? GREEN : (emoji ? 'var(--tl-paper)' : col(swatch.fill));
+  return (
+    <span aria-hidden style={{
+      width: size, height: size, borderRadius: '50%', display: 'inline-flex',
+      alignItems: 'center', justifyContent: 'center', lineHeight: 1,
+      background: bg, border: `2px solid ${border}`, fontSize: Math.round(size * 0.52),
+      boxShadow: ring ? '0 0 0 5px var(--tl-paper)' : 'none',
+    }}>
+      {completed ? <Check size={Math.round(size * 0.6)} color="#fff" strokeWidth={3} />
+        : (emoji || null)}
+    </span>
   );
 }
 
@@ -157,64 +190,106 @@ export function TripTimeline(props: TripTimelineProps) {
   }, [legend]);
   const swatchFor = (type: string) => legendByKey[type]?.swatch ?? NEUTRAL;
 
-  // Display order: a manual order (from `order`) wins; anything not yet in it
-  // falls back to chronological, appended after the manually-placed items.
+  // Display order: items the user has placed (in `order`) keep their manual
+  // position; everything else — including newly-added items — is inserted at its
+  // chronological slot, so new stops always land in date order until moved.
   const manualActive = !!(props.order && props.order.length);
+  const chrono = (s: UnifiedStop) => `${s.startDate}T${s.time || '00:00'}`;
   const sorted = useMemo(() => {
-    const idx = new Map((props.order ?? []).map((id, i) => [id, i]));
-    return [...stops].sort((a, b) => {
-      const ia = idx.has(a.id) ? idx.get(a.id)! : Infinity;
-      const ib = idx.has(b.id) ? idx.get(b.id)! : Infinity;
-      if (ia !== ib) return ia - ib;
-      return a.startDate.localeCompare(b.startDate)
-        || (a.source === b.source ? 0 : a.source === 'stay' ? -1 : 1)
-        || a.city.localeCompare(b.city);
-    });
+    const byId = new Map(stops.map(s => [s.id, s]));
+    const placed = (props.order ?? []).map(id => byId.get(id)).filter(Boolean) as UnifiedStop[];
+    const placedIds = new Set(placed.map(s => s.id));
+    const rest = stops.filter(s => !placedIds.has(s.id))
+      .sort((a, b) => chrono(a).localeCompare(chrono(b)) || a.city.localeCompare(b.city));
+    for (const u of rest) {
+      let i = placed.findIndex(p => chrono(p) > chrono(u));
+      if (i === -1) i = placed.length;
+      placed.splice(i, 0, u);
+    }
+    return placed;
   }, [stops, props.order]);
 
   const [editing, setEditing] = useState<UnifiedStop | null>(null);
   const [adding, setAdding] = useState(false);
   const [lockedInfo, setLockedInfo] = useState<UnifiedStop | null>(null);
   const [legendOpen, setLegendOpen] = useState(false);
+  const [armedId, setArmedId] = useState<string | null>(null);
 
-  /* ── Drag any item to reorder (manual order; dates are left untouched) ── */
+  /* ── Hold to wiggle, then drag to reorder (line or list; dates untouched) ── */
   const trackRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
   const [dragId, setDragId] = useState<string | null>(null);
-  const drag = useRef<{ id: string; startX: number; moved: boolean } | null>(null);
+  const drag = useRef<{ id: string; startX: number; startY: number; moved: boolean; axis: 'x' | 'y' } | null>(null);
+  const hold = useRef<{ id: string; x: number; y: number } | null>(null);
+  const holdTimer = useRef<number | null>(null);
+  const suppressClick = useRef(false); // swallow the click that follows an arm/drag
 
-  function onPointerDown(e: React.PointerEvent, stop: UnifiedStop) {
+  function clearHold() { if (holdTimer.current) { clearTimeout(holdTimer.current); holdTimer.current = null; } hold.current = null; }
+
+  // Pointer down on a point/row. If already armed → begin a drag; else start a
+  // long-press that arms (wiggles) the item.
+  function onPointerDown(e: React.PointerEvent, stop: UnifiedStop, axis: 'x' | 'y') {
     if (readOnly || !props.onReorder) return;
-    drag.current = { id: stop.id, startX: e.clientX, moved: false };
+    if (armedId === stop.id) {
+      drag.current = { id: stop.id, startX: e.clientX, startY: e.clientY, moved: false, axis };
+      return;
+    }
+    hold.current = { id: stop.id, x: e.clientX, y: e.clientY };
+    if (holdTimer.current) clearTimeout(holdTimer.current);
+    holdTimer.current = window.setTimeout(() => { setArmedId(stop.id); suppressClick.current = true; hold.current = null; }, 420);
   }
+  // The list has an explicit drag handle → start dragging immediately.
+  function onGripDown(e: React.PointerEvent, stop: UnifiedStop) {
+    if (readOnly || !props.onReorder) return;
+    e.preventDefault();
+    drag.current = { id: stop.id, startX: e.clientX, startY: e.clientY, moved: false, axis: 'y' };
+  }
+
   useEffect(() => {
     function move(e: PointerEvent) {
+      const h = hold.current;
+      if (h && (Math.abs(e.clientX - h.x) > 10 || Math.abs(e.clientY - h.y) > 10)) clearHold();
       const d = drag.current; if (!d) return;
-      if (!d.moved && Math.abs(e.clientX - d.startX) > 6) { d.moved = true; setDragId(d.id); }
+      if (!d.moved && (Math.abs(e.clientX - d.startX) > 6 || Math.abs(e.clientY - d.startY) > 6)) { d.moved = true; setDragId(d.id); }
     }
     function up(e: PointerEvent) {
+      clearHold();
       const d = drag.current; drag.current = null;
-      if (!d) return;
-      if (d.moved) { commitDrop(d.id, e.clientX); setDragId(null); }
+      if (d && d.moved) { commitDrop(d.id, d.axis === 'y' ? e.clientY : e.clientX, d.axis); setDragId(null); suppressClick.current = true; }
     }
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', up);
     return () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sorted]);
+  }, [sorted, armedId]);
 
-  /* Move the dragged item to the drop position and persist the new order of
-   * every item (dates are never changed — position is purely manual). */
-  function commitDrop(id: string, clientX: number) {
-    const cols = Array.from(trackRef.current?.querySelectorAll('[data-sk]') ?? []) as HTMLElement[];
-    const centers = cols.map(c => { const r = c.getBoundingClientRect(); return r.left + r.width / 2; });
-    let idx = centers.findIndex(x => clientX < x);
-    if (idx === -1) idx = centers.length;
-    const curIdx = sorted.findIndex(s => s.id === id);
-    if (idx > curIdx) idx -= 1;
+  function reorderTo(id: string, targetIdx: number) {
     const ids = sorted.map(s => s.id);
-    ids.splice(curIdx, 1);
-    ids.splice(idx, 0, id);
+    const cur = ids.indexOf(id);
+    if (targetIdx > cur) targetIdx -= 1;
+    if (targetIdx === cur || cur < 0) return;
+    ids.splice(cur, 1);
+    ids.splice(targetIdx, 0, id);
     props.onReorder?.(ids);
+  }
+  /* Drop position from pointer coordinate against the row/column centres. */
+  function commitDrop(id: string, coord: number, axis: 'x' | 'y') {
+    const host = axis === 'y' ? listRef.current : trackRef.current;
+    const cells = Array.from(host?.querySelectorAll('[data-sk]') ?? []) as HTMLElement[];
+    const centers = cells.map(c => { const r = c.getBoundingClientRect(); return axis === 'y' ? r.top + r.height / 2 : r.left + r.width / 2; });
+    let idx = centers.findIndex(x => coord < x);
+    if (idx === -1) idx = centers.length;
+    reorderTo(id, idx);
+  }
+
+  // Tapping a point/row: swallow the click right after a long-press; otherwise
+  // disarm if armed, else open the editor (extras) or info (locked).
+  function onItemClick(stop: UnifiedStop) {
+    if (suppressClick.current) { suppressClick.current = false; return; }
+    if (dragId) return;
+    if (armedId) { setArmedId(null); return; }
+    if (stop.locked) setLockedInfo(stop);
+    else if (!readOnly) setEditing(stop);
   }
 
   return (
@@ -222,7 +297,7 @@ export function TripTimeline(props: TripTimelineProps) {
      <div className="tl-card">
       {!readOnly && props.onReorder && sorted.length > 1 && (
         <div className="tl-orderbar">
-          <span>{manualActive ? 'Your custom order' : 'Drag any item to reorder'}</span>
+          <span>{manualActive ? 'Your custom order' : 'Hold an item to move it or mark it done'}</span>
           {manualActive && <button type="button" className="tl-textbtn" onClick={() => props.onReorder?.([])}>Reset to dates</button>}
         </div>
       )}
@@ -235,23 +310,20 @@ export function TripTimeline(props: TripTimelineProps) {
           {sorted.map(stop => {
             const sw = swatchFor(stop.type);
             const isDrag = dragId === stop.id;
+            const armed = armedId === stop.id;
             return (
               <div key={stop.id} data-sk={stop.id} role="listitem"
-                className={`tl-col${isDrag ? ' tl-col--drag' : ''}`}>
+                className={`tl-col${isDrag ? ' tl-col--drag' : ''}${armed ? ' tl-col--armed' : ''}${stop.completed ? ' tl-col--done' : ''}`}>
                 <div className="tl-dotrow">
                   <button
                     type="button"
                     className="tl-dotbtn"
-                    onPointerDown={e => onPointerDown(e, stop)}
-                    onClick={() => {
-                      if (drag.current?.moved) return;
-                      if (stop.locked) setLockedInfo(stop);
-                      else if (!readOnly) setEditing(stop);
-                    }}
-                    aria-label={`${stop.city}, ${fmtRange(stop.startDate, stop.endDate)}${stop.locked ? `, from ${stop.source === 'route' ? 'Fuel & Driving' : 'Stays'}` : ''}`}
-                    title={stop.locked ? `From ${stop.source === 'route' ? 'Fuel & Driving' : 'Stays'} — edit there` : 'Edit stop'}
+                    onPointerDown={e => onPointerDown(e, stop, 'x')}
+                    onClick={() => onItemClick(stop)}
+                    aria-label={`${stop.city}, ${fmtRange(stop.startDate, stop.endDate)}${stop.completed ? ', completed' : ''}${stop.locked ? `, from ${stop.source === 'route' ? 'Fuel & Driving' : 'Stays'}` : ''}`}
+                    title={armed ? 'Drag to move' : stop.locked ? `From ${stop.source === 'route' ? 'Fuel & Driving' : 'Stays'}` : 'Tap to edit · hold to move'}
                   >
-                    <Dot swatch={sw} />
+                    <Point type={stop.type} swatch={sw} completed={stop.completed} />
                   </button>
                 </div>
                 <div className="tl-city">{stop.city || '—'}</div>
@@ -262,8 +334,15 @@ export function TripTimeline(props: TripTimelineProps) {
                     {stop.locked && <span className="tl-pill tl-pill--muted">{stop.source === 'route' ? 'drive' : 'stay'}</span>}
                   </div>
                 )}
-                {!readOnly && props.onReorder && (
-                  <span className="tl-grip" aria-hidden><GripVertical size={12} /></span>
+                {armed && (
+                  <div className="tl-actions-row" data-no-drag>
+                    <button type="button" className={`tl-act${stop.completed ? ' tl-act--done' : ''}`} aria-label="Mark completed"
+                      onClick={e => { e.stopPropagation(); props.onToggleComplete?.(stop.id); }}><Check size={15} /></button>
+                    {!stop.locked && <button type="button" className="tl-act" aria-label="Edit"
+                      onClick={e => { e.stopPropagation(); setArmedId(null); setEditing(stop); }}><Pencil size={14} /></button>}
+                    {!stop.locked && <button type="button" className="tl-act tl-act--danger" aria-label="Delete"
+                      onClick={e => { e.stopPropagation(); setArmedId(null); props.onDeleteStop?.(stop.id); }}><Trash2 size={14} /></button>}
+                  </div>
                 )}
               </div>
             );
@@ -299,12 +378,39 @@ export function TripTimeline(props: TripTimelineProps) {
         <div className="tl-legend-items">
           {legend.map(l => (
             <span key={l.id} className="tl-legend-item">
-              <Dot swatch={l.swatch} size={12} ring={false} />
+              <Point type={l.key} swatch={l.swatch} size={18} ring={false} />
               <span className="tl-legend-label">{l.label}</span>
             </span>
           ))}
         </div>
       </div>
+
+      {/* List view — the same items, top-to-bottom. Reordering / completing here
+          and on the line above stay in sync (both use the shared order + state). */}
+      {sorted.length > 0 && (
+        <div className="tl-list" ref={listRef}>
+          {sorted.map(stop => {
+            const armed = armedId === stop.id;
+            return (
+              <div key={stop.id} data-sk={stop.id}
+                className={`tl-row${dragId === stop.id ? ' tl-row--drag' : ''}${armed ? ' tl-row--armed' : ''}${stop.completed ? ' tl-row--done' : ''}`}>
+                {!readOnly && props.onReorder && (
+                  <span className="tl-rowgrip" onPointerDown={e => onGripDown(e, stop)} aria-label="Drag to reorder"><GripVertical size={16} /></span>
+                )}
+                <Point type={stop.type} swatch={swatchFor(stop.type)} completed={stop.completed} size={22} ring={false} />
+                <button type="button" className="tl-rowmain" onClick={() => onItemClick(stop)}>
+                  <span className="tl-rowcity">{stop.city || '—'}</span>
+                  <span className="tl-rowdate">{fmtRange(stop.startDate, stop.endDate)}{stop.tags.length ? ` · ${stop.tags.join(' · ')}` : ''}</span>
+                </button>
+                {!readOnly && props.onToggleComplete && (
+                  <button type="button" className={`tl-rowcheck${stop.completed ? ' tl-rowcheck--on' : ''}`} aria-label={stop.completed ? 'Mark not done' : 'Mark completed'}
+                    onClick={() => props.onToggleComplete?.(stop.id)}><Check size={15} /></button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
      </div>
 
       {/* Editors */}
@@ -547,12 +653,14 @@ export function TripTimelineDemo() {
   const [stops, setStops] = useState<UnifiedStop[]>(SEED_STOPS);
   const [legend, setLegend] = useState<TimelineLegendItem[]>(SEED_LEGEND);
   const [order, setOrder] = useState<string[]>([]);
+  const [done, setDone] = useState<string[]>([]);
   return (
     <TripTimeline
-      stops={stops}
+      stops={stops.map(s => ({ ...s, completed: done.includes(s.id) }))}
       legend={legend}
       order={order}
       onReorder={setOrder}
+      onToggleComplete={id => setDone(d => d.includes(id) ? d.filter(x => x !== id) : [...d, id])}
       onSaveStop={(id, p) => setStops(s => s.map(x => x.id === id ? { ...x, ...p } : x))}
       onAddStop={p => setStops(s => [...s, { id: crypto.randomUUID(), locked: false, source: 'extra', ...p }])}
       onDeleteStop={id => setStops(s => s.filter(x => x.id !== id))}

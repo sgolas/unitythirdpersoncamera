@@ -212,9 +212,12 @@ export interface TripMeta extends SyncMeta {
   tripCurrency: string;      // 'EUR'
   totalBudget: number;
   notes: string;
-  // Manual order for the Trip Timeline (unified stop ids in display order). When
-  // set, it overrides date ordering so the user can arrange items freely.
+  // Manual order for the Trip Timeline (unified stop ids in display order). New
+  // items still slot in chronologically until the user drags them.
   timelineOrder?: string[];
+  // Ids of timeline items marked "completed" (turn green). Covers stays, drives
+  // and stops uniformly, so it works for the read-only derived items too.
+  timelineCompleted?: string[];
 }
 
 /* ── Photos & files (stored locally, synced to the group) ───── */

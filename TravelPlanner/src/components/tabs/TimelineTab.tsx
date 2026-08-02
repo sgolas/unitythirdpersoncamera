@@ -37,6 +37,7 @@ export function TimelineTab() {
     })();
   }, []);
 
+  const doneSet = new Set(trip?.timelineCompleted ?? []);
   // Merge stays (locked) + extra stops into the unified, date-ordered list.
   const stayStops: UnifiedStop[] = stays
     .filter(s => (s.city || s.name))
@@ -49,10 +50,12 @@ export function TimelineTab() {
       tags: [],
       locked: true,
       source: 'stay' as const,
+      completed: doneSet.has(`stay-${s.id}`),
     }));
   const extraStops: UnifiedStop[] = extras.map(s => ({
     id: s.id, city: s.city, startDate: s.startDate, endDate: s.endDate,
     type: s.type, tags: s.tags, locked: false, source: 'extra' as const,
+    completed: doneSet.has(s.id),
   }));
   // Drives from the Fuel & Driving planner that have a departure date show as
   // read-only "travel" stops on the line (edit them on that page).
@@ -76,6 +79,8 @@ export function TimelineTab() {
         tags,
         locked: true,
         source: 'route' as const,
+        time: r.departTime,
+        completed: doneSet.has(`route-${r.id}`),
       };
     });
   const stops = [...stayStops, ...extraStops, ...routeStops];
@@ -102,6 +107,12 @@ export function TimelineTab() {
     if (!trip) return;
     await put<TripMeta>({ ...trip, timelineOrder: ids }, ids.length ? 'Reordered the timeline' : 'Reset timeline to date order', 'update');
   }
+  async function toggleComplete(id: string) {
+    if (!trip) return;
+    const cur = trip.timelineCompleted ?? [];
+    const next = cur.includes(id) ? cur.filter(x => x !== id) : [...cur, id];
+    await put<TripMeta>({ ...trip, timelineCompleted: next }, 'Updated timeline progress', 'update');
+  }
 
   const subtitle = stops.length
     ? `${stops.length} stop${stops.length === 1 ? '' : 's'} · ${stayStops.length} from stays`
@@ -117,6 +128,7 @@ export function TimelineTab() {
           legend={legend}
           order={trip?.timelineOrder}
           onReorder={reorder}
+          onToggleComplete={toggleComplete}
           onSaveStop={saveStop}
           onAddStop={addStop}
           onDeleteStop={id => { const s = extras.find(x => x.id === id); if (s) remove('timelinestop', id, `Removed timeline stop: ${s.city}`); }}

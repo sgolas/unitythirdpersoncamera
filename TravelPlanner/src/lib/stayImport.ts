@@ -162,27 +162,49 @@ export function parseStay(text: string): ParsedStay {
     || flat.match(/(?:booking|reservation|itinerary)\s*(?:number|code|id|no\.?)[:\s]*\n?\s*([A-Z0-9-]{5,16})/i);
   if (m) { confirmation = m[1].toUpperCase(); found.push('confirmation'); }
 
-  // City + country — Airbnb: "Entire rental unit in Lisbon, Portugal".
-  let city = '';
-  m = flat.match(/\b(?:in|·)\s+([A-Z][A-Za-zÀ-ÿ .'-]+),\s*([A-Z][A-Za-zÀ-ÿ .'-]{2,})/);
-  if (m) { city = m[1].trim(); found.push('city'); }
-
-  // Address — a line carrying a street-type word (many languages) and a number,
-  // e.g. US "12 Baker Street", PT "Rua Garrett 12, 1200-273 Lisboa",
-  // FR "10 Rue de Rivoli", ES "Calle Mayor 5". Falls back to a line with a
-  // recognisable postal code (UK/CA/EU/US) when no street word is present.
+  // Address. Best signal is Airbnb's explicit "Address" label with the value on
+  // the next line ("Address" ⏎ "Bohaterów Warszawy, 07-410 Ostrołęka, Poland" ⏎
+  // "Get directions"). Otherwise fall back to a line with a street-type word
+  // (many languages) or a recognisable postal code.
   let address = '';
-  const STREET = /\b(?:street|st|road|rd|avenue|ave|boulevard|blvd|lane|ln|drive|dr|way|court|ct|place|pl|square|sq|terrace|crescent|close|parade|rua|avenida|travessa|largo|pra(?:ç|c)a|calle|carrer|carrera|avda|paseo|plaza|ronda|camino|rue|avenue|quai|impasse|chemin|all[ée]e|boulevard|via|viale|piazza|corso|strada|contrada|stra(?:ss|ß)e|platz|weg|gasse|allee|ring|damm|ufer|straat|gracht|plein|kade|gata|gate|vei|vej|plads|katu|sokak|cadde)\b/i;
-  const KEYWORD = /check|total|subtotal|confirm|night|fee|guest|reservation|hosted|www\.|http|@/i;
-  const POSTAL = /\b(?:\d{5}(?:-\d{4})?|\d{4}\s?[A-Z]{2}|\d{4}-\d{3}|[A-Z]{1,2}\d[A-Z\d]?\s?\d[A-Z]{2}|[A-Z]\d[A-Z]\s?\d[A-Z]\d)\b/;
-  let addrLine = lines.find(l => l.length <= 90 && /\d/.test(l) && STREET.test(l) && !KEYWORD.test(l));
-  if (!addrLine) addrLine = lines.find(l => l.length <= 90 && l.includes(',') && POSTAL.test(l) && !KEYWORD.test(l));
-  if (addrLine) { address = addrLine.replace(/\s+/g, ' ').trim(); found.push('address'); }
+  const STREET = /\b(?:street|st|road|rd|avenue|ave|boulevard|blvd|lane|ln|drive|dr|way|court|ct|place|pl|square|sq|terrace|crescent|close|parade|rua|avenida|travessa|largo|pra(?:ç|c)a|calle|carrer|carrera|avda|paseo|plaza|ronda|camino|rue|quai|impasse|chemin|all[ée]e|via|viale|piazza|corso|strada|contrada|stra(?:ss|ß)e|platz|weg|gasse|allee|ring|damm|ufer|straat|gracht|plein|kade|gata|gate|vei|vej|plads|katu|sokak|cadde|ulica|ul\.)\b/i;
+  const KEYWORD = /check|total|subtotal|confirm|night|fee|guest|reservation|hosted|directions|www\.|http|@/i;
+  // Postal codes: US, generic 4-digit+2-letter, PT 1234-567, PL 12-345, UK, CA.
+  const POSTAL = /\b(?:\d{5}(?:-\d{4})?|\d{4}\s?[A-Z]{2}|\d{4}-\d{3}|\d{2}-\d{3}|[A-Z]{1,2}\d[A-Z\d]?\s?\d[A-Z]{2}|[A-Z]\d[A-Z]\s?\d[A-Z]\d)\b/;
+  const labelIdx = lines.findIndex(l => /^\s*(?:address|location|where you'?ll be(?: staying)?)\s*:?\s*$/i.test(l));
+  if (labelIdx >= 0) {
+    for (let j = labelIdx + 1; j < Math.min(labelIdx + 3, lines.length); j++) {
+      if (lines[j] && !/^get directions/i.test(lines[j]) && !/^-{3,}/.test(lines[j])) { address = lines[j].trim(); break; }
+    }
+  }
+  if (!address) {
+    let addrLine = lines.find(l => l.length <= 90 && /\d/.test(l) && STREET.test(l) && !KEYWORD.test(l));
+    if (!addrLine) addrLine = lines.find(l => l.length <= 90 && l.includes(',') && POSTAL.test(l) && !KEYWORD.test(l));
+    if (addrLine) address = addrLine.replace(/\s+/g, ' ').trim();
+  }
+  if (address) found.push('address');
 
-  // Listing / property name.
+  // City. Try, in order: an Airbnb greeting ("You're all set for Ostrołęka" /
+  // "Your trip to Lisbon"), a "… in City, Country" title, then derive it from
+  // the address (the part before the country, minus any postal code).
+  let city = '';
+  m = flat.match(/(?:all set for|trip to|going to|heading to|welcome to|your stay in)\s+(\p{Lu}[\p{L}][\p{L} .'’-]*?)\s*[!.\n]/u)
+    || flat.match(/\b(?:in|·)\s+(\p{Lu}[\p{L} .'’-]+),\s*\p{Lu}[\p{L} .'’-]{2,}/u);
+  if (m) city = m[1].trim();
+  if (!city && address) city = cityFromAddress(address);
+  if (city) found.push('city');
+
+  // Listing / property name. Airbnb prints the listing title on its own line,
+  // just above "Entire home/apt hosted by …" — prefer that real title.
   let name = '';
-  const titleLine = lines.find(l => /entire\s+(?:home|rental unit|place|apartment|condo|villa|house|cabin|loft|guest suite)|room in|hosted by/i.test(l));
-  if (titleLine) name = titleLine.replace(/\s+/g, ' ').trim();
+  const hostIdx = lines.findIndex(l => /hosted by/i.test(l));
+  if (hostIdx > 0 && !/^(?:you'?re all set|your trip|welcome)/i.test(lines[hostIdx - 1]) && lines[hostIdx - 1].length <= 80) {
+    name = lines[hostIdx - 1].trim();
+  }
+  if (!name) {
+    const titleLine = lines.find(l => /entire\s+(?:home|rental unit|place|apartment|condo|villa|house|cabin|loft|guest suite)|room in|hosted by/i.test(l));
+    if (titleLine) name = titleLine.replace(/\s+/g, ' ').trim();
+  }
   if (!name && provider === 'airbnb') name = city ? `Airbnb in ${city}` : 'Airbnb stay';
   if (!name && city) name = `Stay in ${city}`;
   if (name) found.push('name');
@@ -215,6 +237,17 @@ export function parseStay(text: string): ParsedStay {
       : `Imported from ${provider} confirmation PDF`;
 
   return { name, city, address, checkIn, checkOut, confirmation, cost, costCurrency, notes, provider, found };
+}
+
+/** Pull a city out of a comma-separated address: the segment before the
+ *  country, with any leading postal code stripped.
+ *  "Bohaterów Warszawy, 07-410 Ostrołęka, Poland" → "Ostrołęka";
+ *  "Lisbon, Portugal" → "Lisbon". */
+function cityFromAddress(addr: string): string {
+  const parts = addr.split(',').map(s => s.trim()).filter(Boolean);
+  if (parts.length < 2) return '';
+  const seg = parts.length >= 3 ? parts[parts.length - 2] : parts[0];
+  return seg.replace(/^\s*(?:\d{2}-\d{3}|\d{4}-\d{3}|\d{3,6}|[A-Z]\d[A-Z]\s?\d[A-Z]\d|[A-Z]{1,2}\d[A-Z\d]?\s?\d[A-Z]{2})\s+/i, '').trim();
 }
 
 /** Parse "1,234.56" and "1.234,56" (EU) into a number. */

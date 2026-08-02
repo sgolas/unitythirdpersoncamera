@@ -62,7 +62,7 @@ const iso = (y: number, m: number, d: number) =>
 
 /** All parseable dates in a chunk of text, in order, as ISO strings. Handles
  *  "Sep 8, 2025", "8 September", "Mon, Oct 6", "2025-09-08" and "09/08/2025". */
-function allDates(text: string, year: number): string[] {
+export function allDates(text: string, year: number): string[] {
   const out: string[] = [];
   const re = /(20\d{2})-(\d{1,2})-(\d{1,2})|([A-Za-z]{3,9})\.?\s+(\d{1,2})(?:st|nd|rd|th)?(?:,?\s*(20\d{2}))?|(\d{1,2})(?:st|nd|rd|th)?\s+([A-Za-z]{3,9})\.?(?:,?\s*(20\d{2}))?|(\d{1,2})\/(\d{1,2})\/(20\d{2})/g;
   let m: RegExpExecArray | null;
@@ -97,8 +97,25 @@ function findLast<T>(arr: T[], pred: (x: T) => boolean): T | undefined {
   return undefined;
 }
 
+/**
+ * The grand-total amount + currency from a receipt's lines. Reads only the
+ * grand-total line so discounts are already applied: prefers an explicit
+ * "Total (CAD) $1,234.00" (currency from the code, not the ambiguous $ symbol),
+ * else a plain "Total" line — never "Subtotal" or item lines.
+ */
+export function grandTotal(lines: string[]): { cost: number; cur: string } {
+  let parenCur = '';
+  let totalLine = findLast(lines, l => /\btotal\s*\(([a-z]{3})\)/i.test(l) && !/sub-?total/i.test(l));
+  if (totalLine) parenCur = (totalLine.match(/\btotal\s*\(([a-z]{3})\)/i)![1]).toUpperCase();
+  if (!totalLine) totalLine = findLast(lines, l => /\b(?:grand\s+)?total\b/i.test(l) && !/sub-?total/i.test(l));
+  if (!totalLine) return { cost: 0, cur: '' };
+  let mv = lastMoney(totalLine);
+  if (!mv) { const i = lines.indexOf(totalLine); mv = i >= 0 && lines[i + 1] ? lastMoney(lines[i + 1]) : null; }
+  return mv && mv.num > 0 ? { cost: mv.num, cur: parenCur || mv.cur } : { cost: 0, cur: '' };
+}
+
 /** The last monetary value on a line, e.g. "Total (CAD)  $1,234.00" → 1234. */
-function lastMoney(line: string): { num: number; cur: string } | null {
+export function lastMoney(line: string): { num: number; cur: string } | null {
   const re = /([$€£¥])\s?(\d[\d.,]*)|(\d[\d.,]*)\s?(USD|EUR|GBP|CAD|AUD|JPY|CHF|NZD)\b/gi;
   let m: RegExpExecArray | null, last: RegExpExecArray | null = null;
   while ((m = re.exec(line))) last = m;
@@ -162,26 +179,8 @@ export function parseStay(text: string): ParsedStay {
     || flat.match(/(?:booking|reservation|itinerary)\s*(?:number|code|id|no\.?)[:\s]*\n?\s*([A-Z0-9-]{5,16})/i);
   if (m) { confirmation = m[1].toUpperCase(); found.push('confirmation'); }
 
-  // Address. Best signal is Airbnb's explicit "Address" label with the value on
-  // the next line ("Address" ⏎ "Bohaterów Warszawy, 07-410 Ostrołęka, Poland" ⏎
-  // "Get directions"). Otherwise fall back to a line with a street-type word
-  // (many languages) or a recognisable postal code.
-  let address = '';
-  const STREET = /\b(?:street|st|road|rd|avenue|ave|boulevard|blvd|lane|ln|drive|dr|way|court|ct|place|pl|square|sq|terrace|crescent|close|parade|rua|avenida|travessa|largo|pra(?:ç|c)a|calle|carrer|carrera|avda|paseo|plaza|ronda|camino|rue|quai|impasse|chemin|all[ée]e|via|viale|piazza|corso|strada|contrada|stra(?:ss|ß)e|platz|weg|gasse|allee|ring|damm|ufer|straat|gracht|plein|kade|gata|gate|vei|vej|plads|katu|sokak|cadde|ulica|ul\.)\b/i;
-  const KEYWORD = /check|total|subtotal|confirm|night|fee|guest|reservation|hosted|directions|www\.|http|@/i;
-  // Postal codes: US, generic 4-digit+2-letter, PT 1234-567, PL 12-345, UK, CA.
-  const POSTAL = /\b(?:\d{5}(?:-\d{4})?|\d{4}\s?[A-Z]{2}|\d{4}-\d{3}|\d{2}-\d{3}|[A-Z]{1,2}\d[A-Z\d]?\s?\d[A-Z]{2}|[A-Z]\d[A-Z]\s?\d[A-Z]\d)\b/;
-  const labelIdx = lines.findIndex(l => /^\s*(?:address|location|where you'?ll be(?: staying)?)\s*:?\s*$/i.test(l));
-  if (labelIdx >= 0) {
-    for (let j = labelIdx + 1; j < Math.min(labelIdx + 3, lines.length); j++) {
-      if (lines[j] && !/^get directions/i.test(lines[j]) && !/^-{3,}/.test(lines[j])) { address = lines[j].trim(); break; }
-    }
-  }
-  if (!address) {
-    let addrLine = lines.find(l => l.length <= 90 && /\d/.test(l) && STREET.test(l) && !KEYWORD.test(l));
-    if (!addrLine) addrLine = lines.find(l => l.length <= 90 && l.includes(',') && POSTAL.test(l) && !KEYWORD.test(l));
-    if (addrLine) address = addrLine.replace(/\s+/g, ' ').trim();
-  }
+  // Address — see findAddress() (label, street word, or postal-code line).
+  const address = findAddress(lines);
   if (address) found.push('address');
 
   // City. Try, in order: an Airbnb greeting ("You're all set for Ostrołęka" /
@@ -209,27 +208,8 @@ export function parseStay(text: string): ParsedStay {
   if (!name && city) name = `Stay in ${city}`;
   if (name) found.push('name');
 
-  // Total cost + currency. Read the *grand-total* line only, so any discounts
-  // are already applied. Airbnb prints "Total (CAD)  $1,234.00" — we prefer
-  // that line and take the currency from the (CAD) code, not the $ symbol
-  // (which is ambiguous). We deliberately skip "Subtotal" and item lines like
-  // "$214 x 3 nights" / "Weekly discount -$50" so the pre-discount amount and
-  // the discount itself are never picked up.
-  let cost = 0; let costCurrency = '';
-  // 1) The explicit "Total (CUR)" line (last one wins), with its currency code.
-  let parenCur = '';
-  let totalLine = findLast(lines, l => /\btotal\s*\(([a-z]{3})\)/i.test(l) && !/sub-?total/i.test(l));
-  if (totalLine) parenCur = (totalLine.match(/\btotal\s*\(([a-z]{3})\)/i)![1]).toUpperCase();
-  // 2) Otherwise a plain grand-total line — never "Subtotal".
-  if (!totalLine) {
-    totalLine = findLast(lines, l => /\b(?:grand\s+)?total\b/i.test(l) && !/sub-?total/i.test(l));
-  }
-  if (totalLine) {
-    // Amount is normally on the total line; occasionally on the next line.
-    let mv = lastMoney(totalLine);
-    if (!mv) { const i = lines.indexOf(totalLine); mv = i >= 0 && lines[i + 1] ? lastMoney(lines[i + 1]) : null; }
-    if (mv && mv.num > 0) { cost = mv.num; costCurrency = parenCur || mv.cur; }
-  }
+  // Total cost + currency (grand-total line only — see grandTotal()).
+  const { cost, cur: costCurrency } = grandTotal(lines);
   if (cost > 0) { found.push('cost'); if (costCurrency) found.push('currency'); }
 
   const notes = provider === 'airbnb' ? 'Imported from Airbnb confirmation PDF'
@@ -237,6 +217,27 @@ export function parseStay(text: string): ParsedStay {
       : `Imported from ${provider} confirmation PDF`;
 
   return { name, city, address, checkIn, checkOut, confirmation, cost, costCurrency, notes, provider, found };
+}
+
+/**
+ * Find a postal/street address in a receipt's lines. Best signal is an explicit
+ * label ("Address" / "Location" / "Venue" / "Meeting point" …) with the value on
+ * the next line; otherwise a line carrying a street-type word (many languages)
+ * or a recognisable postal code (US / EU / PT / PL / UK / CA).
+ */
+export function findAddress(lines: string[]): string {
+  const STREET = /\b(?:street|st|road|rd|avenue|ave|boulevard|blvd|lane|ln|drive|dr|way|court|ct|place|pl|square|sq|terrace|crescent|close|parade|rua|avenida|travessa|largo|pra(?:ç|c)a|calle|carrer|carrera|avda|paseo|plaza|ronda|camino|rue|quai|impasse|chemin|all[ée]e|via|viale|piazza|corso|strada|contrada|stra(?:ss|ß)e|platz|weg|gasse|allee|ring|damm|ufer|straat|gracht|plein|kade|gata|gate|vei|vej|plads|katu|sokak|cadde|ulica|ul\.)\b/i;
+  const KEYWORD = /check|total|subtotal|confirm|night|fee|guest|reservation|hosted|directions|www\.|http|@/i;
+  const POSTAL = /\b(?:\d{5}(?:-\d{4})?|\d{4}\s?[A-Z]{2}|\d{4}-\d{3}|\d{2}-\d{3}|[A-Z]{1,2}\d[A-Z\d]?\s?\d[A-Z]{2}|[A-Z]\d[A-Z]\s?\d[A-Z]\d)\b/;
+  const labelIdx = lines.findIndex(l => /^\s*(?:address|location|venue|meeting point|where(?: you'?ll be(?: staying)?)?|getting there)\s*:?\s*$/i.test(l));
+  if (labelIdx >= 0) {
+    for (let j = labelIdx + 1; j < Math.min(labelIdx + 3, lines.length); j++) {
+      if (lines[j] && !/^get directions/i.test(lines[j]) && !/^-{3,}/.test(lines[j])) return lines[j].trim();
+    }
+  }
+  let addrLine = lines.find(l => l.length <= 90 && /\d/.test(l) && STREET.test(l) && !KEYWORD.test(l));
+  if (!addrLine) addrLine = lines.find(l => l.length <= 90 && l.includes(',') && POSTAL.test(l) && !KEYWORD.test(l));
+  return addrLine ? addrLine.replace(/\s+/g, ' ').trim() : '';
 }
 
 /** Pull a city out of a comma-separated address: the segment before the
@@ -251,7 +252,7 @@ function cityFromAddress(addr: string): string {
 }
 
 /** Parse "1,234.56" and "1.234,56" (EU) into a number. */
-function parseNumber(s: string): number {
+export function parseNumber(s: string): number {
   const t = s.replace(/[^\d.,]/g, '');
   // If both separators present, the last one is the decimal separator.
   if (t.includes('.') && t.includes(',')) {

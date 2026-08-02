@@ -150,6 +150,27 @@ export interface Expense extends SyncMeta {
 /** True when an item should count toward budget/spent totals (default: yes). */
 export const countsToBudget = (e: { excludeFromBudget?: boolean }): boolean => !e.excludeFromBudget;
 
+/* ── Activities & experiences (booked tours, tickets, reservations) ──
+ * Mirrors Stays: importable from a receipt/booking PDF, with the original file
+ * kept alongside. Costs feed the budget under the 'activities' category. */
+export interface Activity extends SyncMeta {
+  kind: 'activity';
+  title: string;             // e.g. "Sagrada Família skip-the-line tour"
+  provider: string;          // GetYourGuide / Viator / OpenTable / … (optional)
+  date: ISODate;
+  startTime: ISOTime | '';
+  endTime: ISOTime | '';
+  location: string;          // place or address
+  confirmation: string;
+  cost: number;
+  costCurrency?: string;
+  notes: string;
+  // Optional attachment — the original booking/receipt PDF (synced).
+  fileData?: string;
+  fileName?: string;
+  fileMime?: string;
+}
+
 /* ── 6. Itinerary Planner ───────────────────────────────────── */
 export interface ItineraryEvent extends SyncMeta {
   kind: 'itinerary';
@@ -327,7 +348,7 @@ export interface TimelineLegendItem extends SyncMeta {
 export type AnyRecord =
   | Traveler | TravelDocument | ChecklistItem | Transport
   | Accommodation | CarRental | Expense | ItineraryEvent | BudgetLine | BudgetSheet | TripMeta | TripPhoto | MapPin | ChatMessage | Suggestion | FuelRoute
-  | TimelineStop | TimelineLegendItem;
+  | TimelineStop | TimelineLegendItem | Activity;
 
 export type EntityKind = AnyRecord['kind'];
 

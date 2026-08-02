@@ -10,7 +10,7 @@ import Dexie, { type Table } from 'dexie';
 import type {
   Traveler, TravelDocument, ChecklistItem, Transport, Accommodation, CarRental,
   Expense, ItineraryEvent, BudgetLine, BudgetSheet, TripMeta, TripPhoto, MapPin, ChatMessage, Suggestion, FuelRoute, ChangeLogEntry,
-  TimelineStop, TimelineLegendItem,
+  TimelineStop, TimelineLegendItem, Activity,
   AnyRecord, EntityKind, ChangeAction,
 } from '../types';
 
@@ -33,6 +33,7 @@ class TripDB extends Dexie {
   budgetsheets!:   Table<BudgetSheet, string>;
   timelinestops!:  Table<TimelineStop, string>;
   timelinelegend!: Table<TimelineLegendItem, string>;
+  activities!:     Table<Activity, string>;
   changelog!:      Table<ChangeLogEntry, string>;
 
   constructor() {
@@ -82,6 +83,10 @@ class TripDB extends Dexie {
       timelinestops:  'id, startDate, order, updatedAt',
       timelinelegend: 'id, key, order, updatedAt',
     });
+    // v10 adds booked activities / experiences.
+    this.version(10).stores({
+      activities:     'id, date, updatedAt',
+    });
   }
 }
 
@@ -107,6 +112,7 @@ const TABLES: Record<EntityKind, Table<any, string>> = {
   budgetsheet:   db.budgetsheets,
   timelinestop:  db.timelinestops,
   timelinelegend: db.timelinelegend,
+  activity:      db.activities,
 };
 
 export function tableFor(kind: EntityKind): Table<any, string> {

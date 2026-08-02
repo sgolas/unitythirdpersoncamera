@@ -9,7 +9,7 @@ import { db, activeRows } from '../db/database';
 import type {
   Traveler, TravelDocument, ChecklistItem, Transport, Accommodation, CarRental,
   Expense, ExpenseCategory, ItineraryEvent, BudgetLine, BudgetSheet, TripMeta, TripPhoto, MapPin, ChatMessage, Suggestion, FuelRoute, ChangeLogEntry,
-  TimelineStop, TimelineLegendItem,
+  TimelineStop, TimelineLegendItem, Activity,
 } from '../types';
 
 export const useTrip = () =>
@@ -36,6 +36,10 @@ export const useCarRentals = () =>
   activeRows<CarRental>(useLiveQuery(() => db.carrentals.toArray(), []))
     .sort((a, b) => a.pickupDate.localeCompare(b.pickupDate));
 
+export const useActivities = () =>
+  activeRows<Activity>(useLiveQuery(() => db.activities.toArray(), []))
+    .sort((a, b) => (a.date + a.startTime).localeCompare(b.date + b.startTime));
+
 export const useTimelineStops = () =>
   activeRows<TimelineStop>(useLiveQuery(() => db.timelinestops.toArray(), []))
     .sort((a, b) => a.startDate.localeCompare(b.startDate) || (a.order - b.order));
@@ -50,14 +54,14 @@ export const useExpenses = () =>
 
 /** An item in the Expenses tally: either a real logged expense, or a read-only
  *  item derived from a booking's cost (stay / transport / car rental). */
-export type SpendItem = Expense & { auto?: boolean; source?: 'accommodation' | 'transport' | 'carrental' };
+export type SpendItem = Expense & { auto?: boolean; source?: 'accommodation' | 'transport' | 'carrental' | 'activity' };
 
 const cap = (s: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
 
-/** Turn booking costs (stays, transport, car rentals) into read-only expense
- *  items so they count toward the Expenses/Budget tally automatically. */
+/** Turn booking costs (stays, transport, car rentals, activities) into read-only
+ *  expense items so they count toward the Expenses/Budget tally automatically. */
 export function bookingSpend(
-  stays: Accommodation[], transport: Transport[], cars: CarRental[], cur: string,
+  stays: Accommodation[], transport: Transport[], cars: CarRental[], cur: string, activities: Activity[] = [],
 ): SpendItem[] {
   const mk = (
     id: string, source: SpendItem['source'], title: string, amount: number,
@@ -74,6 +78,8 @@ export function bookingSpend(
     items.push(mk(`auto-trn-${t.id}`, 'transport', t.provider ? `${cap(t.mode)} · ${t.provider}` : cap(t.mode) || 'Transport', t.cost, t.costCurrency ?? cur, 'transport', t.departDate, [t.fromPlace, t.toPlace].filter(Boolean).join(' → ')));
   for (const c of cars) if (c.cost > 0)
     items.push(mk(`auto-car-${c.id}`, 'carrental', c.company ? `${c.company} car` : 'Car rental', c.cost, c.costCurrency ?? cur, 'transport', c.pickupDate, c.pickupLocation || ''));
+  for (const a of activities) if (a.cost > 0)
+    items.push(mk(`auto-act-${a.id}`, 'activity', a.title || 'Activity', a.cost, a.costCurrency ?? cur, 'activities', a.date, a.location || a.provider || ''));
   return items;
 }
 
@@ -84,11 +90,12 @@ export function useSpend(): SpendItem[] {
   const stays = useAccommodation();
   const transport = useTransport();
   const cars = useCarRentals();
+  const activities = useActivities();
   const cur = trip?.tripCurrency ?? 'EUR';
   return useMemo(
-    () => [...(expenses as SpendItem[]), ...bookingSpend(stays, transport, cars, cur)]
+    () => [...(expenses as SpendItem[]), ...bookingSpend(stays, transport, cars, cur, activities)]
       .sort((a, b) => (b.date || '').localeCompare(a.date || '')),
-    [expenses, stays, transport, cars, cur],
+    [expenses, stays, transport, cars, activities, cur],
   );
 }
 

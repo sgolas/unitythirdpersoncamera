@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { Trash2, MapPin, Clock, FileUp, Loader2, Pencil, FileText, Ticket, Wallet, Tag } from 'lucide-react';
-import { useActivities, useTrip } from '../../hooks/useTrip';
+import { useActivities, useTrip, useBudgetSheets } from '../../hooks/useTrip';
 import { put, remove } from '../../db/database';
-import type { Activity } from '../../types';
+import type { Activity, BudgetSheet, TripMeta } from '../../types';
 import { money } from '../../types';
 import { fmtDate, fmtTime, todayStr } from '../../utils/format';
-import { TabHeader, Sheet, Field, TextInput, TextArea, FormFooter, Fab, EmptyState, ConfirmDelete, CostField } from '../ui';
+import { TabHeader, Sheet, Field, TextInput, TextArea, Select, FormFooter, Fab, EmptyState, ConfirmDelete, CostField } from '../ui';
 import { PlaceInput } from '../PlaceInput';
 import { extractPdfText, parseActivity, type ParsedActivity } from '../../lib/activityImport';
 import { aiExtractActivity, mergePreferAi } from '../../lib/aiExtract';
@@ -21,7 +21,19 @@ import { DocViewer } from '../DocViewer';
 export function ActivitiesTab() {
   const activities = useActivities();
   const trip = useTrip();
+  const sheets = useBudgetSheets();
   const cur = trip?.tripCurrency ?? 'EUR';
+
+  // An activity's cost feeds the budget as an auto item; its sheet lives in the
+  // trip's autoSheet map (shared with the Budget page), keyed by that item id.
+  const sheetOf = (id: string) => trip?.autoSheet?.[`auto-act-${id}`] ?? '';
+  async function assignSheet(activityId: string, sheetId: string) {
+    if (!trip) return;
+    const key = `auto-act-${activityId}`;
+    const map = { ...(trip.autoSheet ?? {}) };
+    if (sheetId) map[key] = sheetId; else delete map[key];
+    await put<TripMeta>({ ...trip, autoSheet: map }, 'Set activity budget sheet');
+  }
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<Activity | null>(null);
   const [viewing, setViewing] = useState<Activity | null>(null);
@@ -104,10 +116,13 @@ export function ActivitiesTab() {
       <Fab onClick={() => setAdding(true)} label="Add activity" />
 
       {(adding || editing) && (
-        <ActivitySheet activity={editing} currency={cur} onClose={() => { setAdding(false); setEditing(null); }} />
+        <ActivitySheet activity={editing} currency={cur} sheets={sheets}
+          initialSheet={editing ? sheetOf(editing.id) : ''} onAssignSheet={assignSheet}
+          onClose={() => { setAdding(false); setEditing(null); }} />
       )}
       {importDraft && (
         <ActivitySheet activity={null} initial={importDraft} currency={cur} banner={importInfo}
+          sheets={sheets} initialSheet="" onAssignSheet={assignSheet}
           onClose={() => { setImportDraft(null); setImportInfo(null); }} />
       )}
       {viewing && (
@@ -226,11 +241,14 @@ function ActivityDetail({ activity: a, currency, onClose, onViewPdf }: {
   );
 }
 
-function ActivitySheet({ activity, initial, currency, banner, onClose }: {
+function ActivitySheet({ activity, initial, currency, banner, sheets, initialSheet, onAssignSheet, onClose }: {
   activity: Activity | null; initial?: Partial<Activity>; currency: string;
-  banner?: { found: string[]; provider: string } | null; onClose: () => void;
+  banner?: { found: string[]; provider: string } | null;
+  sheets: BudgetSheet[]; initialSheet: string; onAssignSheet: (activityId: string, sheetId: string) => void | Promise<void>;
+  onClose: () => void;
 }) {
   const seed = activity ?? initial;
+  const [sheetId, setSheetId] = useState(initialSheet);
   const [title, setTitle] = useState(seed?.title ?? '');
   const [provider, setProvider] = useState(seed?.provider ?? '');
   const [date, setDate] = useState(seed?.date || todayStr());
@@ -245,14 +263,16 @@ function ActivitySheet({ activity, initial, currency, banner, onClose }: {
   async function save() {
     if (!title.trim()) return;
     const isNew = !activity;
+    const id = activity?.id ?? crypto.randomUUID();
     await put<Activity>({
-      kind: 'activity', id: activity?.id ?? crypto.randomUUID(),
+      kind: 'activity', id,
       title: title.trim(), provider: provider.trim(), date,
       startTime, endTime, location: location.trim(), confirmation: confirmation.trim(),
       cost: parseFloat(cost) || 0, costCurrency, notes: notes.trim(),
       fileData: seed?.fileData, fileName: seed?.fileName, fileMime: seed?.fileMime,
       updatedAt: '', updatedBy: '',
     }, `${isNew ? 'Added' : 'Updated'} activity: ${title.trim()}`, isNew ? 'create' : 'update');
+    if (sheetId !== initialSheet) await onAssignSheet(id, sheetId);
     onClose();
   }
 
@@ -277,6 +297,14 @@ function ActivitySheet({ activity, initial, currency, banner, onClose }: {
       <Field label="Location"><PlaceInput value={location} onChange={setLocation} placeholder="Search a place…" /></Field>
       <Field label="Confirmation"><TextInput value={confirmation} onChange={e => setConfirmation(e.target.value)} placeholder="Optional" /></Field>
       <CostField value={cost} onChange={setCost} currency={costCurrency} onCurrencyChange={setCostCurrency} />
+      {sheets.length > 0 && (
+        <Field label="Budget sheet">
+          <Select value={sheetId} onChange={e => setSheetId(e.target.value)}>
+            <option value="">🧾 General (whole trip)</option>
+            {sheets.map(s => <option key={s.id} value={s.id}>📍 {s.name}</option>)}
+          </Select>
+        </Field>
+      )}
       <Field label="Notes"><TextArea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Optional" /></Field>
       {seed?.fileData && (
         <div className="flex items-center gap-2 text-sm text-teal-600 bg-teal-500/5 rounded-xl px-3 py-2.5">

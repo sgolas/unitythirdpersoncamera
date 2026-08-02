@@ -6,9 +6,9 @@
  * through put()/remove() so they log + sync like everything else.
  */
 import { useEffect } from 'react';
-import { useAccommodation, useTimelineStops, useTimelineLegend, useFuelRoutes } from '../../hooks/useTrip';
+import { useAccommodation, useTimelineStops, useTimelineLegend, useFuelRoutes, useTrip } from '../../hooks/useTrip';
 import { db, put, remove } from '../../db/database';
-import type { TimelineStop, TimelineLegendItem } from '../../types';
+import type { TimelineStop, TimelineLegendItem, TripMeta } from '../../types';
 import { driveDuration, arrivalDateTime } from '../../lib/route';
 import { TabHeader } from '../ui';
 import { TripTimeline, SEED_LEGEND, type UnifiedStop, type StopPatch } from '../TripTimeline';
@@ -20,6 +20,7 @@ export function TimelineTab() {
   const extras = useTimelineStops();
   const legend = useTimelineLegend();
   const routes = useFuelRoutes();
+  const trip = useTrip();
 
   // Seed the built-in legend once, and make sure every built-in type exists
   // (so upgrades that add a built-in — e.g. "Drive" — get it too).
@@ -97,9 +98,9 @@ export function TimelineTab() {
       order: nextOrder(), updatedAt: '', updatedBy: '',
     }, `Added timeline stop: ${p.city}`, 'create');
   }
-  async function reorderStop(id: string, startDate: string, endDate: string | null, order: number) {
-    const s = extras.find(x => x.id === id); if (!s) return;
-    await put<TimelineStop>({ ...s, startDate, endDate, order }, `Moved timeline stop: ${s.city}`, 'update');
+  async function reorder(ids: string[]) {
+    if (!trip) return;
+    await put<TripMeta>({ ...trip, timelineOrder: ids }, ids.length ? 'Reordered the timeline' : 'Reset timeline to date order', 'update');
   }
 
   const subtitle = stops.length
@@ -114,10 +115,11 @@ export function TimelineTab() {
         <TripTimeline
           stops={stops}
           legend={legend}
+          order={trip?.timelineOrder}
+          onReorder={reorder}
           onSaveStop={saveStop}
           onAddStop={addStop}
           onDeleteStop={id => { const s = extras.find(x => x.id === id); if (s) remove('timelinestop', id, `Removed timeline stop: ${s.city}`); }}
-          onReorderStop={reorderStop}
           onSaveLegend={i => put<TimelineLegendItem>(i, `Updated timeline type: ${i.label}`, 'update')}
           onAddLegend={i => put<TimelineLegendItem>(i, `Added timeline type: ${i.label}`, 'create')}
           onDeleteLegend={id => { const l = legend.find(x => x.id === id); if (l) remove('timelinelegend', id, `Removed timeline type: ${l.label}`); }}

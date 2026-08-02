@@ -44,8 +44,10 @@ export interface TripTimelineProps {
   /** Create a new extra stop (dates already chosen to sit at the drop point). */
   onAddStop?: (patch: StopPatch) => void;
   onDeleteStop?: (id: string) => void;
-  /** Reorder: an extra stop was dragged; its dates were re-flowed to match. */
-  onReorderStop?: (id: string, startDate: string, endDate: string | null, order: number) => void;
+  /** Manual display order (unified stop ids). When set, overrides date order. */
+  order?: string[];
+  /** Persist a new manual order after a drag (or [] to reset to date order). */
+  onReorder?: (orderedIds: string[]) => void;
   onSaveLegend?: (item: TimelineLegendItem) => void;
   onAddLegend?: (item: TimelineLegendItem) => void;
   onDeleteLegend?: (id: string) => void;
@@ -58,8 +60,6 @@ const addDays = (iso: string, n: number) => {
   return d.toISOString().slice(0, 10);
 };
 const effEnd = (s: { startDate: string; endDate: string | null }) => s.endDate || s.startDate;
-const durDays = (s: { startDate: string; endDate: string | null }) =>
-  s.endDate ? Math.max(0, Math.round((+new Date(s.endDate) - +new Date(s.startDate)) / 86_400_000)) : 0;
 const today = () => new Date().toISOString().slice(0, 10);
 function fmtRange(start: string, end: string | null): string {
   const f = (iso: string, withYear = false) => new Date(iso + 'T00:00:00').toLocaleDateString('en-US',
@@ -157,25 +157,33 @@ export function TripTimeline(props: TripTimelineProps) {
   }, [legend]);
   const swatchFor = (type: string) => legendByKey[type]?.swatch ?? NEUTRAL;
 
-  const sorted = useMemo(
-    () => [...stops].sort((a, b) => a.startDate.localeCompare(b.startDate)
-      || (a.source === b.source ? 0 : a.source === 'stay' ? -1 : 1)
-      || a.city.localeCompare(b.city)),
-    [stops],
-  );
+  // Display order: a manual order (from `order`) wins; anything not yet in it
+  // falls back to chronological, appended after the manually-placed items.
+  const manualActive = !!(props.order && props.order.length);
+  const sorted = useMemo(() => {
+    const idx = new Map((props.order ?? []).map((id, i) => [id, i]));
+    return [...stops].sort((a, b) => {
+      const ia = idx.has(a.id) ? idx.get(a.id)! : Infinity;
+      const ib = idx.has(b.id) ? idx.get(b.id)! : Infinity;
+      if (ia !== ib) return ia - ib;
+      return a.startDate.localeCompare(b.startDate)
+        || (a.source === b.source ? 0 : a.source === 'stay' ? -1 : 1)
+        || a.city.localeCompare(b.city);
+    });
+  }, [stops, props.order]);
 
   const [editing, setEditing] = useState<UnifiedStop | null>(null);
   const [adding, setAdding] = useState(false);
   const [lockedInfo, setLockedInfo] = useState<UnifiedStop | null>(null);
   const [legendOpen, setLegendOpen] = useState(false);
 
-  /* ── Drag-to-reorder (extra stops only) ──────────────────── */
+  /* ── Drag any item to reorder (manual order; dates are left untouched) ── */
   const trackRef = useRef<HTMLDivElement>(null);
   const [dragId, setDragId] = useState<string | null>(null);
   const drag = useRef<{ id: string; startX: number; moved: boolean } | null>(null);
 
   function onPointerDown(e: React.PointerEvent, stop: UnifiedStop) {
-    if (readOnly || stop.locked) return;
+    if (readOnly || !props.onReorder) return;
     drag.current = { id: stop.id, startX: e.clientX, moved: false };
   }
   useEffect(() => {
@@ -194,40 +202,30 @@ export function TripTimeline(props: TripTimelineProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sorted]);
 
-  /* Work out where the pointer dropped and re-flow the stop's dates so the
-   * line stays consistent with the calendar. */
+  /* Move the dragged item to the drop position and persist the new order of
+   * every item (dates are never changed — position is purely manual). */
   function commitDrop(id: string, clientX: number) {
     const cols = Array.from(trackRef.current?.querySelectorAll('[data-sk]') ?? []) as HTMLElement[];
-    const centers = cols.map(c => { const r = c.getBoundingClientRect(); return { key: c.dataset.sk!, x: r.left + r.width / 2 }; });
-    let idx = centers.findIndex(c => clientX < c.x);
+    const centers = cols.map(c => { const r = c.getBoundingClientRect(); return r.left + r.width / 2; });
+    let idx = centers.findIndex(x => clientX < x);
     if (idx === -1) idx = centers.length;
-    const without = sorted.filter(s => s.id !== id);
-    // idx counts positions in the *rendered* (with-dragged) list; map to `without`.
     const curIdx = sorted.findIndex(s => s.id === id);
     if (idx > curIdx) idx -= 1;
-    const prev = without[idx - 1];
-    const next = without[idx];
-    const moving = sorted.find(s => s.id === id)!;
-    const dur = durDays(moving);
-    let start: string, end: string | null;
-    if (prev && next) {
-      start = addDays(effEnd(prev), 1);
-      if (start > next.startDate) start = next.startDate;
-      end = dur > 0 ? addDays(start, dur) : null;
-      if (end && end >= next.startDate) end = null;
-    } else if (prev) {
-      start = addDays(effEnd(prev), 1);
-      end = dur > 0 ? addDays(start, dur) : null;
-    } else if (next) {
-      start = addDays(next.startDate, -1 - dur);
-      end = dur > 0 ? addDays(start, dur) : null;
-    } else { start = moving.startDate; end = moving.endDate; }
-    props.onReorderStop?.(id, start, end, idx);
+    const ids = sorted.map(s => s.id);
+    ids.splice(curIdx, 1);
+    ids.splice(idx, 0, id);
+    props.onReorder?.(ids);
   }
 
   return (
     <div className="tl-scope" style={themeVars}>
      <div className="tl-card">
+      {!readOnly && props.onReorder && sorted.length > 1 && (
+        <div className="tl-orderbar">
+          <span>{manualActive ? 'Your custom order' : 'Drag any item to reorder'}</span>
+          {manualActive && <button type="button" className="tl-textbtn" onClick={() => props.onReorder?.([])}>Reset to dates</button>}
+        </div>
+      )}
       {/* Timeline track */}
       <div ref={trackRef} className="tl-track" role="list" aria-label="Trip timeline"
         style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
@@ -264,7 +262,7 @@ export function TripTimeline(props: TripTimelineProps) {
                     {stop.locked && <span className="tl-pill tl-pill--muted">{stop.source === 'route' ? 'drive' : 'stay'}</span>}
                   </div>
                 )}
-                {!readOnly && !stop.locked && (
+                {!readOnly && props.onReorder && (
                   <span className="tl-grip" aria-hidden><GripVertical size={12} /></span>
                 )}
               </div>
@@ -548,14 +546,16 @@ function InfoSheet({ title, onClose, children }: { title: string; onClose: () =>
 export function TripTimelineDemo() {
   const [stops, setStops] = useState<UnifiedStop[]>(SEED_STOPS);
   const [legend, setLegend] = useState<TimelineLegendItem[]>(SEED_LEGEND);
+  const [order, setOrder] = useState<string[]>([]);
   return (
     <TripTimeline
       stops={stops}
       legend={legend}
+      order={order}
+      onReorder={setOrder}
       onSaveStop={(id, p) => setStops(s => s.map(x => x.id === id ? { ...x, ...p } : x))}
       onAddStop={p => setStops(s => [...s, { id: crypto.randomUUID(), locked: false, source: 'extra', ...p }])}
       onDeleteStop={id => setStops(s => s.filter(x => x.id !== id))}
-      onReorderStop={(id, startDate, endDate) => setStops(s => s.map(x => x.id === id ? { ...x, startDate, endDate } : x))}
       onSaveLegend={i => setLegend(l => l.map(x => x.id === i.id ? i : x))}
       onAddLegend={i => setLegend(l => [...l, i])}
       onDeleteLegend={id => setLegend(l => l.filter(x => x.id !== id))}

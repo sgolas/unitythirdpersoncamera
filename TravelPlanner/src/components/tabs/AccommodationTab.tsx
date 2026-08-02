@@ -8,6 +8,7 @@ import { fmtDate, todayStr, tripLength } from '../../utils/format';
 import { TabHeader, Sheet, Field, TextInput, TextArea, FormFooter, Fab, EmptyState, ConfirmDelete, CostField } from '../ui';
 import { PlaceInput } from '../PlaceInput';
 import { extractPdfText, parseStay, type ParsedStay } from '../../lib/stayImport';
+import { aiExtractStay, mergePreferAi } from '../../lib/aiExtract';
 import { readFileAsDataUrl, approxBytes, MAX_ATTACH_BYTES } from '../../lib/attachments';
 import { DocViewer } from '../DocViewer';
 
@@ -34,7 +35,10 @@ export function AccommodationTab() {
     setImporting(true);
     try {
       const text = await extractPdfText(file);
-      const p: ParsedStay = parseStay(text);
+      const local: ParsedStay = parseStay(text);
+      // AI-assisted read (server-side, key-free) overlays the on-device parse.
+      const ai = await aiExtractStay(text);
+      const p = mergePreferAi<ParsedStay>(local, ai as Partial<ParsedStay> | null);
       if (!p.name && !p.city && !p.checkIn && !p.confirmation) {
         setImportErr("Couldn't read a booking from that PDF. You can still add it by hand.");
         return;
@@ -45,8 +49,10 @@ export function AccommodationTab() {
       if (dataUrl && approxBytes(dataUrl) <= MAX_ATTACH_BYTES) {
         fileData = dataUrl; fileName = file.name || 'confirmation.pdf'; fileMime = 'application/pdf';
       }
-      const found = fileData ? [...p.found, 'PDF'] : p.found;
-      setImportInfo({ found, provider: p.provider });
+      const filled = ['name', 'city', 'address', 'checkIn', 'checkOut', 'confirmation', 'cost']
+        .filter(k => (p as any)[k]);
+      const found = [...filled, ...(ai ? ['AI'] : []), ...(fileData ? ['PDF'] : [])];
+      setImportInfo({ found, provider: ai ? 'AI' : p.provider });
       setImportDraft({
         name: p.name, city: p.city, address: p.address,
         checkIn: p.checkIn, checkOut: p.checkOut,
@@ -273,7 +279,7 @@ function StaySheet({ stay, initial, currency, banner, onClose }: { stay: Accommo
       {banner && (
         <div className="rounded-xl bg-grape/5 border border-grape/20 p-3 mb-1">
           <p className="text-sm font-semibold text-grape">
-            {banner.provider === 'airbnb' ? 'Airbnb booking read' : banner.provider === 'generic' ? 'Booking read' : `${banner.provider} booking read`} · {banner.found.length} field{banner.found.length === 1 ? '' : 's'} filled
+            {banner.provider === 'AI' ? 'Read with AI ✨' : banner.provider === 'airbnb' ? 'Airbnb booking read' : banner.provider === 'generic' ? 'Booking read' : `${banner.provider} booking read`} · {banner.found.length} field{banner.found.length === 1 ? '' : 's'} filled
           </p>
           <p className="text-xs text-slate-500 mt-0.5">Double-check everything below, then save. Anything the PDF didn’t include is left blank for you to fill.</p>
         </div>

@@ -8,6 +8,7 @@ import { fmtDate, fmtTime, todayStr } from '../../utils/format';
 import { TabHeader, Sheet, Field, TextInput, TextArea, FormFooter, Fab, EmptyState, ConfirmDelete, CostField } from '../ui';
 import { PlaceInput } from '../PlaceInput';
 import { extractPdfText, parseActivity, type ParsedActivity } from '../../lib/activityImport';
+import { aiExtractActivity, mergePreferAi } from '../../lib/aiExtract';
 import { readFileAsDataUrl, approxBytes, MAX_ATTACH_BYTES } from '../../lib/attachments';
 import { DocViewer } from '../DocViewer';
 
@@ -40,7 +41,11 @@ export function ActivitiesTab() {
     setImporting(true);
     try {
       const text = await extractPdfText(file);
-      const p: ParsedActivity = parseActivity(text);
+      const local: ParsedActivity = parseActivity(text);
+      // AI-assisted read (server-side, key-free) overlays the on-device parse;
+      // if it's unavailable we just keep the on-device result.
+      const ai = await aiExtractActivity(text);
+      const p = mergePreferAi<ParsedActivity>(local, ai as Partial<ParsedActivity> | null);
       if (!p.title && !p.date && !p.confirmation && !p.cost) {
         setImportErr("Couldn't read a booking from that PDF. You can still add it by hand.");
         return;
@@ -50,8 +55,10 @@ export function ActivitiesTab() {
       if (dataUrl && approxBytes(dataUrl) <= MAX_ATTACH_BYTES) {
         fileData = dataUrl; fileName = file.name || 'booking.pdf'; fileMime = 'application/pdf';
       }
-      const found = fileData ? [...p.found, 'PDF'] : p.found;
-      setImportInfo({ found, provider: p.provider || 'generic' });
+      const filled = ['title', 'provider', 'date', 'startTime', 'endTime', 'location', 'confirmation', 'cost']
+        .filter(k => (p as any)[k]);
+      const found = [...filled, ...(ai ? ['AI'] : []), ...(fileData ? ['PDF'] : [])];
+      setImportInfo({ found, provider: ai ? 'AI' : (p.provider || 'generic') });
       setImportDraft({
         title: p.title, provider: p.provider, date: p.date, startTime: p.startTime, endTime: p.endTime,
         location: p.location, confirmation: p.confirmation, cost: p.cost, costCurrency: p.costCurrency || cur,
@@ -255,7 +262,7 @@ function ActivitySheet({ activity, initial, currency, banner, onClose }: {
       {banner && (
         <div className="rounded-xl bg-teal-500/5 border border-teal-400/20 p-3 mb-1">
           <p className="text-sm font-semibold text-teal-600">
-            {banner.provider === 'generic' ? 'Booking read' : `${banner.provider} booking read`} · {banner.found.length} field{banner.found.length === 1 ? '' : 's'} filled
+            {banner.provider === 'AI' ? 'Read with AI ✨' : banner.provider === 'generic' ? 'Booking read' : `${banner.provider} booking read`} · {banner.found.length} field{banner.found.length === 1 ? '' : 's'} filled
           </p>
           <p className="text-xs text-slate-500 mt-0.5">Double-check everything below, then save. Anything the PDF didn’t include is left blank for you to fill.</p>
         </div>

@@ -1,0 +1,7 @@
+name = "trip-planner-sgolas"
+pages_build_output_dir = "dist"
+compatibility_date = "2024-11-01"
+
+# Workers AI binding — powers /api/extract (key-free booking extraction).
+[ai]
+binding = "AI"

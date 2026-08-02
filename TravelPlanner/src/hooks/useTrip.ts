@@ -9,6 +9,7 @@ import { db, activeRows } from '../db/database';
 import type {
   Traveler, TravelDocument, ChecklistItem, Transport, Accommodation, CarRental,
   Expense, ExpenseCategory, ItineraryEvent, BudgetLine, BudgetSheet, TripMeta, TripPhoto, MapPin, ChatMessage, Suggestion, FuelRoute, ChangeLogEntry,
+  TimelineStop, TimelineLegendItem,
 } from '../types';
 
 export const useTrip = () =>
@@ -34,6 +35,14 @@ export const useAccommodation = () =>
 export const useCarRentals = () =>
   activeRows<CarRental>(useLiveQuery(() => db.carrentals.toArray(), []))
     .sort((a, b) => a.pickupDate.localeCompare(b.pickupDate));
+
+export const useTimelineStops = () =>
+  activeRows<TimelineStop>(useLiveQuery(() => db.timelinestops.toArray(), []))
+    .sort((a, b) => a.startDate.localeCompare(b.startDate) || (a.order - b.order));
+
+export const useTimelineLegend = () =>
+  activeRows<TimelineLegendItem>(useLiveQuery(() => db.timelinelegend.toArray(), []))
+    .sort((a, b) => a.order - b.order);
 
 export const useExpenses = () =>
   activeRows<Expense>(useLiveQuery(() => db.expenses.toArray(), []))

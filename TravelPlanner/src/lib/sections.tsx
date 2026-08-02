@@ -1,11 +1,11 @@
 import {
   Images, FileText, Compass, ListChecks, Plane, BedDouble, Car, Fuel,
-  PiggyBank, Calculator, Languages, Sparkles, History, Settings2, Gamepad2, Lightbulb,
+  PiggyBank, Calculator, Languages, Sparkles, History, Settings2, Gamepad2, Lightbulb, Milestone,
 } from 'lucide-react';
 
 /** The sections shown in the More menu — and pinnable to the dashboard. */
 export type SectionKey =
-  | 'photos' | 'documents' | 'overview' | 'checklist' | 'transport'
+  | 'photos' | 'documents' | 'overview' | 'timeline' | 'checklist' | 'transport'
   | 'accommodation' | 'carrental' | 'fuel' | 'suggestions' | 'budget' | 'converter' | 'translate'
   | 'helper' | 'artillery' | 'changelog' | 'settings';
 
@@ -15,6 +15,7 @@ export const SECTIONS: Section[] = [
   { key: 'photos',        label: 'Photos',        icon: <Images size={22} />,     color: '#ec4899' },
   { key: 'documents',     label: 'Documents',     icon: <FileText size={22} />,   color: '#64748b' },
   { key: 'overview',      label: 'Trip Overview', icon: <Compass size={22} />,    color: '#38bdf8' },
+  { key: 'timeline',      label: 'Trip Timeline', icon: <Milestone size={22} />,  color: '#13595C' },
   { key: 'checklist',     label: 'Checklist',     icon: <ListChecks size={22} />, color: '#34d399' },
   { key: 'transport',     label: 'Transport',     icon: <Plane size={22} />,      color: '#38bdf8' },
   { key: 'accommodation', label: 'Stays',         icon: <BedDouble size={22} />,  color: '#a78bfa' },

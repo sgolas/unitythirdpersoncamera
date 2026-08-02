@@ -281,10 +281,48 @@ export interface FuelRoute extends SyncMeta {
   notes: string;
 }
 
+/* ── 18. Trip Timeline ──────────────────────────────────────────
+ * A horizontal, date-ordered timeline of a trip. Overnight stops are derived
+ * live from Accommodation (Stays) and stay read-only here; the records below
+ * are the *extra* stops (day trips, buffers, an end marker, custom types) that
+ * the user inserts between stays. The legend is an editable list of stop
+ * "types", each with a dot style — adding one defines a new assignable type.  */
+
+/** A dot style. Colors are semantic tokens (resolved to theme-aware CSS vars)
+ *  or raw hex, so the timeline reads correctly in both light and dark mode. */
+export type TimelineColor = 'route' | 'accent' | 'ink' | 'paper' | 'muted' | string;
+export interface TimelineSwatch {
+  fill: TimelineColor;        // dot fill
+  border?: TimelineColor;     // optional ring/border colour
+  borderWidth?: number;       // border width in px (day-style dots use ~3)
+}
+
+/** An extra stop the user added to the timeline (not backed by a Stay). */
+export interface TimelineStop extends SyncMeta {
+  kind: 'timelinestop';
+  city: string;
+  startDate: ISODate;
+  endDate: ISODate | null;    // null = single-day stop
+  type: string;               // references a TimelineLegendItem.key
+  tags: string[];
+  order: number;              // tiebreak for stops sharing a start date
+}
+
+/** An entry in the editable legend — also the catalogue of assignable types. */
+export interface TimelineLegendItem extends SyncMeta {
+  kind: 'timelinelegend';
+  key: string;                // stable type id (e.g. 'overnight' | 'day' | 'end')
+  label: string;              // display name
+  swatch: TimelineSwatch;
+  order: number;              // display order
+  builtin?: boolean;          // overnight/day/end — kept undeletable
+}
+
 /* ── Union of all synced records ────────────────────────────── */
 export type AnyRecord =
   | Traveler | TravelDocument | ChecklistItem | Transport
-  | Accommodation | CarRental | Expense | ItineraryEvent | BudgetLine | BudgetSheet | TripMeta | TripPhoto | MapPin | ChatMessage | Suggestion | FuelRoute;
+  | Accommodation | CarRental | Expense | ItineraryEvent | BudgetLine | BudgetSheet | TripMeta | TripPhoto | MapPin | ChatMessage | Suggestion | FuelRoute
+  | TimelineStop | TimelineLegendItem;
 
 export type EntityKind = AnyRecord['kind'];
 

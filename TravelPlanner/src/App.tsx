@@ -25,6 +25,7 @@ import { CarRentalTab } from './components/tabs/CarRentalTab';
 import { FuelTab } from './components/tabs/FuelTab';
 import { ExpensesTab } from './components/tabs/ExpensesTab';
 import { ItineraryTab } from './components/tabs/ItineraryTab';
+import { TimelineTab } from './components/tabs/TimelineTab';
 import { BudgetTab } from './components/tabs/BudgetTab';
 import { HelperTab } from './components/tabs/HelperTab';
 import { ChangeLogTab } from './components/tabs/ChangeLogTab';
@@ -38,7 +39,7 @@ import { ArtilleryTab } from './components/tabs/ArtilleryTab';
 import { SuggestionsTab } from './components/tabs/SuggestionsTab';
 
 type View =
-  | 'dashboard' | 'overview' | 'documents' | 'checklist' | 'transport'
+  | 'dashboard' | 'overview' | 'timeline' | 'documents' | 'checklist' | 'transport'
   | 'accommodation' | 'carrental' | 'fuel' | 'suggestions' | 'expenses' | 'itinerary' | 'budget' | 'helper'
   | 'changelog' | 'settings' | 'map' | 'photos' | 'converter' | 'chat' | 'translate' | 'artillery';
 
@@ -122,6 +123,7 @@ export default function App() {
     <>
       {view === 'dashboard'     && <DashboardTab onNavigate={go} />}
       {view === 'overview'      && <TripOverviewTab />}
+      {view === 'timeline'      && <TimelineTab />}
       {view === 'documents'     && <DocumentsTab />}
       {view === 'checklist'     && <ChecklistTab />}
       {view === 'transport'     && <TransportTab />}

@@ -62,13 +62,14 @@ const cap = (s: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
  *  expense items so they count toward the Expenses/Budget tally automatically. */
 export function bookingSpend(
   stays: Accommodation[], transport: Transport[], cars: CarRental[], cur: string, activities: Activity[] = [],
+  autoSheet: Record<string, string> = {},
 ): SpendItem[] {
   const mk = (
     id: string, source: SpendItem['source'], title: string, amount: number,
     currency: string, category: ExpenseCategory, date: string, place: string,
   ): SpendItem => ({
     kind: 'expense', id, title, amount, currency, category, date,
-    paidBy: null, place, notes: '', sheetId: null, updatedAt: '', updatedBy: '',
+    paidBy: null, place, notes: '', sheetId: autoSheet[id] ?? null, updatedAt: '', updatedBy: '',
     auto: true, source,
   });
   const items: SpendItem[] = [];
@@ -92,10 +93,11 @@ export function useSpend(): SpendItem[] {
   const cars = useCarRentals();
   const activities = useActivities();
   const cur = trip?.tripCurrency ?? 'EUR';
+  const autoSheet = trip?.autoSheet;
   return useMemo(
-    () => [...(expenses as SpendItem[]), ...bookingSpend(stays, transport, cars, cur, activities)]
+    () => [...(expenses as SpendItem[]), ...bookingSpend(stays, transport, cars, cur, activities, autoSheet ?? {})]
       .sort((a, b) => (b.date || '').localeCompare(a.date || '')),
-    [expenses, stays, transport, cars, activities, cur],
+    [expenses, stays, transport, cars, activities, cur, autoSheet],
   );
 }
 

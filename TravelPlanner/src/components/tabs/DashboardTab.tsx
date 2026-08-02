@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import {
   Plane, BedDouble, CalendarRange, PiggyBank,
   Sparkles, History, Compass, CalendarClock, Calculator, ChevronRight,
@@ -39,6 +40,11 @@ export function DashboardTab({ onNavigate }: { onNavigate: (v: any) => void }) {
   const stays = useAccommodation();
   const itinerary = useItinerary();
   const travelers = useTravelers();
+  // Budget widget: pick which sheet to show (remembered across restarts). Hooks
+  // must run before any early return, so this lives up here.
+  const [budgetSheet, setBudgetSheet] = useState<string>(() => localStorage.getItem('dash.budgetSheet') || '');
+  useEffect(() => { localStorage.setItem('dash.budgetSheet', budgetSheet); }, [budgetSheet]);
+  useEffect(() => { if (budgetSheet && !sheets.find(s => s.id === budgetSheet)) setBudgetSheet(''); }, [sheets, budgetSheet]);
 
   if (!trip) return null;
 
@@ -46,10 +52,13 @@ export function DashboardTab({ onNavigate }: { onNavigate: (v: any) => void }) {
   const today = todayStr();
   const days = daysUntil(trip.startDate);
   const counted = expenses.filter(countsToBudget);
-  const spent = sumExpenses(counted, cur);
-  const grandBudget = trip.totalBudget + sheets.reduce((s, x) => s + x.total, 0);
-  const budgetPct = grandBudget > 0 ? Math.min(100, Math.round((spent / grandBudget) * 100)) : 0;
   const lastSync = getLastSync();
+
+  const selSheet = sheets.find(s => s.id === budgetSheet) ?? null;
+  const budgetCounted = budgetSheet ? counted.filter(e => (e.sheetId ?? null) === budgetSheet) : counted;
+  const budgetSpent = sumExpenses(budgetCounted, cur);
+  const budgetTotal = budgetSheet ? (selSheet?.total ?? 0) : trip.totalBudget;
+  const budgetPct = budgetTotal > 0 ? Math.min(100, Math.round((budgetSpent / budgetTotal) * 100)) : 0;
 
   const stops = computeStops(transport, stays, itinerary);
   const weatherLoc = stops[0]?.label || trip.destinations.split(/[·,]/)[0].trim();
@@ -63,7 +72,7 @@ export function DashboardTab({ onNavigate }: { onNavigate: (v: any) => void }) {
 
   // Top spend categories (for the budget card).
   const catSums = (Object.keys(CAT_META) as ExpenseCategory[])
-    .map(k => ({ k, ...CAT_META[k], sum: sumExpenses(counted.filter(e => e.category === k), cur) }))
+    .map(k => ({ k, ...CAT_META[k], sum: sumExpenses(budgetCounted.filter(e => e.category === k), cur) }))
     .filter(c => c.sum > 0).sort((a, b) => b.sum - a.sum);
   const maxCat = catSums[0]?.sum || 1;
 
@@ -159,9 +168,23 @@ export function DashboardTab({ onNavigate }: { onNavigate: (v: any) => void }) {
         ) },
         { key: 'budget', node: (
           <Card title="Budget" icon={<PiggyBank size={13} />} action="Breakdown" onAction={() => onNavigate('budget')}>
+            {sheets.length > 0 && (
+              <select value={budgetSheet} onChange={e => setBudgetSheet(e.target.value)} data-no-drag
+                onClick={e => e.stopPropagation()}
+                className="mb-3 w-full text-sm font-semibold rounded-xl border border-line bg-surface-2 text-content px-3 py-2">
+                <option value="">🧾 Whole trip</option>
+                {sheets.map(s => <option key={s.id} value={s.id}>📍 {s.name}</option>)}
+              </select>
+            )}
             <div className="flex items-center gap-4">
               <Ring pct={budgetPct} />
               <div className="flex-1 min-w-0 space-y-2">
+                {budgetTotal > 0 && (
+                  <div className="flex justify-between text-xs">
+                    <span className="text-muted">{selSheet ? selSheet.name : 'Spent'}</span>
+                    <span className="font-bold text-content">{moneyHome(budgetSpent, cur)} / {moneyHome(budgetTotal, cur)}</span>
+                  </div>
+                )}
                 {catSums.length === 0 ? (
                   <p className="text-sm text-muted">No spending yet.</p>
                 ) : catSums.slice(0, 3).map(c => (

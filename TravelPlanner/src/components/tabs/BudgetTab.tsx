@@ -1,12 +1,12 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Plus, Pencil, ChevronRight } from 'lucide-react';
 import { useBudget, useBudgetSheets, useSpend, useTrip, type SpendItem } from '../../hooks/useTrip';
-import { put, remove } from '../../db/database';
-import type { BudgetLine, BudgetSheet, ExpenseCategory, TripMeta } from '../../types';
+import { db, put, remove } from '../../db/database';
+import type { BudgetLine, BudgetSheet, Expense, ExpenseCategory, TripMeta } from '../../types';
 import { money, moneyHome, moneyAway, sumExpenses, countsToBudget } from '../../types';
 import { convert, getHomeCurrency } from '../../lib/currency';
 import { fmtDate } from '../../utils/format';
-import { TabHeader, Sheet, Field, TextInput, FormFooter, GhostButton, EmptyState } from '../ui';
+import { TabHeader, Sheet, Field, TextInput, Select, FormFooter, GhostButton, EmptyState } from '../ui';
 
 const SOURCE_LABEL: Record<string, string> = { accommodation: 'Stay', transport: 'Transport', carrental: 'Car rental' };
 
@@ -19,19 +19,19 @@ const CATS: { key: ExpenseCategory; label: string; emoji: string; color: string 
   { key: 'other',      label: 'Other',      emoji: '💶', color: '#64748b' },
 ];
 
-/** Grand total across the General budget + every sheet — the "total for all". */
-export function grandBudget(trip: TripMeta, sheets: BudgetSheet[]): number {
-  return trip.totalBudget + sheets.reduce((s, x) => s + x.total, 0);
-}
-
-type View = 'all' | 'general' | string; // 'all', 'general', or a sheet id
+type View = 'general' | string; // 'general' (whole vacation) or a sheet id
 
 export function BudgetTab({ onNavigate }: { onNavigate?: (v: any) => void } = {}) {
   const budget = useBudget();
   const sheets = useBudgetSheets();
   const expenses = useSpend();
   const trip = useTrip();
-  const [view, setView] = useState<View>('general');
+  // Remember the last-opened sheet across page and app restarts.
+  const [view, setView] = useState<View>(() => localStorage.getItem('budget.view') || 'general');
+  useEffect(() => { localStorage.setItem('budget.view', view); }, [view]);
+  // Only reset a stale sheet id once sheets have actually loaded (they're [] for
+  // a tick on mount, which would otherwise wrongly bounce us back to General).
+  useEffect(() => { if (view !== 'general' && sheets.length > 0 && !sheets.find(s => s.id === view)) setView('general'); }, [sheets, view]);
   const [editTotal, setEditTotal] = useState(false);
   const [editLine, setEditLine] = useState<ExpenseCategory | null>(null);
   const [editSheet, setEditSheet] = useState<BudgetSheet | 'new' | null>(null);
@@ -40,28 +40,40 @@ export function BudgetTab({ onNavigate }: { onNavigate?: (v: any) => void } = {}
   if (!trip) return null;
   const cur = trip.tripCurrency;
 
-  // The active view resolves to a "sheet key": null = General, a sheet id, or
-  // 'all' meaning every sheet + General combined.
+  // General is the whole-vacation total (every item counts); a sheet shows only
+  // the items assigned to it. Planned amounts stay tied to where they were set
+  // (General → unassigned lines; a sheet → that sheet's lines).
   const activeSheet = sheets.find(s => s.id === view) ?? null;
-  const key: 'all' | string | null = view === 'all' ? 'all' : view === 'general' ? null : view;
-  const inView = <T extends { sheetId?: string | null }>(r: T) =>
-    key === 'all' ? true : (r.sheetId ?? null) === key;
+  const isGeneral = view === 'general' || (sheets.length > 0 && !activeSheet);
+  const spentInView = (r: { sheetId?: string | null }) => isGeneral ? true : (r.sheetId ?? null) === view;
+  const plannedInView = (r: { sheetId?: string | null }) => (r.sheetId ?? null) === (isGeneral ? null : view);
 
-  const viewExpenses = expenses.filter(e => inView(e) && countsToBudget(e));
+  const viewExpenses = expenses.filter(e => spentInView(e) && countsToBudget(e));
   const plannedFor = (c: ExpenseCategory) =>
-    budget.filter(b => inView(b) && b.category === c).reduce((s, b) => s + b.planned, 0);
+    budget.filter(b => plannedInView(b) && b.category === c).reduce((s, b) => s + b.planned, 0);
   const spentFor = (c: ExpenseCategory) => sumExpenses(viewExpenses.filter(e => e.category === c), cur);
 
   const totalSpent = sumExpenses(viewExpenses, cur);
-  const totalBudget = view === 'all' ? grandBudget(trip, sheets)
-    : view === 'general' ? trip.totalBudget
-    : (activeSheet?.total ?? 0);
+  const totalBudget = isGeneral ? trip.totalBudget : (activeSheet?.total ?? 0);
   const remaining = totalBudget - totalSpent;
   const pct = totalBudget > 0 ? Math.min(100, (totalSpent / totalBudget) * 100) : 0;
 
-  const title = view === 'all' ? 'All budgets' : view === 'general' ? 'General' : (activeSheet?.name ?? '');
-  const canEditTotal = view !== 'all';   // grand total is computed, not editable
-  const canEditLines = view !== 'all';   // category plans are per-sheet
+  const title = isGeneral ? 'Whole trip' : (activeSheet?.name ?? '');
+  const canEditTotal = true;
+  const canEditLines = true;
+
+  async function setItemSheet(it: SpendItem, sheetId: string | null) {
+    if (!trip) return;
+    const dest = sheetId ? (sheets.find(s => s.id === sheetId)?.name ?? 'sheet') : 'General';
+    if (it.auto) {
+      const map = { ...(trip.autoSheet ?? {}) };
+      if (sheetId) map[it.id] = sheetId; else delete map[it.id];
+      await put<TripMeta>({ ...trip, autoSheet: map }, `Moved ${it.title} to ${dest}`);
+    } else {
+      const e = await db.expenses.get(it.id);
+      if (e) await put<Expense>({ ...e, sheetId: sheetId ?? null }, `Moved ${it.title} to ${dest}`, 'update');
+    }
+  }
 
   return (
     <div className="animate-fadeUp">
@@ -71,8 +83,8 @@ export function BudgetTab({ onNavigate }: { onNavigate?: (v: any) => void } = {}
       {/* Sheet switcher — only once you've split the budget into sheets */}
       {sheets.length > 0 && (
         <div className="flex gap-2 overflow-x-auto no-scrollbar px-4 pt-3">
-          {(['all', 'general', ...sheets.map(s => s.id)] as View[]).map(v => {
-            const label = v === 'all' ? 'All' : v === 'general' ? 'General' : sheets.find(s => s.id === v)!.name;
+          {(['general', ...sheets.map(s => s.id)] as View[]).map(v => {
+            const label = v === 'general' ? '🧾 Whole trip' : `📍 ${sheets.find(s => s.id === v)!.name}`;
             const active = view === v;
             return (
               <button key={v} onClick={() => setView(v)}
@@ -94,12 +106,11 @@ export function BudgetTab({ onNavigate }: { onNavigate?: (v: any) => void } = {}
           <div className="flex justify-between items-baseline">
             <span className="text-white/60 text-sm flex items-center gap-1.5">
               {title} budget
-              {view !== 'general' && view !== 'all' && (
+              {!isGeneral && (
                 <button onClick={e => { e.stopPropagation(); setEditSheet(activeSheet); }} aria-label="Edit sheet"><Pencil size={12} className="text-white/50" /></button>
               )}
             </span>
-            {canEditTotal ? <span className="text-white/60 text-sm underline">edit</span>
-              : <span className="text-white/40 text-xs">sum of all sheets</span>}
+            <span className="text-white/60 text-sm underline">edit</span>
           </div>
           {totalBudget ? (
             <div className="mt-1">
@@ -134,17 +145,17 @@ export function BudgetTab({ onNavigate }: { onNavigate?: (v: any) => void } = {}
         </div>
       </div>
 
-      {/* All view: per-sheet breakdown */}
-      {view === 'all' && (
+      {/* Whole-trip view: how the total splits across your location sheets. */}
+      {isGeneral && sheets.length > 0 && (
         <div className="px-4 py-4 space-y-2">
-          <p className="text-xs font-bold text-slate-400 uppercase tracking-wide px-1">By sheet</p>
-          {[{ id: 'general', name: 'General', total: trip.totalBudget }, ...sheets].map(s => {
-            const sk = s.id === 'general' ? null : s.id;
-            const sSpent = sumExpenses(expenses.filter(e => (e.sheetId ?? null) === sk && countsToBudget(e)), cur);
+          <p className="text-xs font-bold text-slate-400 uppercase tracking-wide px-1">By location</p>
+          {[...sheets.map(s => ({ id: s.id, name: s.name, total: s.total })), { id: '', name: 'Unassigned', total: 0 }].map(s => {
+            const sSpent = sumExpenses(expenses.filter(e => (e.sheetId ?? null) === (s.id || null) && countsToBudget(e)), cur);
+            if (!s.id && sSpent === 0) return null;
             return (
-              <div key={s.id} className="bg-white rounded-2xl p-4 shadow-sm" onClick={() => setView(s.id === 'general' ? 'general' : s.id)}>
+              <div key={s.id || 'unassigned'} className="bg-white rounded-2xl p-4 shadow-sm active:bg-slate-50" onClick={() => s.id && setView(s.id)}>
                 <div className="flex items-center justify-between gap-2">
-                  <span className="font-semibold text-slate-800">{s.id === 'general' ? '🧾' : '📍'} {s.name}</span>
+                  <span className="font-semibold text-slate-800">{s.id ? '📍' : '🧾'} {s.name}</span>
                   <span className="text-right leading-tight">
                     <span className="block text-sm font-semibold text-slate-700">{moneyHome(sSpent, cur)}{s.total > 0 && <span className="text-slate-400 font-normal"> / {moneyHome(s.total, cur)}</span>}</span>
                     <span className="block text-xs text-slate-400">{moneyAway(sSpent, cur)}{s.total > 0 && ` / ${moneyAway(s.total, cur)}`}</span>
@@ -163,7 +174,7 @@ export function BudgetTab({ onNavigate }: { onNavigate?: (v: any) => void } = {}
 
       {/* Category lines */}
       <div className="px-4 py-4 space-y-2">
-        <p className="text-xs font-bold text-slate-400 uppercase tracking-wide px-1">By category{view === 'all' ? ' (all sheets)' : ''}</p>
+        <p className="text-xs font-bold text-slate-400 uppercase tracking-wide px-1">By category</p>
         {CATS.map(c => {
           const planned = plannedFor(c.key);
           const spent = spentFor(c.key);
@@ -206,8 +217,8 @@ export function BudgetTab({ onNavigate }: { onNavigate?: (v: any) => void } = {}
           : activeSheet && <SheetTotalSheet sheet={activeSheet} currency={cur} onClose={() => setEditTotal(false)} />
       )}
       {editLine && canEditLines && (
-        <LineSheet category={editLine} currency={cur} sheetId={key === 'all' ? null : key}
-          existing={budget.find(b => b.category === editLine && (b.sheetId ?? null) === (key === 'all' ? null : key)) ?? null}
+        <LineSheet category={editLine} currency={cur} sheetId={isGeneral ? null : view}
+          existing={budget.find(b => b.category === editLine && (b.sheetId ?? null) === (isGeneral ? null : view)) ?? null}
           onClose={() => setEditLine(null)} />
       )}
       {editSheet && (
@@ -218,12 +229,13 @@ export function BudgetTab({ onNavigate }: { onNavigate?: (v: any) => void } = {}
       {detailCat && (() => {
         const c = CATS.find(x => x.key === detailCat)!;
         return (
-          <CategoryDetail cat={c} currency={cur}
+          <CategoryDetail cat={c} currency={cur} sheets={sheets}
             items={viewExpenses.filter(e => e.category === detailCat)}
             planned={plannedFor(detailCat)} spent={spentFor(detailCat)}
             canEditPlan={canEditLines}
             onEditPlan={() => { setDetailCat(null); setEditLine(detailCat); }}
             onOpenItem={(it) => { setDetailCat(null); onNavigate?.(it.auto ? it.source : 'expenses'); }}
+            onSetSheet={setItemSheet}
             onClose={() => setDetailCat(null)} />
         );
       })()}
@@ -233,10 +245,11 @@ export function BudgetTab({ onNavigate }: { onNavigate?: (v: any) => void } = {}
 
 /** Lists every item that rolls up into one budget category (real expenses plus
  *  the stay/transport/car costs folded in), with the option to set its plan. */
-function CategoryDetail({ cat, items, currency, planned, spent, canEditPlan, onEditPlan, onOpenItem, onClose }: {
+function CategoryDetail({ cat, items, currency, sheets, planned, spent, canEditPlan, onEditPlan, onOpenItem, onSetSheet, onClose }: {
   cat: { key: ExpenseCategory; label: string; emoji: string; color: string };
-  items: SpendItem[]; currency: string; planned: number; spent: number;
-  canEditPlan: boolean; onEditPlan: () => void; onOpenItem: (it: SpendItem) => void; onClose: () => void;
+  items: SpendItem[]; currency: string; sheets: BudgetSheet[]; planned: number; spent: number;
+  canEditPlan: boolean; onEditPlan: () => void; onOpenItem: (it: SpendItem) => void;
+  onSetSheet: (it: SpendItem, sheetId: string | null) => void; onClose: () => void;
 }) {
   const pct = planned > 0 ? Math.min(100, (spent / planned) * 100) : 0;
   const over = planned > 0 && spent > planned;
@@ -272,15 +285,25 @@ function CategoryDetail({ cat, items, currency, planned, spent, canEditPlan, onE
               : [fmtDate(it.date), it.place]
             ).filter(Boolean).join(' · ');
             return (
-              <button key={it.id} onClick={() => onOpenItem(it)}
-                className="w-full flex items-center gap-3 bg-slate-50 rounded-xl px-3 py-2.5 text-left active:bg-slate-100 transition">
-                <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-slate-800 truncate">{it.title}</p>
-                  {meta && <p className="text-xs text-slate-400 truncate">{meta}</p>}
-                </div>
-                <span className="font-bold text-slate-800 whitespace-nowrap">{moneyHome(it.amount, it.currency)}</span>
-                <ChevronRight size={16} className="text-slate-300 flex-shrink-0" />
-              </button>
+              <div key={it.id} className="bg-slate-50 rounded-xl px-3 py-2.5">
+                <button onClick={() => onOpenItem(it)} className="w-full flex items-center gap-3 text-left">
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-slate-800 truncate">{it.title}</p>
+                    {meta && <p className="text-xs text-slate-400 truncate">{meta}</p>}
+                  </div>
+                  <span className="font-bold text-slate-800 whitespace-nowrap">{moneyHome(it.amount, it.currency)}</span>
+                  <ChevronRight size={16} className="text-slate-300 flex-shrink-0" />
+                </button>
+                {sheets.length > 0 && (
+                  <div className="flex items-center gap-2 mt-2">
+                    <span className="text-[11px] text-slate-400 flex-shrink-0">Sheet</span>
+                    <Select value={it.sheetId ?? ''} onChange={e => onSetSheet(it, e.target.value || null)}>
+                      <option value="">🧾 General (whole trip)</option>
+                      {sheets.map(s => <option key={s.id} value={s.id}>📍 {s.name}</option>)}
+                    </Select>
+                  </div>
+                )}
+              </div>
             );
           })}
         </div>
@@ -295,13 +318,13 @@ function TotalSheet({ trip, onClose }: { trip: TripMeta; onClose: () => void }) 
   const [val, setVal] = useState(trip.totalBudget ? convert(trip.totalBudget, away, home).toFixed(2) : '');
   async function save() {
     const stored = convert(parseFloat(val) || 0, home, away);
-    await put<TripMeta>({ ...trip, totalBudget: stored }, `Set General budget to ${money(stored, away)}`);
+    await put<TripMeta>({ ...trip, totalBudget: stored }, `Set whole-trip budget to ${money(stored, away)}`);
     onClose();
   }
   const preview = home !== away && parseFloat(val) ? `≈ ${moneyAway(parseFloat(val), home)}` : '';
   return (
-    <Sheet title="General budget" onClose={onClose} footer={<FormFooter onCancel={onClose} onSubmit={save} submitLabel="Save" />}>
-      <Field label={`General budget (${home})`}>
+    <Sheet title="Whole-trip budget" onClose={onClose} footer={<FormFooter onCancel={onClose} onSubmit={save} submitLabel="Save" />}>
+      <Field label={`Whole-trip budget (${home})`}>
         <TextInput autoFocus type="number" inputMode="decimal" value={val} onChange={e => setVal(e.target.value)} placeholder="0.00" />
       </Field>
       {preview && <p className="text-xs text-slate-400 -mt-2">{preview}</p>}

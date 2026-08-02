@@ -218,6 +218,9 @@ export interface TripMeta extends SyncMeta {
   // Ids of timeline items marked "completed" (turn green). Covers stays, drives
   // and stops uniformly, so it works for the read-only derived items too.
   timelineCompleted?: string[];
+  // Budget-sheet assignment for auto/booking-derived spend items (keyed by the
+  // synthetic item id, e.g. "auto-acc-<id>"). Absent = General.
+  autoSheet?: Record<string, string>;
 }
 
 /* ── Photos & files (stored locally, synced to the group) ───── */

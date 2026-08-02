@@ -1,7 +1,7 @@
-import { useState, useMemo } from 'react';
+import { useEffect, useRef, useState, useMemo } from 'react';
 import {
   MapPin, Plus, X, Trash2, Navigation, Loader2, RefreshCw, Coins, Route as RouteIcon,
-  CornerDownRight, Repeat, Pencil, Check,
+  CornerDownRight, Repeat, Pencil, Check, Clock, GripVertical,
 } from 'lucide-react';
 import { useFuelRoutes, useTrip, useTravelers } from '../../hooks/useTrip';
 import { put, remove } from '../../db/database';
@@ -35,6 +35,43 @@ export function FuelTab() {
   const [pendingDelete, setPendingDelete] = useState<FuelRoute | null>(null);
   const cur = trip?.tripCurrency ?? 'EUR';
 
+  // Press-and-hold a card to edit/delete or drag it to reorder (like Stays).
+  const listRef = useRef<HTMLDivElement>(null);
+  const [dragId, setDragId] = useState<string | null>(null);
+  const drag = useRef<{ id: string; startY: number; moved: boolean } | null>(null);
+
+  function beginDrag(id: string, e: React.PointerEvent) { drag.current = { id, startY: e.clientY, moved: false }; }
+  useEffect(() => {
+    function move(e: PointerEvent) {
+      const d = drag.current; if (!d) return;
+      if (!d.moved && Math.abs(e.clientY - d.startY) > 6) { d.moved = true; setDragId(d.id); }
+    }
+    function up(e: PointerEvent) {
+      const d = drag.current; drag.current = null;
+      if (d && d.moved) { commitDrop(d.id, e.clientY); setDragId(null); }
+    }
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+    return () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [routes]);
+
+  function commitDrop(id: string, clientY: number) {
+    const cards = Array.from(listRef.current?.querySelectorAll('[data-fuel]') ?? []) as HTMLElement[];
+    const centers = cards.map(c => { const b = c.getBoundingClientRect(); return { id: c.dataset.fuel!, mid: b.top + b.height / 2 }; });
+    let idx = centers.findIndex(c => clientY < c.mid);
+    if (idx === -1) idx = centers.length;
+    const ids = routes.map(r => r.id);
+    const cur = ids.indexOf(id);
+    if (idx > cur) idx -= 1;
+    if (idx === cur) return;
+    ids.splice(cur, 1); ids.splice(idx, 0, id);
+    ids.forEach((rid, i) => {
+      const r = routes.find(x => x.id === rid);
+      if (r && r.order !== i) put<FuelRoute>({ ...r, order: i }, 'Reordered routes', 'update');
+    });
+  }
+
   return (
     <div className="animate-fadeUp">
       <TabHeader title="Fuel & Driving" subtitle="Plan a route, estimate the fuel cost"
@@ -45,11 +82,15 @@ export function FuelTab() {
           <EmptyState emoji="🛣️" title="No routes yet"
             hint="Add a start, destination and any stops to estimate the fuel cost of the drive." />
         ) : (
-          <div className="space-y-3">
-            {routes.map(r => (
-              <RouteCard key={r.id} r={r} tripCur={cur} onEdit={() => setEditing(r)} onDelete={() => setPendingDelete(r)} />
-            ))}
-          </div>
+          <>
+            {routes.length > 1 && <p className="text-[11px] text-slate-400 text-center mb-2">Press &amp; hold a route to edit, delete or drag it</p>}
+            <div ref={listRef} className="space-y-3">
+              {routes.map(r => (
+                <RouteCard key={r.id} r={r} tripCur={cur} dragging={dragId === r.id}
+                  onEdit={() => setEditing(r)} onDelete={() => setPendingDelete(r)} onDragStart={e => beginDrag(r.id, e)} />
+              ))}
+            </div>
+          </>
         )}
       </div>
 
@@ -77,9 +118,32 @@ function costOf(r: FuelRoute, tripCur: string) {
   return { total, litres, priceCost, tripCost: convert(priceCost, r.priceCurrency, tripCur) };
 }
 
-function RouteCard({ r, tripCur, onEdit, onDelete }: { r: FuelRoute; tripCur: string; onEdit: () => void; onDelete: () => void }) {
+function RouteCard({ r, tripCur, dragging, onEdit, onDelete, onDragStart }: {
+  r: FuelRoute; tripCur: string; dragging: boolean;
+  onEdit: () => void; onDelete: () => void; onDragStart: (e: React.PointerEvent) => void;
+}) {
   const { total, litres, priceCost, tripCost } = costOf(r, tripCur);
   const [logged, setLogged] = useState(false);
+  const [armed, setArmed] = useState(false);
+  const timer = useRef<number | null>(null);
+  const start = useRef<{ x: number; y: number } | null>(null);
+  const held = useRef(false);
+
+  function clearTimer() { if (timer.current) { clearTimeout(timer.current); timer.current = null; } }
+  function onDown(e: React.PointerEvent) {
+    if (armed) { onDragStart(e); return; }        // armed → dragging reorders
+    start.current = { x: e.clientX, y: e.clientY };
+    held.current = false;
+    clearTimer();
+    timer.current = window.setTimeout(() => { held.current = true; setArmed(true); }, 450);
+  }
+  function onMove(e: React.PointerEvent) {
+    if (armed || !start.current) return;
+    if (Math.abs(e.clientX - start.current.x) > 10 || Math.abs(e.clientY - start.current.y) > 10) clearTimer();
+  }
+  function onUp() { clearTimer(); start.current = null; }
+  useEffect(() => clearTimer, []);
+
   async function addExpense() {
     await put<Expense>({
       kind: 'expense', id: crypto.randomUUID(),
@@ -94,8 +158,13 @@ function RouteCard({ r, tripCur, onEdit, onDelete }: { r: FuelRoute; tripCur: st
   const from = r.waypoints[0]?.label || 'Start';
   const to = r.waypoints[r.waypoints.length - 1]?.label || 'Destination';
   const stops = Math.max(0, r.waypoints.length - 2);
+  const arr = r.departTime ? arrivalDateTime(r.departDate || todayStr(), r.departTime, r.durationMin || 0) : null;
   return (
-    <div className="rounded-2xl border border-line bg-surface shadow-sm overflow-hidden">
+    <div data-fuel={r.id}
+      onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerLeave={onUp}
+      onClick={() => { if (held.current) { held.current = false; return; } if (armed) setArmed(false); }}
+      className={`rounded-2xl border bg-surface shadow-sm overflow-hidden transition ${armed ? 'border-teal-400 ring-2 ring-teal-400/50 animate-wiggle' : 'border-line'} ${dragging ? 'opacity-60 scale-[1.02]' : ''}`}
+      style={{ touchAction: 'pan-y' }}>
       <div className="p-3.5">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
@@ -108,11 +177,22 @@ function RouteCard({ r, tripCur, onEdit, onDelete }: { r: FuelRoute; tripCur: st
               {shortPlace(from)} → {shortPlace(to)}{stops > 0 ? ` · ${stops} stop${stops > 1 ? 's' : ''}` : ''}
             </p>
             {r.vehicle && <p className="text-[11px] text-muted mt-0.5 truncate">🚗 {r.year ? `${r.year} ` : ''}{r.vehicle}</p>}
+            {r.departTime && (
+              <p className="text-[12px] font-semibold text-teal-600 mt-1 flex items-center gap-1">
+                <Clock size={12} /> {fmtTime(r.departTime)}{arr ? ` → ${fmtTime(arr.time)}` : ''}
+                {r.departDate ? <span className="text-muted font-normal">· {fmtDate(r.departDate)}{arr && arr.date !== r.departDate ? ` → ${fmtDate(arr.date)}` : ''}</span> : null}
+              </p>
+            )}
           </div>
-          <div className="flex items-center gap-1 flex-shrink-0">
-            <button onClick={onEdit} className="p-1.5 rounded-lg text-muted active:bg-slate-100" aria-label="Edit"><Pencil size={15} /></button>
-            <button onClick={onDelete} className="p-1.5 rounded-lg text-muted active:bg-red-50" aria-label="Delete"><Trash2 size={15} /></button>
-          </div>
+          {armed ? (
+            <div className="flex items-center gap-1.5 flex-shrink-0" data-no-drag>
+              <span className="text-slate-300" aria-hidden><GripVertical size={16} /></span>
+              <button onClick={ev => { ev.stopPropagation(); setArmed(false); onEdit(); }} aria-label="Edit route"
+                className="w-9 h-9 rounded-full bg-teal-500 text-white flex items-center justify-center shadow active:scale-90"><Pencil size={16} /></button>
+              <button onClick={ev => { ev.stopPropagation(); setArmed(false); onDelete(); }} aria-label="Delete route"
+                className="w-9 h-9 rounded-full bg-red-50 text-sunset flex items-center justify-center active:scale-90"><Trash2 size={16} /></button>
+            </div>
+          ) : null}
         </div>
         <div className="mt-2.5 grid grid-cols-3 gap-2 text-center">
           <Stat label="Distance" value={`${Math.round(total)} km`} sub={`${Math.round(total / KM_PER_MI)} mi`} />
@@ -122,7 +202,7 @@ function RouteCard({ r, tripCur, onEdit, onDelete }: { r: FuelRoute; tripCur: st
           <Stat label="Cost" value={money1(tripCost, tripCur)} sub={r.priceCurrency !== tripCur ? money1(priceCost, r.priceCurrency) : undefined} accent />
         </div>
         {tripCost > 0 && (
-          <button onClick={addExpense} disabled={logged}
+          <button data-no-drag onClick={ev => { ev.stopPropagation(); if (armed) { setArmed(false); return; } addExpense(); }} disabled={logged}
             className={`w-full mt-2.5 py-2 rounded-xl text-sm font-semibold flex items-center justify-center gap-1.5 border transition ${
               logged ? 'bg-emerald-50 border-emerald-200 text-emerald-600' : 'bg-white border-line text-slate-600 active:bg-slate-50'}`}>
             {logged ? <><Check size={14} /> Added to expenses</> : <><Coins size={14} /> Add to expenses</>}

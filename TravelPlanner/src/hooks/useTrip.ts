@@ -127,7 +127,8 @@ export const useSuggestions = () =>
 
 export const useFuelRoutes = () =>
   activeRows<FuelRoute>(useLiveQuery(() => db.fuelroutes.toArray(), []))
-    .sort((a, b) => (b.updatedAt).localeCompare(a.updatedAt));
+    // Manual order first (when set); newest-first for anything unordered.
+    .sort((a, b) => (a.order ?? Infinity) - (b.order ?? Infinity) || b.updatedAt.localeCompare(a.updatedAt));
 
 export const useChangelog = () =>
   (useLiveQuery(() => db.changelog.orderBy('at').reverse().limit(200).toArray(), []) ?? []) as ChangeLogEntry[];

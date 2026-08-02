@@ -310,6 +310,7 @@ export interface FuelRoute extends SyncMeta {
   durationMin?: number;         // one-way driving time in minutes (from the router)
   departDate?: ISODate;         // when the drive starts (optional; used for the timeline)
   departTime?: ISOTime;         // departure time → arrival is departure + durationMin
+  order?: number;               // manual position in the Fuel & Driving list
   notes: string;
 }
 

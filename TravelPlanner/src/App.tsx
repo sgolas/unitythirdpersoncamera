@@ -3,6 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from './db/database';
 import { initCurrency } from './lib/currency';
 import { Onboarding } from './components/Onboarding';
+import { MePrompt } from './components/MePrompt';
 import { WelcomeSlides } from './components/WelcomeSlides';
 import {
   LayoutDashboard, CalendarRange, Wallet, LayoutGrid,
@@ -122,6 +123,7 @@ export default function App() {
 
   const content = (
     <>
+      <MePrompt />
       {view === 'dashboard'     && <DashboardTab onNavigate={go} />}
       {view === 'overview'      && <TripOverviewTab />}
       {view === 'timeline'      && <TimelineTab />}

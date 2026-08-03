@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { Trash2, Phone, Car, Plus, X, Loader, ImageIcon } from 'lucide-react';
+import { Phone, Car, Plus, X, Loader, ImageIcon, MapPin, Ticket, User, Wallet, FileText } from 'lucide-react';
 import { useCarRentals, useTrip } from '../../hooks/useTrip';
 import { put, remove } from '../../db/database';
 import type { CarRental } from '../../types';
@@ -9,6 +9,8 @@ import { TabHeader, Sheet, Field, TextInput, TextArea, FormFooter, Fab, EmptySta
 import { PlaceInput } from '../PlaceInput';
 import { CarNameInput } from '../CarNameInput';
 import { compressToDataUrl } from '../../lib/photoUpload';
+import { ReorderProvider, HoldCard, HoldHint, DetailSheet, DocField, type DetailRow } from '../cardKit';
+import { DocViewer } from '../DocViewer';
 
 export function CarRentalTab() {
   const rentals = useCarRentals();
@@ -16,8 +18,14 @@ export function CarRentalTab() {
   const cur = trip?.tripCurrency ?? 'EUR';
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<CarRental | null>(null);
+  const [viewing, setViewing] = useState<CarRental | null>(null);
+  const [pdfView, setPdfView] = useState<{ name: string; mime?: string; dataUrl: string } | null>(null);
   const [pendingDelete, setPendingDelete] = useState<CarRental | null>(null);
   const [viewer, setViewer] = useState<string | null>(null);
+
+  function reorder(ids: string[]) {
+    ids.forEach((id, i) => { const r = rentals.find(x => x.id === id); if (r && r.order !== i) put<CarRental>({ ...r, order: i }, 'Reordered car rentals', 'update'); });
+  }
 
   return (
     <div className="animate-fadeUp">
@@ -28,19 +36,17 @@ export function CarRentalTab() {
         <EmptyState emoji="🚗" title="No car rentals yet"
           hint="Add a reservation — pickup & drop-off, booking number, cost and receipts" />
       ) : (
-        <div className="px-4 py-4 space-y-3">
+        <div className="px-4 py-4">
+          <HoldHint count={rentals.length} />
+          <ReorderProvider ids={rentals.map(r => r.id)} onReorder={reorder} className="space-y-3">
           {rentals.map(r => (
-            <div key={r.id} onClick={() => setEditing(r)}
-              className="bg-white rounded-2xl p-4 shadow-sm group active:bg-slate-50">
+            <HoldCard key={r.id} id={r.id} accent="#0f766e" hasDoc={!!r.fileData || r.receipts?.length > 0}
+              onView={() => setViewing(r)} onEdit={() => setEditing(r)} onDelete={() => setPendingDelete(r)}>
               <div className="flex items-start justify-between">
                 <div className="min-w-0">
                   <p className="font-bold text-slate-800 truncate flex items-center gap-1.5"><Car size={15} className="text-emerald-600" /> {r.company || 'Car rental'}</p>
                   {r.carType && <p className="text-sm text-emerald-700 font-medium">{r.carType}</p>}
                 </div>
-                <button onClick={ev => { ev.stopPropagation(); setPendingDelete(r); }}
-                  className="p-1 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-red-50 flex-shrink-0">
-                  <Trash2 size={14} className="text-slate-300 hover:text-sunset" />
-                </button>
               </div>
 
               <div className="flex items-stretch gap-2 mt-3 bg-slate-50 rounded-xl p-2.5">
@@ -66,15 +72,16 @@ export function CarRentalTab() {
               </div>
 
               {r.receipts?.length > 0 && (
-                <div className="flex gap-2 mt-2.5 overflow-x-auto no-scrollbar">
+                <div className="flex gap-2 mt-2.5 overflow-x-auto no-scrollbar" data-no-drag>
                   {r.receipts.map((src, i) => (
                     <img key={i} src={src} alt="" onClick={e => { e.stopPropagation(); setViewer(src); }}
                       className="w-14 h-14 rounded-lg object-cover border border-line flex-shrink-0" />
                   ))}
                 </div>
               )}
-            </div>
+            </HoldCard>
           ))}
+          </ReorderProvider>
         </div>
       )}
 
@@ -83,6 +90,29 @@ export function CarRentalTab() {
       {(adding || editing) && (
         <RentalSheet rental={editing} currency={cur} onClose={() => { setAdding(false); setEditing(null); }} />
       )}
+      {viewing && (() => {
+        const rows: DetailRow[] = [
+          { icon: <MapPin size={16} />, label: 'Pick-up', value: `${viewing.pickupLocation || '—'}${viewing.pickupDate ? ` · ${fmtDate(viewing.pickupDate)}${viewing.pickupTime ? ` ${fmtTime(viewing.pickupTime)}` : ''}` : ''}` },
+          { icon: <MapPin size={16} />, label: 'Drop-off', value: viewing.dropoffLocation ? `${viewing.dropoffLocation}${viewing.dropoffDate ? ` · ${fmtDate(viewing.dropoffDate)}${viewing.dropoffTime ? ` ${fmtTime(viewing.dropoffTime)}` : ''}` : ''}` : '' },
+          { icon: <Ticket size={16} />, label: 'Reservation', value: viewing.confirmation },
+          { icon: <User size={16} />, label: 'Driver', value: viewing.driver },
+          { icon: <Phone size={16} />, label: 'Contact', value: viewing.contact },
+          { icon: <Wallet size={16} />, label: 'Cost', value: viewing.cost > 0 ? money(viewing.cost, viewing.costCurrency ?? cur) : '' },
+          { icon: <FileText size={16} />, label: 'Notes', value: viewing.notes },
+          ...(viewing.receipts?.length ? [{ icon: <ImageIcon size={16} />, label: 'Receipts', value: (
+            <span className="flex gap-2 flex-wrap mt-1">{viewing.receipts.map((src, i) => (
+              <img key={i} src={src} alt="" onClick={() => setViewer(src)} className="w-14 h-14 rounded-lg object-cover border border-line" />
+            ))}</span>) } as DetailRow] : []),
+        ];
+        return (
+          <DetailSheet title={`🚗 ${viewing.company || 'Car rental'}`} subtitle={viewing.carType}
+            rows={rows} file={viewing.fileData} fileName={viewing.fileName}
+            onViewDoc={() => viewing.fileData && setPdfView({ name: viewing.fileName || 'rental.pdf', mime: viewing.fileMime, dataUrl: viewing.fileData })}
+            note="Press & hold the card in the list to edit or delete it."
+            onClose={() => setViewing(null)} />
+        );
+      })()}
+      {pdfView && <DocViewer name={pdfView.name} mime={pdfView.mime} dataUrl={pdfView.dataUrl} onClose={() => setPdfView(null)} />}
       {pendingDelete && (
         <ConfirmDelete label={`${pendingDelete.company || 'this rental'}`}
           onCancel={() => setPendingDelete(null)}
@@ -116,6 +146,7 @@ function RentalSheet({ rental, currency, onClose }: { rental: CarRental | null; 
   const [costCurrency, setCostCurrency] = useState(rental?.costCurrency ?? currency);
   const [notes, setNotes] = useState(rental?.notes ?? '');
   const [receipts, setReceipts] = useState<string[]>(rental?.receipts ?? []);
+  const [file, setFile] = useState({ data: rental?.fileData, name: rental?.fileName, mime: rental?.fileMime });
   const [busy, setBusy] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -140,6 +171,7 @@ function RentalSheet({ rental, currency, onClose }: { rental: CarRental | null; 
       dropoffLocation: dropoffLocation.trim(), dropoffDate, dropoffTime,
       confirmation: confirmation.trim(), driver: driver.trim(), contact: contact.trim(),
       cost: parseFloat(cost) || 0, costCurrency, notes: notes.trim(), receipts,
+      order: rental?.order, fileData: file.data, fileName: file.name, fileMime: file.mime,
       updatedAt: '', updatedBy: '',
     }, `${isNew ? 'Added' : 'Updated'} car rental: ${company.trim() || pickupLocation.trim()}`, isNew ? 'create' : 'update');
     onClose();
@@ -193,6 +225,8 @@ function RentalSheet({ rental, currency, onClose }: { rental: CarRental | null; 
         <p className="text-[11px] text-slate-400 mt-1.5">Snap or pick receipt/agreement photos — stored on your device and synced to the group.</p>
       </Field>
 
+      <DocField file={file.data} fileName={file.name}
+        onPick={(data, name, mime) => setFile({ data, name, mime })} onClear={() => setFile({ data: undefined, name: undefined, mime: undefined })} />
       <Field label="Notes"><TextArea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Insurance, fuel policy, extras…" /></Field>
     </Sheet>
   );

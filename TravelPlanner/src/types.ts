@@ -62,6 +62,10 @@ export interface ChecklistItem extends SyncMeta {
   assignedTo: string | null; // travelerId or null
   dueDate: ISODate | '';
   notes?: string;
+  order?: number;            // manual position in the list
+  fileData?: string;         // attached document (PDF or photo), synced
+  fileName?: string;
+  fileMime?: string;
 }
 
 /* ── 3. Transport Details ───────────────────────────────────── */
@@ -87,6 +91,10 @@ export interface Transport extends SyncMeta {
   cost: number;
   costCurrency?: string;     // currency of `cost` (defaults to trip currency)
   notes: string;
+  order?: number;            // manual position in the list
+  fileData?: string;         // attached ticket/confirmation (PDF or photo), synced
+  fileName?: string;
+  fileMime?: string;
 }
 
 /* ── 4. Accommodation Details ───────────────────────────────── */
@@ -127,6 +135,10 @@ export interface CarRental extends SyncMeta {
   costCurrency?: string;        // currency of `cost` (defaults to trip currency)
   notes: string;
   receipts: string[];           // receipt/document photos as data: URIs (local-first, synced)
+  order?: number;               // manual position in the list
+  fileData?: string;            // attached agreement/voucher (PDF or photo), synced
+  fileName?: string;
+  fileMime?: string;
 }
 
 /* ── 5. Expense Tracker ─────────────────────────────────────── */
@@ -183,6 +195,10 @@ export interface ItineraryEvent extends SyncMeta {
   cost: number;          // estimated / actual cost for this activity
   costCurrency?: string; // currency of `cost` (defaults to trip currency)
   notes: string;
+  order?: number;        // manual position in the list
+  fileData?: string;     // attached document (PDF or photo), synced
+  fileName?: string;
+  fileMime?: string;
 }
 
 /* ── 7. Budget Tracker ──────────────────────────────────────── */

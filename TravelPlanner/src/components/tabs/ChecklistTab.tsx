@@ -1,9 +1,11 @@
 import { useState } from 'react';
-import { Trash2 } from 'lucide-react';
+import { User, FileText } from 'lucide-react';
 import { useChecklist, useTravelers, travelerName } from '../../hooks/useTrip';
 import { put, remove } from '../../db/database';
 import type { ChecklistItem, ChecklistCategory } from '../../types';
 import { TabHeader, Sheet, Field, TextInput, TextArea, Select, FormFooter, Fab, EmptyState, ConfirmDelete } from '../ui';
+import { ReorderProvider, HoldCard, DetailSheet, DocField, type DetailRow } from '../cardKit';
+import { DocViewer } from '../DocViewer';
 
 const CATS: { key: ChecklistCategory; label: string; emoji: string }[] = [
   { key: 'packing',        label: 'Packing',        emoji: '🧳' },
@@ -21,6 +23,8 @@ export function ChecklistTab() {
   const travelers = useTravelers();
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<ChecklistItem | null>(null);
+  const [viewing, setViewing] = useState<ChecklistItem | null>(null);
+  const [pdfView, setPdfView] = useState<{ name: string; mime?: string; dataUrl: string } | null>(null);
   const [pendingDelete, setPendingDelete] = useState<ChecklistItem | null>(null);
 
   const doneCount = items.filter(i => i.done).length;
@@ -28,6 +32,9 @@ export function ChecklistTab() {
   async function toggle(item: ChecklistItem) {
     await put({ ...item, done: !item.done },
       `${item.done ? 'Unchecked' : 'Checked'}: ${item.text}`);
+  }
+  function reorderCat(ids: string[]) {
+    ids.forEach((id, i) => { const it = items.find(x => x.id === id); if (it && it.order !== i) put<ChecklistItem>({ ...it, order: i }, 'Reordered checklist', 'update'); });
   }
 
   return (
@@ -53,16 +60,18 @@ export function ChecklistTab() {
               <p className="text-xs font-bold text-slate-400 uppercase tracking-wide px-1 mb-1.5">
                 {cat.emoji} {cat.label}
               </p>
-              <div className="space-y-2">
+              <ReorderProvider ids={items.filter(i => i.category === cat.key).map(i => i.id)} onReorder={reorderCat} className="space-y-2">
                 {items.filter(i => i.category === cat.key).map(item => (
-                  <div key={item.id} className="bg-white rounded-2xl px-4 py-3 shadow-sm flex items-center gap-3 group">
-                    <button onClick={() => toggle(item)}
+                  <HoldCard key={item.id} id={item.id} accent="#059669" hasDoc={!!item.fileData}
+                    onView={() => setViewing(item)} onEdit={() => setEditing(item)} onDelete={() => setPendingDelete(item)}
+                    className="!px-4 !py-3 flex items-center gap-3">
+                    <button data-no-drag onClick={e => { e.stopPropagation(); toggle(item); }}
                       className={`w-6 h-6 rounded-lg border-2 flex-shrink-0 flex items-center justify-center transition ${
                         item.done ? 'bg-mint border-mint text-white' : 'border-slate-300'
                       }`}>
                       {item.done && '✓'}
                     </button>
-                    <div className="flex-1 min-w-0" onClick={() => setEditing(item)}>
+                    <div className="flex-1 min-w-0 pr-16">
                       <p className={`font-medium ${item.done ? 'line-through text-slate-400' : 'text-slate-800'}`}>{item.text}</p>
                       {item.notes && (
                         <p className="text-xs text-slate-500 mt-0.5 whitespace-pre-wrap break-words">{item.notes}</p>
@@ -71,13 +80,9 @@ export function ChecklistTab() {
                         <p className="text-xs text-slate-400 mt-0.5">{travelerName(travelers, item.assignedTo)}</p>
                       )}
                     </div>
-                    <button onClick={() => setPendingDelete(item)}
-                      className="p-1.5 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-red-50 transition">
-                      <Trash2 size={15} className="text-slate-300 hover:text-sunset" />
-                    </button>
-                  </div>
+                  </HoldCard>
                 ))}
-              </div>
+              </ReorderProvider>
             </div>
           ))}
         </div>
@@ -86,6 +91,23 @@ export function ChecklistTab() {
       <Fab onClick={() => setAdding(true)} label="Add item" />
 
       {(adding || editing) && <ItemSheet item={editing} travelers={travelers} onClose={() => { setAdding(false); setEditing(null); }} />}
+      {viewing && (() => {
+        const c = catMeta(viewing.category);
+        const rows: DetailRow[] = [
+          { label: 'Category', value: `${c.emoji} ${c.label}` },
+          { label: 'Status', value: viewing.done ? '✅ Done' : '⬜ Not done' },
+          { icon: <User size={16} />, label: 'Assigned to', value: viewing.assignedTo ? travelerName(travelers, viewing.assignedTo) : 'Everyone' },
+          { icon: <FileText size={16} />, label: 'Notes', value: viewing.notes || '' },
+        ];
+        return (
+          <DetailSheet title={viewing.text} rows={rows}
+            file={viewing.fileData} fileName={viewing.fileName}
+            onViewDoc={() => viewing.fileData && setPdfView({ name: viewing.fileName || 'document.pdf', mime: viewing.fileMime, dataUrl: viewing.fileData })}
+            note="Tap the box to check it off · press & hold to edit, delete or drag."
+            onClose={() => setViewing(null)} />
+        );
+      })()}
+      {pdfView && <DocViewer name={pdfView.name} mime={pdfView.mime} dataUrl={pdfView.dataUrl} onClose={() => setPdfView(null)} />}
       {pendingDelete && (
         <ConfirmDelete label={`"${pendingDelete.text}"`}
           onCancel={() => setPendingDelete(null)}
@@ -100,6 +122,7 @@ function ItemSheet({ item, travelers, onClose }: { item: ChecklistItem | null; t
   const [category, setCategory] = useState<ChecklistCategory>(item?.category ?? 'packing');
   const [assignedTo, setAssignedTo] = useState(item?.assignedTo ?? '');
   const [notes, setNotes] = useState(item?.notes ?? '');
+  const [file, setFile] = useState({ data: item?.fileData, name: item?.fileName, mime: item?.fileMime });
 
   async function save() {
     if (!text.trim()) return;
@@ -107,7 +130,8 @@ function ItemSheet({ item, travelers, onClose }: { item: ChecklistItem | null; t
     await put<ChecklistItem>({
       kind: 'checklist', id: item?.id ?? crypto.randomUUID(), text: text.trim(), category,
       done: item?.done ?? false, assignedTo: assignedTo || null, dueDate: item?.dueDate ?? '',
-      notes: notes.trim(),
+      notes: notes.trim(), order: item?.order,
+      fileData: file.data, fileName: file.name, fileMime: file.mime,
       updatedAt: '', updatedBy: '',
     }, `${isNew ? 'Added' : 'Updated'} ${catMeta(category).label.toLowerCase()} item: ${text.trim()}`, isNew ? 'create' : 'update');
     onClose();
@@ -129,6 +153,9 @@ function ItemSheet({ item, travelers, onClose }: { item: ChecklistItem | null; t
         </Select>
       </Field>
       <Field label="Notes"><TextArea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Confirmation #, details, links…" /></Field>
+      <DocField file={file.data} fileName={file.name}
+        onPick={(data, name, mime) => setFile({ data, name, mime })}
+        onClear={() => setFile({ data: undefined, name: undefined, mime: undefined })} />
     </Sheet>
   );
 }

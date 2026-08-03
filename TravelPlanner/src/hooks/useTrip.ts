@@ -21,12 +21,17 @@ export const useTravelers = () =>
 export const useDocuments = () =>
   activeRows<TravelDocument>(useLiveQuery(() => db.documents.toArray(), []));
 
+// A manual `order` (set by dragging) wins; otherwise the natural sort applies.
+const byOrder = <T extends { order?: number }>(fallback: (a: T, b: T) => number) =>
+  (a: T, b: T) => (a.order ?? Infinity) - (b.order ?? Infinity) || fallback(a, b);
+
 export const useChecklist = () =>
-  activeRows<ChecklistItem>(useLiveQuery(() => db.checklist.toArray(), []));
+  activeRows<ChecklistItem>(useLiveQuery(() => db.checklist.toArray(), []))
+    .sort(byOrder(() => 0));
 
 export const useTransport = () =>
   activeRows<Transport>(useLiveQuery(() => db.transport.toArray(), []))
-    .sort((a, b) => (a.departDate + a.departTime).localeCompare(b.departDate + b.departTime));
+    .sort(byOrder((a, b) => (a.departDate + a.departTime).localeCompare(b.departDate + b.departTime)));
 
 export const useAccommodation = () =>
   activeRows<Accommodation>(useLiveQuery(() => db.accommodation.toArray(), []))
@@ -34,7 +39,7 @@ export const useAccommodation = () =>
 
 export const useCarRentals = () =>
   activeRows<CarRental>(useLiveQuery(() => db.carrentals.toArray(), []))
-    .sort((a, b) => a.pickupDate.localeCompare(b.pickupDate));
+    .sort(byOrder((a, b) => a.pickupDate.localeCompare(b.pickupDate)));
 
 export const useActivities = () =>
   activeRows<Activity>(useLiveQuery(() => db.activities.toArray(), []))
@@ -103,7 +108,7 @@ export function useSpend(): SpendItem[] {
 
 export const useItinerary = () =>
   activeRows<ItineraryEvent>(useLiveQuery(() => db.itinerary.toArray(), []))
-    .sort((a, b) => (a.date + a.startTime).localeCompare(b.date + b.startTime));
+    .sort(byOrder((a, b) => (a.date + a.startTime).localeCompare(b.date + b.startTime)));
 
 export const useBudget = () =>
   activeRows<BudgetLine>(useLiveQuery(() => db.budget.toArray(), []));

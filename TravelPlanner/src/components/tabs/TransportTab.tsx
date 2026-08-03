@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Trash2, ArrowRight } from 'lucide-react';
+import { ArrowRight, MapPin, Ticket, Armchair, Wallet, FileText } from 'lucide-react';
 import { useTransport, useTrip } from '../../hooks/useTrip';
 import { put, remove } from '../../db/database';
 import type { Transport, TransportMode } from '../../types';
@@ -7,6 +7,8 @@ import { money } from '../../types';
 import { fmtDate, fmtTime, todayStr } from '../../utils/format';
 import { TabHeader, Sheet, Field, TextInput, TextArea, Select, FormFooter, Fab, EmptyState, ConfirmDelete, CostField } from '../ui';
 import { PlaceInput } from '../PlaceInput';
+import { ReorderProvider, HoldCard, HoldHint, DetailSheet, DocField, type DetailRow } from '../cardKit';
+import { DocViewer } from '../DocViewer';
 import { watchableFlights, getFlightStatuses, statusKey, statusLabel, lookupFlight, type FlightStatus } from '../../lib/flightStatus';
 import { PLACES_ENDPOINT } from '../../lib/config';
 import { Search, Loader } from 'lucide-react';
@@ -34,8 +36,14 @@ export function TransportTab() {
   const cur = trip?.tripCurrency ?? 'EUR';
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<Transport | null>(null);
+  const [viewing, setViewing] = useState<Transport | null>(null);
+  const [pdfView, setPdfView] = useState<{ name: string; mime?: string; dataUrl: string } | null>(null);
   const [pendingDelete, setPendingDelete] = useState<Transport | null>(null);
   const [statuses, setStatuses] = useState<Record<string, FlightStatus>>({});
+
+  function reorder(ids: string[]) {
+    ids.forEach((id, i) => { const l = legs.find(x => x.id === id); if (l && l.order !== i) put<Transport>({ ...l, order: i }, 'Reordered transport', 'update'); });
+  }
 
   // Live status for flights departing soon (needs a flight number set).
   const watchCount = watchableFlights(legs).length;
@@ -55,45 +63,44 @@ export function TransportTab() {
       {legs.length === 0 ? (
         <EmptyState emoji="✈️" title="No transport yet" hint="Add flights, trains, ferries & transfers" />
       ) : (
-        <div className="px-4 py-4 space-y-3">
-          {legs.map(l => {
-            const m = modeMeta(l.mode);
-            const st = l.mode === 'flight' && l.flightNumber ? statuses[statusKey(l)] : undefined;
-            const lab = st ? statusLabel(st) : null;
-            return (
-              <div key={l.id} onClick={() => setEditing(l)}
-                className="bg-white rounded-2xl p-4 shadow-sm group active:bg-slate-50">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-bold text-slate-400">
-                    {m.emoji} {m.label.toUpperCase()}{l.flightNumber ? ` ${l.flightNumber.toUpperCase()}` : ''}{l.provider ? ` · ${l.provider}` : ''}
-                    {lab && <span className={`ml-2 px-2 py-0.5 rounded-full font-bold ${TONE_CLS[lab.tone]}`}>{lab.text}</span>}
-                  </span>
-                  <button onClick={ev => { ev.stopPropagation(); setPendingDelete(l); }}
-                    className="p-1 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-red-50">
-                    <Trash2 size={14} className="text-slate-300 hover:text-sunset" />
-                  </button>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="flex-1">
-                    <p className="font-bold text-slate-800">{l.fromPlace || '—'}</p>
-                    <p className="text-xs text-slate-400">{fmtDate(l.departDate)}{l.departTime ? ` · ${fmtTime(l.departTime)}` : ''}</p>
+        <div className="px-4 py-4">
+          <HoldHint count={legs.length} />
+          <ReorderProvider ids={legs.map(l => l.id)} onReorder={reorder} className="space-y-3">
+            {legs.map(l => {
+              const m = modeMeta(l.mode);
+              const st = l.mode === 'flight' && l.flightNumber ? statuses[statusKey(l)] : undefined;
+              const lab = st ? statusLabel(st) : null;
+              return (
+                <HoldCard key={l.id} id={l.id} accent="#0284c7" hasDoc={!!l.fileData}
+                  onView={() => setViewing(l)} onEdit={() => setEditing(l)} onDelete={() => setPendingDelete(l)}>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-bold text-slate-400">
+                      {m.emoji} {m.label.toUpperCase()}{l.flightNumber ? ` ${l.flightNumber.toUpperCase()}` : ''}{l.provider ? ` · ${l.provider}` : ''}
+                      {lab && <span className={`ml-2 px-2 py-0.5 rounded-full font-bold ${TONE_CLS[lab.tone]}`}>{lab.text}</span>}
+                    </span>
                   </div>
-                  <ArrowRight size={18} className="text-sky flex-shrink-0" />
-                  <div className="flex-1 text-right">
-                    <p className="font-bold text-slate-800">{l.toPlace || '—'}</p>
-                    <p className="text-xs text-slate-400">{l.arriveDate ? fmtDate(l.arriveDate) : ''}{l.arriveTime ? ` · ${fmtTime(l.arriveTime)}` : ''}</p>
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1">
+                      <p className="font-bold text-slate-800">{l.fromPlace || '—'}</p>
+                      <p className="text-xs text-slate-400">{fmtDate(l.departDate)}{l.departTime ? ` · ${fmtTime(l.departTime)}` : ''}</p>
+                    </div>
+                    <ArrowRight size={18} className="text-sky flex-shrink-0" />
+                    <div className="flex-1 text-right">
+                      <p className="font-bold text-slate-800">{l.toPlace || '—'}</p>
+                      <p className="text-xs text-slate-400">{l.arriveDate ? fmtDate(l.arriveDate) : ''}{l.arriveTime ? ` · ${fmtTime(l.arriveTime)}` : ''}</p>
+                    </div>
                   </div>
-                </div>
-                {(l.confirmation || l.seat || l.cost > 0) && (
-                  <div className="flex gap-3 mt-3 pt-3 border-t border-slate-100 text-xs text-slate-500">
-                    {l.confirmation && <span>🎫 {l.confirmation}</span>}
-                    {l.seat && <span>💺 {l.seat}</span>}
-                    {l.cost > 0 && <span className="ml-auto font-semibold text-slate-700">{money(l.cost, l.costCurrency ?? cur)}</span>}
-                  </div>
-                )}
-              </div>
-            );
-          })}
+                  {(l.confirmation || l.seat || l.cost > 0) && (
+                    <div className="flex gap-3 mt-3 pt-3 border-t border-slate-100 text-xs text-slate-500">
+                      {l.confirmation && <span>🎫 {l.confirmation}</span>}
+                      {l.seat && <span>💺 {l.seat}</span>}
+                      {l.cost > 0 && <span className="ml-auto font-semibold text-slate-700">{money(l.cost, l.costCurrency ?? cur)}</span>}
+                    </div>
+                  )}
+                </HoldCard>
+              );
+            })}
+          </ReorderProvider>
         </div>
       )}
 
@@ -102,6 +109,28 @@ export function TransportTab() {
       {(adding || editing) && (
         <TransportSheet leg={editing} currency={cur} onClose={() => { setAdding(false); setEditing(null); }} />
       )}
+      {viewing && (() => {
+        const m = modeMeta(viewing.mode);
+        const rows: DetailRow[] = [
+          { icon: <MapPin size={16} />, label: 'From', value: viewing.fromPlace },
+          { icon: <MapPin size={16} />, label: 'To', value: viewing.toPlace },
+          { label: 'Depart', value: `${fmtDate(viewing.departDate)}${viewing.departTime ? ` · ${fmtTime(viewing.departTime)}` : ''}` },
+          { label: 'Arrive', value: viewing.arriveDate ? `${fmtDate(viewing.arriveDate)}${viewing.arriveTime ? ` · ${fmtTime(viewing.arriveTime)}` : ''}` : '' },
+          { icon: <Ticket size={16} />, label: 'Confirmation', value: viewing.confirmation },
+          { icon: <Armchair size={16} />, label: 'Seat', value: viewing.seat },
+          { icon: <Wallet size={16} />, label: 'Cost', value: viewing.cost > 0 ? money(viewing.cost, viewing.costCurrency ?? cur) : '' },
+          { icon: <FileText size={16} />, label: 'Notes', value: viewing.notes },
+        ];
+        return (
+          <DetailSheet title={`${m.emoji} ${viewing.fromPlace} → ${viewing.toPlace}`}
+            subtitle={`${m.label}${viewing.flightNumber ? ` · ${viewing.flightNumber}` : ''}${viewing.provider ? ` · ${viewing.provider}` : ''}`}
+            rows={rows} file={viewing.fileData} fileName={viewing.fileName}
+            onViewDoc={() => viewing.fileData && setPdfView({ name: viewing.fileName || 'ticket.pdf', mime: viewing.fileMime, dataUrl: viewing.fileData })}
+            note="Press & hold the card in the list to edit or delete it."
+            onClose={() => setViewing(null)} />
+        );
+      })()}
+      {pdfView && <DocViewer name={pdfView.name} mime={pdfView.mime} dataUrl={pdfView.dataUrl} onClose={() => setPdfView(null)} />}
       {pendingDelete && (
         <ConfirmDelete label={`${modeMeta(pendingDelete.mode).label} ${pendingDelete.fromPlace} → ${pendingDelete.toPlace}`}
           onCancel={() => setPendingDelete(null)}
@@ -161,6 +190,7 @@ function TransportSheet({ leg, currency, onClose }: { leg: Transport | null; cur
   const [cost, setCost] = useState(leg ? String(leg.cost || '') : '');
   const [costCurrency, setCostCurrency] = useState(leg?.costCurrency ?? currency);
   const [notes, setNotes] = useState(leg?.notes ?? '');
+  const [file, setFile] = useState({ data: leg?.fileData, name: leg?.fileName, mime: leg?.fileMime });
   const [looking, setLooking] = useState(false);
   const [lookupMsg, setLookupMsg] = useState('');
   // Remembered from the lookup so the arrival date follows whenever the
@@ -227,6 +257,7 @@ function TransportSheet({ leg, currency, onClose }: { leg: Transport | null; cur
       departDate, departTime, arriveDate, arriveTime,
       confirmation: confirmation.trim(), seat: seat.trim(),
       cost: parseFloat(cost) || 0, costCurrency, notes: notes.trim(),
+      order: leg?.order, fileData: file.data, fileName: file.name, fileMime: file.mime,
       updatedAt: '', updatedBy: '',
     }, `${isNew ? 'Added' : 'Updated'} ${mode}: ${fromPlace.trim()} → ${toPlace.trim()}`, isNew ? 'create' : 'update');
     onClose();
@@ -278,6 +309,8 @@ function TransportSheet({ leg, currency, onClose }: { leg: Transport | null; cur
         <Field label="Seat"><TextInput value={seat} onChange={e => setSeat(e.target.value)} placeholder="Optional" /></Field>
       </div>
       <CostField value={cost} onChange={setCost} currency={costCurrency} onCurrencyChange={setCostCurrency} />
+      <DocField file={file.data} fileName={file.name}
+        onPick={(data, name, mime) => setFile({ data, name, mime })} onClear={() => setFile({ data: undefined, name: undefined, mime: undefined })} />
       <Field label="Notes"><TextArea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Optional" /></Field>
     </Sheet>
   );

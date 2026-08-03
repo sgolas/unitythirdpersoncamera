@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Trash2, MapPin, Clock } from 'lucide-react';
+import { MapPin, Clock, CalendarDays, Wallet, FileText } from 'lucide-react';
 import { useItinerary, useTrip, useTransport, useAccommodation, useCarRentals } from '../../hooks/useTrip';
 import { put, remove } from '../../db/database';
 import type { ItineraryEvent } from '../../types';
@@ -8,6 +8,8 @@ import { convert } from '../../lib/currency';
 import { fmtDate, fmtTime, fmtDateLong, dateRange, todayStr } from '../../utils/format';
 import { TabHeader, Sheet, Field, TextInput, TextArea, Select, FormFooter, Fab, EmptyState, ConfirmDelete, CostField } from '../ui';
 import { PlaceInput } from '../PlaceInput';
+import { ReorderProvider, HoldCard, HoldHint, DetailSheet, DocField, type DetailRow } from '../cardKit';
+import { DocViewer } from '../DocViewer';
 
 const CATS = [
   { key: 'sightseeing', label: 'Sightseeing', emoji: '📸', color: '#a78bfa' },
@@ -45,8 +47,14 @@ export function ItineraryTab({ onNavigate }: { onNavigate?: (v: TimelineNav) => 
   });
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<ItineraryEvent | null>(null);
+  const [viewing, setViewing] = useState<ItineraryEvent | null>(null);
+  const [pdfView, setPdfView] = useState<{ name: string; mime?: string; dataUrl: string } | null>(null);
   const [pendingDelete, setPendingDelete] = useState<ItineraryEvent | null>(null);
   const [mode, setMode] = useState<'day' | 'all'>('day');
+
+  function reorderDay(ids: string[]) {
+    ids.forEach((id, i) => { const e = events.find(x => x.id === id); if (e && e.order !== i) put<ItineraryEvent>({ ...e, order: i }, 'Reordered itinerary', 'update'); });
+  }
 
   const cur = trip?.tripCurrency ?? 'EUR';
   const days = trip ? dateRange(trip.startDate, trip.endDate) : [];
@@ -128,8 +136,12 @@ export function ItineraryTab({ onNavigate }: { onNavigate?: (v: TimelineNav) => 
           {dayEvents.length === 0 ? (
             <EmptyState emoji="🗓️" title="Nothing planned" hint="Add activities for this day" />
           ) : (
-            <div className="px-4 py-2 space-y-2">
-              {dayEvents.map(ev => <EventCard key={ev.id} ev={ev} cur={cur} onEdit={() => setEditing(ev)} onDelete={() => setPendingDelete(ev)} />)}
+            <div className="px-4 py-2">
+              <HoldHint count={dayEvents.length} />
+              <ReorderProvider ids={dayEvents.map(e => e.id)} onReorder={reorderDay} className="space-y-2">
+                {dayEvents.map(ev => <EventCard key={ev.id} ev={ev} cur={cur}
+                  onView={() => setViewing(ev)} onEdit={() => setEditing(ev)} onDelete={() => setPendingDelete(ev)} />)}
+              </ReorderProvider>
             </div>
           )}
         </>
@@ -151,7 +163,7 @@ export function ItineraryTab({ onNavigate }: { onNavigate?: (v: TimelineNav) => 
                   <div className="space-y-2">
                     {items.map(it => (
                       <TimelineCard key={it.id} it={it} cur={cur}
-                        onTap={() => { if (it.ev) setEditing(it.ev); else if (it.nav) onNavigate?.(it.nav); }} />
+                        onTap={() => { if (it.ev) setViewing(it.ev); else if (it.nav) onNavigate?.(it.nav); }} />
                     ))}
                   </div>
                 </div>
@@ -166,6 +178,24 @@ export function ItineraryTab({ onNavigate }: { onNavigate?: (v: TimelineNav) => 
       {(adding || editing) && (
         <EventSheet event={editing} defaultDate={selectedDate} currency={cur} onClose={() => { setAdding(false); setEditing(null); }} />
       )}
+      {viewing && (() => {
+        const m = catMeta(viewing.category as Cat);
+        const rows: DetailRow[] = [
+          { icon: <CalendarDays size={16} />, label: 'When', value: `${fmtDate(viewing.date)}${viewing.startTime ? ` · ${fmtTime(viewing.startTime)}${viewing.endTime ? ` – ${fmtTime(viewing.endTime)}` : ''}` : ''}` },
+          { icon: <MapPin size={16} />, label: 'Location', value: viewing.place },
+          { label: 'Category', value: `${m.emoji} ${m.label}` },
+          { icon: <Wallet size={16} />, label: 'Cost', value: viewing.cost > 0 ? money(viewing.cost, viewing.costCurrency ?? cur) : '' },
+          { icon: <FileText size={16} />, label: 'Notes', value: viewing.notes },
+        ];
+        return (
+          <DetailSheet title={`${m.emoji} ${viewing.title}`} rows={rows}
+            file={viewing.fileData} fileName={viewing.fileName}
+            onViewDoc={() => viewing.fileData && setPdfView({ name: viewing.fileName || 'document.pdf', mime: viewing.fileMime, dataUrl: viewing.fileData })}
+            note="Press & hold the event in the day list to edit or delete it."
+            onClose={() => setViewing(null)} />
+        );
+      })()}
+      {pdfView && <DocViewer name={pdfView.name} mime={pdfView.mime} dataUrl={pdfView.dataUrl} onClose={() => setPdfView(null)} />}
       {pendingDelete && (
         <ConfirmDelete label={`"${pendingDelete.title}"`}
           onCancel={() => setPendingDelete(null)}
@@ -191,19 +221,14 @@ function TimelineCard({ it, cur, onTap }: { it: TL; cur: string; onTap: () => vo
   );
 }
 
-function EventCard({ ev, cur, onEdit, onDelete }: { ev: ItineraryEvent; cur: string; onEdit: () => void; onDelete: () => void }) {
+function EventCard({ ev, cur, onView, onEdit, onDelete }: { ev: ItineraryEvent; cur: string; onView: () => void; onEdit: () => void; onDelete: () => void }) {
   const m = catMeta(ev.category as Cat);
   return (
-    <div onClick={onEdit} className="bg-white rounded-2xl shadow-sm flex overflow-hidden group active:bg-slate-50">
+    <HoldCard id={ev.id} accent={m.color} hasDoc={!!ev.fileData} onView={onView} onEdit={onEdit} onDelete={onDelete}
+      className="!p-0 overflow-hidden flex">
       <div className="w-1.5 flex-shrink-0" style={{ backgroundColor: m.color }} />
       <div className="flex-1 p-3.5 min-w-0">
-        <div className="flex items-start justify-between gap-2">
-          <p className="font-semibold text-slate-800">{m.emoji} {ev.title}</p>
-          <button onClick={e => { e.stopPropagation(); onDelete(); }}
-            className="p-1 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-red-50 flex-shrink-0">
-            <Trash2 size={14} className="text-slate-300 hover:text-sunset" />
-          </button>
-        </div>
+        <p className="font-semibold text-slate-800 pr-16">{m.emoji} {ev.title}</p>
         <div className="flex items-center gap-3 mt-1 flex-wrap text-xs text-slate-500">
           {(ev.startTime || ev.endTime) && (
             <span className="flex items-center gap-1"><Clock size={11} />{fmtTime(ev.startTime)}{ev.endTime ? ` – ${fmtTime(ev.endTime)}` : ''}</span>
@@ -213,7 +238,7 @@ function EventCard({ ev, cur, onEdit, onDelete }: { ev: ItineraryEvent; cur: str
         </div>
         {ev.notes && <p className="text-xs text-slate-400 mt-1.5">{ev.notes}</p>}
       </div>
-    </div>
+    </HoldCard>
   );
 }
 
@@ -227,6 +252,7 @@ function EventSheet({ event, defaultDate, currency, onClose }: { event: Itinerar
   const [cost, setCost] = useState(event ? String(event.cost || '') : '');
   const [costCurrency, setCostCurrency] = useState(event?.costCurrency ?? currency);
   const [notes, setNotes] = useState(event?.notes ?? '');
+  const [file, setFile] = useState({ data: event?.fileData, name: event?.fileName, mime: event?.fileMime });
 
   async function save() {
     if (!title.trim()) return;
@@ -235,6 +261,7 @@ function EventSheet({ event, defaultDate, currency, onClose }: { event: Itinerar
       kind: 'itinerary', id: event?.id ?? crypto.randomUUID(),
       title: title.trim(), date, startTime, endTime, place: place.trim(), category,
       cost: parseFloat(cost) || 0, costCurrency, notes: notes.trim(),
+      order: event?.order, fileData: file.data, fileName: file.name, fileMime: file.mime,
       updatedAt: '', updatedBy: '',
     }, `${isNew ? 'Added' : 'Updated'} event: ${title.trim()} on ${fmtDate(date)}`, isNew ? 'create' : 'update');
     onClose();
@@ -256,6 +283,8 @@ function EventSheet({ event, defaultDate, currency, onClose }: { event: Itinerar
       </Field>
       <Field label="Location"><PlaceInput value={place} onChange={setPlace} placeholder="Search a location…" /></Field>
       <CostField value={cost} onChange={setCost} currency={costCurrency} onCurrencyChange={setCostCurrency} />
+      <DocField file={file.data} fileName={file.name}
+        onPick={(data, name, mime) => setFile({ data, name, mime })} onClear={() => setFile({ data: undefined, name: undefined, mime: undefined })} />
       <Field label="Notes"><TextArea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Optional" /></Field>
     </Sheet>
   );

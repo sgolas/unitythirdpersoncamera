@@ -145,3 +145,23 @@ export function travelerName(travelers: Traveler[], id: string | null): string {
   if (!id) return 'Everyone';
   return travelers.find(t => t.id === id)?.name ?? 'Unknown';
 }
+
+/** Distinct, high-contrast accent colours auto-assigned to travelers in order. */
+export const TRAVELER_COLORS = [
+  '#2563eb', '#e11d48', '#059669', '#d97706', '#7c3aed',
+  '#0891b2', '#db2777', '#65a30d', '#ea580c', '#4f46e5',
+];
+export const UNASSIGNED_COLOR = '#94a3b8'; // slate-400, for "Everyone"/unknown
+
+/** The colour for a traveler: their chosen colour, else a stable palette pick. */
+export function travelerColor(travelers: Traveler[], id: string | null | undefined): string {
+  if (!id) return UNASSIGNED_COLOR;
+  const i = travelers.findIndex(t => t.id === id);
+  if (i < 0) return UNASSIGNED_COLOR;
+  return travelers[i].color || TRAVELER_COLORS[i % TRAVELER_COLORS.length];
+}
+
+/** The colour of whoever created a record (for tinting its title), or undefined. */
+export function authorColor(travelers: Traveler[], rec: { authorId?: string }): string | undefined {
+  return rec.authorId ? travelerColor(travelers, rec.authorId) : undefined;
+}

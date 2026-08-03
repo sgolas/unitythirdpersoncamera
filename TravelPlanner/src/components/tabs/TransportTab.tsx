@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { ArrowRight, MapPin, Ticket, Armchair, Wallet, FileText } from 'lucide-react';
-import { useTransport, useTrip } from '../../hooks/useTrip';
+import { useTransport, useTrip, useTravelers, authorColor } from '../../hooks/useTrip';
 import { put, remove } from '../../db/database';
 import type { Transport, TransportMode } from '../../types';
 import { money } from '../../types';
@@ -32,6 +32,7 @@ const TONE_CLS = {
 
 export function TransportTab() {
   const legs = useTransport();
+  const travelers = useTravelers();
   const trip = useTrip();
   const cur = trip?.tripCurrency ?? 'EUR';
   const [adding, setAdding] = useState(false);
@@ -81,12 +82,12 @@ export function TransportTab() {
                   </div>
                   <div className="flex items-center gap-2">
                     <div className="flex-1">
-                      <p className="font-bold text-slate-800">{l.fromPlace || '—'}</p>
+                      <p className="font-bold text-slate-800" style={{ color: authorColor(travelers, l) }}>{l.fromPlace || '—'}</p>
                       <p className="text-xs text-slate-400">{fmtDate(l.departDate)}{l.departTime ? ` · ${fmtTime(l.departTime)}` : ''}</p>
                     </div>
                     <ArrowRight size={18} className="text-sky flex-shrink-0" />
                     <div className="flex-1 text-right">
-                      <p className="font-bold text-slate-800">{l.toPlace || '—'}</p>
+                      <p className="font-bold text-slate-800" style={{ color: authorColor(travelers, l) }}>{l.toPlace || '—'}</p>
                       <p className="text-xs text-slate-400">{l.arriveDate ? fmtDate(l.arriveDate) : ''}{l.arriveTime ? ` · ${fmtTime(l.arriveTime)}` : ''}</p>
                     </div>
                   </div>

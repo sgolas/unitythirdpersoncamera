@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import {
   useTrip, useSpend, useTransport, useAccommodation,
-  useItinerary, useTravelers, useBudgetSheets,
+  useItinerary, useTravelers, useBudgetSheets, travelerColor,
 } from '../../hooks/useTrip';
 import { money, moneyHome, sumExpenses, countsToBudget } from '../../types';
 import type { Transport, Accommodation, ExpenseCategory } from '../../types';
@@ -19,7 +19,6 @@ import { sectionByKey } from '../../lib/sections';
 import { useShortcuts } from '../../lib/dashShortcuts';
 import { useUnreadChat } from '../../lib/chatUnread';
 
-const AV_COLORS = ['#0ea5e9', '#8b5cf6', '#f59e0b', '#10b981', '#fb7185', '#6366f1'];
 const CAT_META: Record<ExpenseCategory, { label: string; color: string }> = {
   food:       { label: 'Food',       color: '#fb7185' },
   transport:  { label: 'Transport',  color: '#38bdf8' },
@@ -107,7 +106,7 @@ export function DashboardTab({ onNavigate }: { onNavigate: (v: any) => void }) {
               <div className="flex" aria-label="Travellers">
                 {travelers.slice(0, 5).map((t, i) => (
                   <span key={t.id} className="w-6 h-6 rounded-full grid place-items-center text-[10px] font-bold text-white overflow-hidden"
-                    style={{ marginLeft: i ? -7 : 0, border: '2px solid var(--hero-2)', background: t.photo ? undefined : AV_COLORS[i % AV_COLORS.length] }}>
+                    style={{ marginLeft: i ? -7 : 0, border: '2px solid var(--hero-2)', background: t.photo ? undefined : travelerColor(travelers, t.id) }}>
                     {t.photo ? <img src={t.photo} alt="" className="w-full h-full object-cover" /> : (t.emoji || t.name.charAt(0))}
                   </span>
                 ))}

@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { MapPin, Clock, CalendarDays, Wallet, FileText } from 'lucide-react';
-import { useItinerary, useTrip, useTransport, useAccommodation, useCarRentals } from '../../hooks/useTrip';
+import { useItinerary, useTrip, useTransport, useAccommodation, useCarRentals, useTravelers, authorColor } from '../../hooks/useTrip';
 import { put, remove } from '../../db/database';
 import type { ItineraryEvent } from '../../types';
 import { money } from '../../types';
@@ -38,6 +38,7 @@ export function ItineraryTab({ onNavigate }: { onNavigate?: (v: TimelineNav) => 
   const transport = useTransport();
   const stays = useAccommodation();
   const cars = useCarRentals();
+  const travelers = useTravelers();
   const trip = useTrip();
   const [selectedDate, setSelectedDate] = useState(() => {
     const today = todayStr();
@@ -139,7 +140,7 @@ export function ItineraryTab({ onNavigate }: { onNavigate?: (v: TimelineNav) => 
             <div className="px-4 py-2">
               <HoldHint count={dayEvents.length} />
               <ReorderProvider ids={dayEvents.map(e => e.id)} onReorder={reorderDay} className="space-y-2">
-                {dayEvents.map(ev => <EventCard key={ev.id} ev={ev} cur={cur}
+                {dayEvents.map(ev => <EventCard key={ev.id} ev={ev} cur={cur} author={authorColor(travelers, ev)}
                   onView={() => setViewing(ev)} onEdit={() => setEditing(ev)} onDelete={() => setPendingDelete(ev)} />)}
               </ReorderProvider>
             </div>
@@ -221,14 +222,14 @@ function TimelineCard({ it, cur, onTap }: { it: TL; cur: string; onTap: () => vo
   );
 }
 
-function EventCard({ ev, cur, onView, onEdit, onDelete }: { ev: ItineraryEvent; cur: string; onView: () => void; onEdit: () => void; onDelete: () => void }) {
+function EventCard({ ev, cur, author, onView, onEdit, onDelete }: { ev: ItineraryEvent; cur: string; author?: string; onView: () => void; onEdit: () => void; onDelete: () => void }) {
   const m = catMeta(ev.category as Cat);
   return (
     <HoldCard id={ev.id} accent={m.color} hasDoc={!!ev.fileData} onView={onView} onEdit={onEdit} onDelete={onDelete}
       className="!p-0 overflow-hidden flex">
       <div className="w-1.5 flex-shrink-0" style={{ backgroundColor: m.color }} />
       <div className="flex-1 p-3.5 min-w-0">
-        <p className="font-semibold text-slate-800 pr-16">{m.emoji} {ev.title}</p>
+        <p className="font-semibold text-slate-800 pr-16" style={{ color: author }}>{m.emoji} {ev.title}</p>
         <div className="flex items-center gap-3 mt-1 flex-wrap text-xs text-slate-500">
           {(ev.startTime || ev.endTime) && (
             <span className="flex items-center gap-1"><Clock size={11} />{fmtTime(ev.startTime)}{ev.endTime ? ` – ${fmtTime(ev.endTime)}` : ''}</span>

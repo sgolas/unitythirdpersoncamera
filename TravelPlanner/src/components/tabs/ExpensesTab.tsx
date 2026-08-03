@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useSpend, useTravelers, useTrip, travelerName, useBudgetSheets } from '../../hooks/useTrip';
+import { useSpend, useTravelers, useTrip, travelerName, useBudgetSheets, authorColor } from '../../hooks/useTrip';
 import { ChevronRight, AlertTriangle, Trash2 } from 'lucide-react';
 import { put, remove } from '../../db/database';
 import type { Expense, ExpenseCategory } from '../../types';
@@ -81,7 +81,7 @@ export function ExpensesTab({ onNavigate }: { onNavigate?: (v: any) => void } = 
                   style={{ backgroundColor: m.color + '20' }}>{m.emoji}</span>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-baseline gap-2">
-                    <p className="font-semibold text-slate-800 truncate flex-1 min-w-0">{e.title}</p>
+                    <p className="font-semibold text-slate-800 truncate flex-1 min-w-0" style={{ color: authorColor(travelers, e) }}>{e.title}</p>
                     <p className="font-bold text-slate-900 whitespace-nowrap flex-shrink-0">{moneyHome(e.amount, e.currency)}</p>
                   </div>
                   <div className="flex items-baseline gap-2 mt-0.5">

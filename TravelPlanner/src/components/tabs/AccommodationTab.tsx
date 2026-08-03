@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Trash2, MapPin, Phone, FileUp, Loader2, Pencil, FileText, Ticket, Wallet } from 'lucide-react';
-import { useAccommodation, useTrip } from '../../hooks/useTrip';
+import { useAccommodation, useTrip, useTravelers, authorColor } from '../../hooks/useTrip';
 import { put, remove } from '../../db/database';
 import type { Accommodation } from '../../types';
 import { money } from '../../types';
@@ -14,6 +14,7 @@ import { DocViewer } from '../DocViewer';
 
 export function AccommodationTab() {
   const stays = useAccommodation();
+  const travelers = useTravelers();
   const trip = useTrip();
   const cur = trip?.tripCurrency ?? 'EUR';
   const [adding, setAdding] = useState(false);
@@ -90,7 +91,7 @@ export function AccommodationTab() {
         <div className="px-4 py-4 space-y-3">
           <p className="text-[11px] text-slate-400 text-center -mt-1 mb-1">Tap to view · press &amp; hold to edit or delete</p>
           {stays.map(s => (
-            <StayCard key={s.id} stay={s} currency={cur}
+            <StayCard key={s.id} stay={s} currency={cur} author={authorColor(travelers, s)}
               onView={() => setViewing(s)} onEdit={() => setEditing(s)} onDelete={() => setPendingDelete(s)} />
           ))}
         </div>
@@ -124,8 +125,8 @@ export function AccommodationTab() {
 
 /* A stay card: tap to view; press-and-hold to reveal edit / delete actions
  * (the same "hold like you're moving it" gesture used elsewhere in the app). */
-function StayCard({ stay: s, currency, onView, onEdit, onDelete }: {
-  stay: Accommodation; currency: string;
+function StayCard({ stay: s, currency, author, onView, onEdit, onDelete }: {
+  stay: Accommodation; currency: string; author?: string;
   onView: () => void; onEdit: () => void; onDelete: () => void;
 }) {
   const [armed, setArmed] = useState(false);
@@ -159,7 +160,7 @@ function StayCard({ stay: s, currency, onView, onEdit, onDelete }: {
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="font-bold text-slate-800 truncate">{s.name}</p>
+          <p className="font-bold text-slate-800 truncate" style={{ color: author }}>{s.name}</p>
           {s.city && <p className="text-sm text-grape font-medium">{s.city}</p>}
         </div>
         {armed ? (

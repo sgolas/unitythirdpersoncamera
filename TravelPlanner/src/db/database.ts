@@ -139,6 +139,14 @@ export function setDeviceName(name: string) {
   localStorage.setItem(DEVICE_KEY, name.trim() || 'This device');
 }
 
+/* Which traveler is using this device — powers "colour by who added it". */
+const ME_KEY = 'trip.meTravelerId';
+export function getMyTravelerId(): string { return localStorage.getItem(ME_KEY) ?? ''; }
+export function setMyTravelerId(id: string) {
+  if (id) localStorage.setItem(ME_KEY, id); else localStorage.removeItem(ME_KEY);
+  try { window.dispatchEvent(new Event('me-changed')); } catch { /* SSR */ }
+}
+
 /* Signal that data changed so the on-device backup can re-save (debounced). */
 function notifyChange() {
   try { window.dispatchEvent(new Event('trip-data-changed')); } catch { /* SSR */ }
@@ -166,10 +174,15 @@ export async function put<T extends AnyRecord>(
   summary: string,
   action: ChangeAction = 'update',
 ): Promise<T> {
+  // Stamp the author once, on creation, so a title can be coloured by who
+  // added it. Never overwrite an existing author on later edits.
+  const me = getMyTravelerId();
+  const authorId = (record as AnyRecord).authorId ?? (action === 'create' && me ? me : undefined);
   const stamped = {
     ...record,
     updatedAt: new Date().toISOString(),
     updatedBy: getDeviceName(),
+    ...(authorId ? { authorId } : {}),
   } as T;
   await tableFor(record.kind).put(stamped);
   await logChange({

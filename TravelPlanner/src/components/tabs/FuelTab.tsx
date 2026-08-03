@@ -3,7 +3,7 @@ import {
   MapPin, Plus, X, Trash2, Navigation, Loader2, RefreshCw, Coins, Route as RouteIcon,
   CornerDownRight, Repeat, Pencil, Check, Clock, GripVertical,
 } from 'lucide-react';
-import { useFuelRoutes, useTrip, useTravelers } from '../../hooks/useTrip';
+import { useFuelRoutes, useTrip, useTravelers, authorColor } from '../../hooks/useTrip';
 import { put, remove } from '../../db/database';
 import type { FuelRoute, FuelWaypoint, EconomyUnit, FuelType, Expense } from '../../types';
 import { money1, CURRENCY_SYMBOLS } from '../../types';
@@ -29,6 +29,7 @@ const fuelMeta = (k: FuelType) => FUEL_TYPES.find(f => f.key === k)!;
 
 export function FuelTab() {
   const routes = useFuelRoutes();
+  const travelers = useTravelers();
   const trip = useTrip();
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<FuelRoute | null>(null);
@@ -86,7 +87,7 @@ export function FuelTab() {
             {routes.length > 1 && <p className="text-[11px] text-slate-400 text-center mb-2">Press &amp; hold a route to edit, delete or drag it</p>}
             <div ref={listRef} className="space-y-3">
               {routes.map(r => (
-                <RouteCard key={r.id} r={r} tripCur={cur} dragging={dragId === r.id}
+                <RouteCard key={r.id} r={r} tripCur={cur} dragging={dragId === r.id} author={authorColor(travelers, r)}
                   onEdit={() => setEditing(r)} onDelete={() => setPendingDelete(r)} onDragStart={e => beginDrag(r.id, e)} />
               ))}
             </div>
@@ -118,8 +119,8 @@ function costOf(r: FuelRoute, tripCur: string) {
   return { total, litres, priceCost, tripCost: convert(priceCost, r.priceCurrency, tripCur) };
 }
 
-function RouteCard({ r, tripCur, dragging, onEdit, onDelete, onDragStart }: {
-  r: FuelRoute; tripCur: string; dragging: boolean;
+function RouteCard({ r, tripCur, dragging, author, onEdit, onDelete, onDragStart }: {
+  r: FuelRoute; tripCur: string; dragging: boolean; author?: string;
   onEdit: () => void; onDelete: () => void; onDragStart: (e: React.PointerEvent) => void;
 }) {
   const { total, litres, priceCost, tripCost } = costOf(r, tripCur);
@@ -170,7 +171,7 @@ function RouteCard({ r, tripCur, dragging, onEdit, onDelete, onDragStart }: {
           <div className="min-w-0">
             <p className="font-bold text-content flex items-center gap-1.5">
               <span>{fuelMeta(r.fuelType).emoji}</span>
-              <span className="truncate">{r.name || 'Drive'}</span>
+              <span className="truncate" style={{ color: author }}>{r.name || 'Drive'}</span>
               {r.roundTrip && <Repeat size={14} className="text-teal-500 flex-shrink-0" />}
             </p>
             <p className="text-[12px] text-muted mt-0.5 truncate">

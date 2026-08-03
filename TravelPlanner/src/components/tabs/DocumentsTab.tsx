@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react';
 import { Trash2, Camera, AlertTriangle, ImagePlus, X, FileText, Eye, Download } from 'lucide-react';
-import { useDocuments, useTravelers, travelerName } from '../../hooks/useTrip';
+import { useDocuments, useTravelers, travelerName, authorColor } from '../../hooks/useTrip';
 import { put, remove } from '../../db/database';
 import type { TravelDocument, DocType } from '../../types';
 import { fmtDate, daysUntil } from '../../utils/format';
@@ -72,7 +72,7 @@ export function DocumentsTab() {
                       : <span className="text-2xl">{m.emoji}</span>}
                 </button>
                 <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-slate-800 truncate">{d.title}</p>
+                  <p className="font-semibold text-slate-800 truncate" style={{ color: authorColor(travelers, d) }}>{d.title}</p>
                   <p className="text-xs text-slate-400">
                     {m.label}{d.travelerId ? ` · ${travelerName(travelers, d.travelerId)}` : ''}
                   </p>

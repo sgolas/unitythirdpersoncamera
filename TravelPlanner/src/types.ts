@@ -15,6 +15,7 @@ export interface SyncMeta {
   id: string;
   updatedAt: ISOStamp;   // last modification time
   updatedBy: string;     // device name that made the change
+  authorId?: string;     // traveler id of whoever first created the record ("me")
   deleted?: boolean;     // tombstone
 }
 
@@ -25,6 +26,7 @@ export interface Traveler extends SyncMeta {
   role: 'adult' | 'child';
   emoji: string;         // avatar emoji (fallback when no photo)
   photo?: string;        // optional profile-picture URL (uploaded like trip photos)
+  color?: string;        // hex accent colour used everywhere this person appears
 }
 
 /* ── 1. Travel Documents ────────────────────────────────────── */

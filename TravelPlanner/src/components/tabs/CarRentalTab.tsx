@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { Phone, Car, Plus, X, Loader, ImageIcon, MapPin, Ticket, User, Wallet, FileText } from 'lucide-react';
-import { useCarRentals, useTrip } from '../../hooks/useTrip';
+import { useCarRentals, useTrip, useTravelers, authorColor } from '../../hooks/useTrip';
 import { put, remove } from '../../db/database';
 import type { CarRental } from '../../types';
 import { money } from '../../types';
@@ -14,6 +14,7 @@ import { DocViewer } from '../DocViewer';
 
 export function CarRentalTab() {
   const rentals = useCarRentals();
+  const travelers = useTravelers();
   const trip = useTrip();
   const cur = trip?.tripCurrency ?? 'EUR';
   const [adding, setAdding] = useState(false);
@@ -44,7 +45,7 @@ export function CarRentalTab() {
               onView={() => setViewing(r)} onEdit={() => setEditing(r)} onDelete={() => setPendingDelete(r)}>
               <div className="flex items-start justify-between">
                 <div className="min-w-0">
-                  <p className="font-bold text-slate-800 truncate flex items-center gap-1.5"><Car size={15} className="text-emerald-600" /> {r.company || 'Car rental'}</p>
+                  <p className="font-bold text-slate-800 truncate flex items-center gap-1.5" style={{ color: authorColor(travelers, r) }}><Car size={15} className="text-emerald-600" /> {r.company || 'Car rental'}</p>
                   {r.carType && <p className="text-sm text-emerald-700 font-medium">{r.carType}</p>}
                 </div>
               </div>

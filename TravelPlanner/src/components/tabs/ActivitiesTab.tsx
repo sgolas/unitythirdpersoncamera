@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Trash2, MapPin, Clock, FileUp, Loader2, Pencil, FileText, Ticket, Wallet, Tag } from 'lucide-react';
-import { useActivities, useTrip, useBudgetSheets } from '../../hooks/useTrip';
+import { useActivities, useTrip, useBudgetSheets, useTravelers, authorColor } from '../../hooks/useTrip';
 import { put, remove } from '../../db/database';
 import type { Activity, BudgetSheet, TripMeta } from '../../types';
 import { money } from '../../types';
@@ -20,6 +20,7 @@ import { DocViewer } from '../DocViewer';
  */
 export function ActivitiesTab() {
   const activities = useActivities();
+  const travelers = useTravelers();
   const trip = useTrip();
   const sheets = useBudgetSheets();
   const cur = trip?.tripCurrency ?? 'EUR';
@@ -107,7 +108,7 @@ export function ActivitiesTab() {
         <div className="px-4 py-4 space-y-3">
           <p className="text-[11px] text-slate-400 text-center -mt-1 mb-1">Tap to view · press &amp; hold to edit or delete</p>
           {activities.map(a => (
-            <ActivityCard key={a.id} activity={a} currency={cur}
+            <ActivityCard key={a.id} activity={a} currency={cur} author={authorColor(travelers, a)}
               onView={() => setViewing(a)} onEdit={() => setEditing(a)} onDelete={() => setPendingDelete(a)} />
           ))}
         </div>
@@ -150,8 +151,8 @@ function whenLabel(a: Activity): string {
 }
 
 /* Card: tap to view; press-and-hold to reveal edit / delete actions. */
-function ActivityCard({ activity: a, currency, onView, onEdit, onDelete }: {
-  activity: Activity; currency: string;
+function ActivityCard({ activity: a, currency, author, onView, onEdit, onDelete }: {
+  activity: Activity; currency: string; author?: string;
   onView: () => void; onEdit: () => void; onDelete: () => void;
 }) {
   const [armed, setArmed] = useState(false);
@@ -183,7 +184,7 @@ function ActivityCard({ activity: a, currency, onView, onEdit, onDelete }: {
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="font-bold text-slate-800 truncate">{a.title}</p>
+          <p className="font-bold text-slate-800 truncate" style={{ color: author }}>{a.title}</p>
           {a.provider && <p className="text-sm text-teal-600 font-medium flex items-center gap-1"><Tag size={12} /> {a.provider}</p>}
         </div>
         {armed ? (

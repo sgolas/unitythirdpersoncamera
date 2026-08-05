@@ -136,7 +136,7 @@ function RouteCard({ r, tripCur, dragging, author, onEdit, onDelete, onDragStart
     start.current = { x: e.clientX, y: e.clientY };
     held.current = false;
     clearTimer();
-    timer.current = window.setTimeout(() => { held.current = true; setArmed(true); }, 450);
+    timer.current = window.setTimeout(() => { held.current = true; setArmed(true); }, 3000); // 3s hold to edit
   }
   function onMove(e: React.PointerEvent) {
     if (armed || !start.current) return;

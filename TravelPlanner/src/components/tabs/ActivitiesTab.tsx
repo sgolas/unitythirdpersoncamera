@@ -166,7 +166,7 @@ function ActivityCard({ activity: a, currency, author, onView, onEdit, onDelete 
     start.current = { x: e.clientX, y: e.clientY };
     held.current = false;
     clearTimer();
-    timer.current = window.setTimeout(() => { held.current = true; setArmed(true); }, 450);
+    timer.current = window.setTimeout(() => { held.current = true; setArmed(true); }, 3000); // 3s hold to edit
   }
   function onMove(e: React.PointerEvent) {
     if (!start.current) return;

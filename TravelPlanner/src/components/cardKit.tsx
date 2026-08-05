@@ -13,6 +13,9 @@ import { Pencil, Trash2, GripVertical, FileText, Paperclip, X } from 'lucide-rea
 import { Sheet } from './ui';
 import { readFileAsDataUrl, compressImageToDataUrl, approxBytes, MAX_ATTACH_BYTES, isPdf } from '../lib/attachments';
 
+/** How long to hold a card before it arms for edit/drag (checking the box stays instant). */
+export const HOLD_MS = 3000;
+
 /* ── Reorder coordination (list-level) ──────────────────────── */
 interface Ctx {
   armedId: string | null;
@@ -44,7 +47,7 @@ export function ReorderProvider({ ids, onReorder, className, children }: {
     if (armedId === id) { drag.current = { id, startY: e.clientY, moved: false }; return; }
     hold.current = { id, x: e.clientX, y: e.clientY };
     clearHold();
-    holdTimer.current = window.setTimeout(() => { setArmedId(id); suppress.current = true; hold.current = null; }, 450);
+    holdTimer.current = window.setTimeout(() => { setArmedId(id); suppress.current = true; hold.current = null; }, HOLD_MS);
   }
   useEffect(() => {
     function move(e: PointerEvent) {

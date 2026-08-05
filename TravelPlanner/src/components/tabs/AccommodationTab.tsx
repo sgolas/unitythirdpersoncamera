@@ -141,7 +141,7 @@ function StayCard({ stay: s, currency, author, onView, onEdit, onDelete }: {
     start.current = { x: e.clientX, y: e.clientY };
     held.current = false;
     clearTimer();
-    timer.current = window.setTimeout(() => { held.current = true; setArmed(true); }, 450);
+    timer.current = window.setTimeout(() => { held.current = true; setArmed(true); }, 3000); // 3s hold to edit
   }
   function onMove(e: React.PointerEvent) {
     // Cancel the long-press if the finger moves (i.e. the list is scrolling).

@@ -1,0 +1,44 @@
+{
+  "name": "trip-planner-desktop",
+  "version": "1.0.34",
+  "private": true,
+  "description": "Trip Planner desktop companion (Windows)",
+  "author": "sgolas",
+  "main": "main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win",
+    "dist:portable": "electron-builder --win portable"
+  },
+  "dependencies": {
+    "electron-updater": "^6.3.9"
+  },
+  "devDependencies": {
+    "electron": "^31.7.6",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.sgolas.tripplanner",
+    "productName": "Trip Planner",
+    "directories": { "output": "release" },
+    "files": ["main.cjs", "preload.cjs"],
+    "extraResources": [{ "from": "../dist", "to": "app" }],
+    "publish": [
+      { "provider": "github", "owner": "sgolas", "repo": "sylsrepo", "releaseType": "release" }
+    ],
+    "win": {
+      "target": ["nsis", "portable"],
+      "icon": "build/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "artifactName": "TripPlanner-Setup.${ext}"
+    },
+    "portable": {
+      "artifactName": "TripPlanner-Portable.${ext}"
+    }
+  }
+}

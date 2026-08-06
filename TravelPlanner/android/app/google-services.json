@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "140090113471",
+    "project_id": "com-sgolas-tripplanner",
+    "storage_bucket": "com-sgolas-tripplanner.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:140090113471:android:fb498ed3eac2fe05e3350a",
+        "android_client_info": {
+          "package_name": "com.sgolas.tripplanner"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAoQ5CrqQ-RG9CklRwRo3Olkh_qYRkgNAE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

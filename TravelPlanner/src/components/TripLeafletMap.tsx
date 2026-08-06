@@ -1,0 +1,413 @@
+import { useEffect, useRef, useState } from 'react';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
+import type { Stop } from './tripMap';
+import type { MapPin } from '../types';
+import type { LatLng } from '../lib/geo';
+
+/**
+ * A real, working geographic map (OpenStreetMap data via CARTO tiles) with a
+ * playful cartoonish treatment: saturated "toy" tiles, big rounded emoji pins
+ * with number badges, and a dashed yarn-style route between stops.
+ *
+ * On top of the trip route it also shows:
+ *   • the user's current location (a pulsing "you are here" dot) and zooms
+ *     the map straight in to it, and
+ *   • custom pins the user has dropped — tap a pin to see its info in a little
+ *     bubble, press-and-hold a pin to edit it.
+ * Tapping empty map calls `onMapTap` so the caller can drop a new pin there.
+ *
+ * Place names are geocoded with the free Nominatim service and cached in
+ * localStorage so it only looks each place up once. If nothing can be located
+ * (e.g. offline) and there are no pins or location, the caller falls back to
+ * the illustrated string map.
+ */
+
+const PIN_COLORS = ['#0ea5a3', '#fb7185', '#f59e0b', '#a78bfa', '#38bdf8', '#34d399'];
+const ME_ZOOM = 16;         // street-level zoom when we lock onto current location
+const HOLD_MS = 500;        // press-and-hold duration to trigger edit
+
+/** Escape user-entered text before it goes into Leaflet HTML (pins/popups),
+ *  so a place named like `<img onerror=…>` can't run script. */
+function esc(s: string): string {
+  return String(s ?? '').replace(/[&<>"']/g, c => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string
+  ));
+}
+
+async function lookupOnce(q: string, signal: AbortSignal): Promise<{ lat: number; lng: number } | null> {
+  const r = await fetch(
+    `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(q)}`,
+    { headers: { Accept: 'application/json' }, signal },
+  );
+  const d = await r.json();
+  if (Array.isArray(d) && d[0]) return { lat: parseFloat(d[0].lat), lng: parseFloat(d[0].lon) };
+  return null;
+}
+
+async function geocode(label: string): Promise<{ lat: number; lng: number } | null> {
+  // 'geo2:' — v2 cache; v1 poisoned some labels with cached failures.
+  const key = 'geo2:' + label.toLowerCase().trim();
+  const cached = localStorage.getItem(key);
+  if (cached !== null) return cached === 'null' ? null : JSON.parse(cached);
+
+  // Full addresses ("Milan Malpensa Airport, Ferno, VA 21010, Italy") often
+  // fail as free-text — retry with simpler and simpler versions.
+  const parts = label.split(',').map(s => s.trim()).filter(Boolean);
+  const attempts = [label];
+  if (parts.length > 2) attempts.push(`${parts[0]}, ${parts[parts.length - 1]}`);
+  if (parts.length > 1) attempts.push(parts[0]);
+
+  try {
+    // Never hang forever on a flaky connection.
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 9000);
+    for (const q of attempts) {
+      const v = await lookupOnce(q, ctrl.signal).catch(() => null);
+      if (v) {
+        clearTimeout(timer);
+        localStorage.setItem(key, JSON.stringify(v));
+        return v;
+      }
+    }
+    clearTimeout(timer);
+  } catch { /* offline / blocked */ }
+  localStorage.setItem(key, 'null');
+  return null;
+}
+
+/**
+ * Points along the great-circle arc between two coordinates — the path a
+ * plane actually flies, which draws as the classic curved flight-map line.
+ * Longitudes are kept continuous so the arc never wraps across the map.
+ */
+function greatCircle(a: [number, number], b: [number, number], n = 48): [number, number][] {
+  const rad = Math.PI / 180, deg = 180 / Math.PI;
+  const toVec = (lat: number, lon: number) => [
+    Math.cos(lat * rad) * Math.cos(lon * rad),
+    Math.cos(lat * rad) * Math.sin(lon * rad),
+    Math.sin(lat * rad),
+  ];
+  const v1 = toVec(a[0], a[1]);
+  const v2 = toVec(b[0], b[1]);
+  const dot = Math.min(1, Math.max(-1, v1[0] * v2[0] + v1[1] * v2[1] + v1[2] * v2[2]));
+  const w = Math.acos(dot);
+  if (w < 1e-6) return [a, b];
+  const pts: [number, number][] = [];
+  for (let i = 0; i <= n; i++) {
+    const t = i / n;
+    const s1 = Math.sin((1 - t) * w) / Math.sin(w);
+    const s2 = Math.sin(t * w) / Math.sin(w);
+    const x = s1 * v1[0] + s2 * v2[0];
+    const y = s1 * v1[1] + s2 * v2[1];
+    const z = s1 * v1[2] + s2 * v2[2];
+    const lat = Math.atan2(z, Math.hypot(x, y)) * deg;
+    let lon = Math.atan2(y, x) * deg;
+    // Stay continuous with the previous point (no antimeridian jump).
+    const prev = pts[pts.length - 1];
+    if (prev) { while (lon - prev[1] > 180) lon -= 360; while (lon - prev[1] < -180) lon += 360; }
+    pts.push([lat, lon]);
+  }
+  return pts;
+}
+
+/** The little info bubble shown for a dropped pin. */
+function pinPopupHtml(p: MapPin): string {
+  const note = p.note ? `<br><span class="cmap-pop-note">${esc(p.note)}</span>` : '';
+  return `<b>${esc(p.label || 'Pin')}</b>${note}`;
+}
+
+/** A trip-route stop with its geocoded position (for the drawer list). */
+export interface PlacedStop { stop: Stop; lat: number; lng: number }
+
+interface Props {
+  stops: Stop[];
+  onFallback: () => void;
+  pins?: MapPin[];
+  me?: LatLng | null;
+  onMapTap?: (lat: number, lng: number) => void;
+  onPinEdit?: (pin: MapPin) => void;
+  /** Called once the stops are geocoded, with each one's map position. */
+  onStopsPlaced?: (placed: PlacedStop[]) => void;
+  /** Fly to this spot (e.g. a point picked from the drawer list). `n` makes
+   *  repeated picks of the same point re-trigger the flight. */
+  focus?: { lat: number; lng: number; pin?: MapPin; label?: string; sub?: string; n: number } | null;
+  /** Fit the view to this region (e.g. a country picked from the list). */
+  region?: { bounds: [[number, number], [number, number]]; n: number } | null;
+}
+
+export function TripLeafletMap({ stops, onFallback, pins = [], me = null, onMapTap, onPinEdit, onStopsPlaced, focus = null, region = null }: Props) {
+  const ref = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<L.Map | null>(null);
+  const stopLayer = useRef<L.LayerGroup | null>(null);
+  const pinLayer = useRef<L.LayerGroup | null>(null);
+  const meLayer = useRef<L.LayerGroup | null>(null);
+  const stopPts = useRef<[number, number][]>([]);
+  const didInitialView = useRef(false);
+  const firedFallback = useRef(false);
+  const [loading, setLoading] = useState(true);
+
+  // Keep the latest callbacks reachable from Leaflet event handlers.
+  const tapRef = useRef(onMapTap); tapRef.current = onMapTap;
+  const editRef = useRef(onPinEdit); editRef.current = onPinEdit;
+  const placedRef = useRef(onStopsPlaced); placedRef.current = onStopsPlaced;
+
+  /** Fit the view to the trip route — used only on first load when we don't
+   *  have a current location to zoom into. */
+  function fitStops() {
+    const map = mapRef.current;
+    if (!map || didInitialView.current) return;
+    const all = stopPts.current;
+    if (all.length === 0) return;
+    didInitialView.current = true;
+    if (all.length === 1) map.setView(all[0], 12);
+    else map.fitBounds(L.latLngBounds(all).pad(0.25));
+  }
+
+  /** One tap: zoom out to show the whole trip (stops + pins + you). */
+  function fitEverything() {
+    const map = mapRef.current;
+    if (!map) return;
+    const all: [number, number][] = [...stopPts.current];
+    pins.forEach(p => all.push([p.lat, p.lng]));
+    if (me) all.push([me.lat, me.lng]);
+    if (all.length === 0) return;
+    didInitialView.current = true;
+    if (all.length === 1) map.setView(all[0], 12);
+    else map.fitBounds(L.latLngBounds(all).pad(0.2));
+  }
+
+  // ── Create the map once ─────────────────────────────────────
+  useEffect(() => {
+    if (!ref.current) return;
+    const map = L.map(ref.current, {
+      zoomControl: true, scrollWheelZoom: false, attributionControl: true,
+      zoomDelta: 2, // each +/− tap moves two levels, so zooming out is quick
+    });
+    // "Mulan scroll" look: a warm parchment base (Carto, which also acts as the
+    // fallback wherever an artistic tile fails) with hand-painted watercolor
+    // tiles layered on top. A sepia/ink CSS wash + vignette frame (see the
+    // .mulan-map rules in index.css) push it toward an aged ink-and-wash map.
+    ref.current.classList.add('mulan-map');
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+      maxZoom: 19, subdomains: 'abcd',
+      attribution: '&copy; OpenStreetMap &copy; CARTO',
+    }).addTo(map);
+    L.tileLayer('https://watercolormaps.collection.cooperhewitt.org/tile/watercolor/{z}/{x}/{y}.jpg', {
+      maxNativeZoom: 16, maxZoom: 19,
+      attribution: 'Watercolor tiles by Stamen Design',
+    }).addTo(map);
+    stopLayer.current = L.layerGroup().addTo(map);
+    pinLayer.current = L.layerGroup().addTo(map);
+    meLayer.current = L.layerGroup().addTo(map);
+    // Tap on empty map: if an info bubble is open, just dismiss it; otherwise
+    // offer to drop a new pin there.
+    let popupShowing = false;
+    map.on('popupopen', () => { popupShowing = true; });
+    map.on('popupclose', () => { setTimeout(() => { popupShowing = false; }, 0); });
+    map.on('click', (e: L.LeafletMouseEvent) => {
+      if (popupShowing) { map.closePopup(); return; }
+      tapRef.current?.(e.latlng.lat, e.latlng.lng);
+    });
+    map.setView([20, 0], 2); // neutral start until we have points
+    mapRef.current = map;
+    // Test hook (only when ?e2e=1) so automated checks can read the zoom/center.
+    if (new URLSearchParams(location.search).has('e2e')) (window as unknown as { __map?: L.Map }).__map = map;
+    setTimeout(() => map.invalidateSize(), 200);
+    return () => { map.remove(); mapRef.current = null; };
+  }, []);
+
+  // ── Geocode stops → draw route + numbered pins ──────────────
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const pts: { stop: Stop; lat: number; lng: number }[] = [];
+      for (const s of stops) {
+        // Exact position stored on the record (picked from search) wins;
+        // otherwise geocode the label text.
+        if (s.lat != null && s.lng != null) { pts.push({ stop: s, lat: s.lat, lng: s.lng }); continue; }
+        const g = await geocode(s.label);
+        if (g) pts.push({ stop: s, ...g });
+      }
+      if (cancelled || !mapRef.current || !stopLayer.current) return;
+      placedRef.current?.(pts.map(p => ({ stop: p.stop, lat: p.lat, lng: p.lng })));
+
+      stopLayer.current.clearLayers();
+      const latlngs: [number, number][] = [];
+      pts.forEach((p, i) => {
+        const color = PIN_COLORS[i % PIN_COLORS.length];
+        const html = `<div class="cmap-pin" style="--c:${color}"><span>${esc(p.stop.emoji)}</span><b>${i + 1}</b></div>`;
+        L.marker([p.lat, p.lng], {
+          icon: L.divIcon({ html, className: 'cmap-icon', iconSize: [46, 46], iconAnchor: [23, 23] }),
+        }).addTo(stopLayer.current!).bindPopup(`<b>${esc(p.stop.label)}</b><br>${esc(p.stop.date)}`);
+        latlngs.push([p.lat, p.lng]);
+      });
+      if (latlngs.length > 1) {
+        // Each leg is drawn as a great-circle arc (the way planes fly), with
+        // a direction arrow riding the middle of the curve. The arrow angle
+        // is computed in projected (Mercator) space so it matches the drawn
+        // line at any zoom.
+        const mapNow = mapRef.current!;
+        for (let i = 1; i < latlngs.length; i++) {
+          const curve = greatCircle(latlngs[i - 1], latlngs[i]);
+          L.polyline(curve, { color: '#0f766e', weight: 4, opacity: 0.85, dashArray: '1 12', lineCap: 'round' })
+            .addTo(stopLayer.current!);
+          const m0 = curve[Math.floor(curve.length / 2) - 1];
+          const m1 = curve[Math.floor(curve.length / 2)];
+          const a = mapNow.project(L.latLng(m0), 12);
+          const b = mapNow.project(L.latLng(m1), 12);
+          const ang = Math.atan2(b.y - a.y, b.x - a.x) * 180 / Math.PI;
+          L.marker(m1, {
+            icon: L.divIcon({
+              html: `<div class="cmap-arrow" style="transform:rotate(${ang}deg)">➤</div>`,
+              className: 'cmap-icon', iconSize: [22, 22], iconAnchor: [11, 11],
+            }),
+            interactive: false,
+          }).addTo(stopLayer.current!);
+        }
+      }
+      stopPts.current = latlngs;
+
+      // Fall back to the illustrated string map only if there is a route we
+      // meant to draw but nothing at all could be placed.
+      if (stops.length > 0 && latlngs.length === 0 && pins.length === 0 && !me && !firedFallback.current) {
+        firedFallback.current = true;
+        onFallback();
+        return;
+      }
+      fitStops(); // only fits if we haven't already locked onto a location
+      setLoading(false);
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stops]);
+
+  // ── Draw custom (user-dropped) pins ─────────────────────────
+  useEffect(() => {
+    const layer = pinLayer.current;
+    const map = mapRef.current;
+    if (!layer || !map) return;
+    layer.clearLayers();
+
+    pins.forEach(p => {
+      const html = `<div class="cmap-drop"><span>${esc(p.emoji || '📍')}</span></div>`;
+      const m = L.marker([p.lat, p.lng], {
+        icon: L.divIcon({ html, className: 'cmap-icon', iconSize: [40, 40], iconAnchor: [20, 36] }),
+      }).addTo(layer);
+
+      // Tap shows the info bubble; press-and-hold opens the editor.
+      const popupHtml = pinPopupHtml(p);
+
+      const el = m.getElement();
+      if (!el) {
+        // Fallback: no DOM handle → just show info on click.
+        m.bindPopup(popupHtml, { offset: [0, -30] });
+        return;
+      }
+      // Keep pin taps from reaching the map (which would open the new-pin
+      // sheet and dismiss the bubble we're about to show).
+      L.DomEvent.disableClickPropagation(el);
+      el.addEventListener('contextmenu', e => e.preventDefault()); // Android long-press menu
+
+      let timer: ReturnType<typeof setTimeout> | null = null;
+      let held = false;
+      let moved = false;
+      let sx = 0, sy = 0;
+      const clear = () => { if (timer) { clearTimeout(timer); timer = null; } };
+      const down = (x: number, y: number) => {
+        held = false; moved = false; sx = x; sy = y;
+        if (!editRef.current) return; // read-only (portal): no hold-to-edit
+        clear();
+        timer = setTimeout(() => { held = true; map.closePopup(); editRef.current!(p); }, HOLD_MS);
+      };
+      const move = (x: number, y: number) => {
+        if (Math.hypot(x - sx, y - sy) > 10) { moved = true; clear(); }
+      };
+      const up = () => {
+        clear();
+        if (!held && !moved) {
+          // A genuine tap → show the info bubble.
+          L.popup({ offset: [0, -30], className: 'cmap-pop' })
+            .setLatLng([p.lat, p.lng]).setContent(popupHtml).openOn(map);
+        }
+        held = false;
+      };
+      el.addEventListener('pointerdown', e => down((e as PointerEvent).clientX, (e as PointerEvent).clientY));
+      el.addEventListener('pointermove', e => move((e as PointerEvent).clientX, (e as PointerEvent).clientY));
+      el.addEventListener('pointerup', up);
+      el.addEventListener('pointercancel', clear);
+      el.addEventListener('pointerleave', clear);
+    });
+
+    if (pins.length) setLoading(false);
+    // Don't refit/zoom when pins change — dropping a pin shouldn't move the map.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pins]);
+
+  // ── Draw the "you are here" marker + zoom straight in to it ──
+  useEffect(() => {
+    const layer = meLayer.current;
+    const map = mapRef.current;
+    if (!layer || !map) return;
+    layer.clearLayers();
+    if (me) {
+      L.marker([me.lat, me.lng], {
+        icon: L.divIcon({ html: '<div class="cmap-me"><i></i></div>', className: 'cmap-icon', iconSize: [20, 20], iconAnchor: [10, 10] }),
+        interactive: false, zIndexOffset: 1000,
+      }).addTo(layer);
+      // Auto-zoom in to the current location.
+      didInitialView.current = true;
+      map.setView([me.lat, me.lng], ME_ZOOM, { animate: true });
+      setLoading(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [me]);
+
+  // ── Focus on a picked country/region ────────────────────────
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !region) return;
+    didInitialView.current = true;
+    map.closePopup();
+    map.fitBounds(region.bounds, { padding: [16, 16] });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [region]);
+
+  // ── Fly to a picked pin (from the drawer list) ──────────────
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !focus) return;
+    didInitialView.current = true;
+    map.setView([focus.lat, focus.lng], 17, { animate: true });
+    const html = focus.pin ? pinPopupHtml(focus.pin)
+      : focus.label
+        ? `<b>${esc(focus.label)}</b>${focus.sub ? `<br><span class="cmap-pop-note">${esc(focus.sub)}</span>` : ''}`
+        : '';
+    if (html) {
+      L.popup({ offset: [0, -30], className: 'cmap-pop' })
+        .setLatLng([focus.lat, focus.lng]).setContent(html).openOn(map);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focus]);
+
+  return (
+    <div className="px-3 py-4">
+      <div className="cmap relative">
+        <div ref={ref} className="cmap-canvas" />
+        {/* One-tap zoom-out to the whole trip. */}
+        <button onClick={fitEverything} aria-label="Show whole trip"
+          className="absolute left-3 bottom-3 z-[500] w-11 h-11 rounded-full bg-white shadow-lg border border-slate-200 flex items-center justify-center text-xl active:scale-90 transition">
+          🌍
+        </button>
+        {loading && (
+          <div className="absolute inset-0 flex items-center justify-center bg-slate-100 text-slate-400 z-[500]">
+            Loading your map…
+          </div>
+        )}
+      </div>
+      <p className="text-center text-xs text-slate-400 mt-3">
+        {onMapTap ? 'Tap the map to drop a pin · tap a pin for info · hold to edit' : 'tap a pin for info'}
+      </p>
+    </div>
+  );
+}

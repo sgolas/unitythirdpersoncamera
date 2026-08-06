@@ -1,0 +1,18 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
+
+[dev]
+  command = "vite"
+  port = 8888
+  targetPort = 5173
+  framework = "#custom"
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

@@ -1,0 +1,15 @@
+name = "trip-planner-sgolas"
+pages_build_output_dir = "dist"
+compatibility_date = "2024-11-01"
+
+# Required Pages env for the backend (set as encrypted Pages secrets, NOT here —
+# a bare `wrangler pages deploy` wipes dashboard plaintext vars, which is what
+# once knocked /api/sync offline with "Sync backend not configured"):
+#   SUPABASE_URL, SUPABASE_SERVICE_KEY, AUTH_SALT  → sync / password / backup
+#   GITHUB_TOKEN, GITHUB_REPO, GITHUB_BRANCH       → "Back up to GitHub"
+#   FCM_SERVICE_ACCOUNT, GOOGLE_MAPS_KEY, FLIGHT_API_KEY, TANKERKOENIG_KEY
+# Keeping them as secrets means deploys can't clear them.
+
+# Workers AI binding — powers /api/extract (key-free booking extraction).
+[ai]
+binding = "AI"

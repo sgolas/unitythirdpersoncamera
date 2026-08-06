@@ -1,0 +1,109 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="titleGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#000080"/>
+      <stop offset="100%" stop-color="#1084d0"/>
+    </linearGradient>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#D4D0C8"/>
+      <stop offset="100%" stop-color="#C0C0C0"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Win98 outer frame background -->
+  <rect width="512" height="512" fill="url(#bgGrad)" rx="16" ry="16"/>
+
+  <!-- 3-D bevel: outer highlight (top + left) -->
+  <rect x="0" y="0" width="512" height="10" fill="#FFFFFF" rx="16" ry="0"/>
+  <rect x="0" y="0" width="10" height="512" fill="#FFFFFF" rx="16" ry="0"/>
+  <!-- 3-D bevel: outer shadow (bottom + right) -->
+  <rect x="0" y="502" width="512" height="10" fill="#404040" rx="0" ry="16"/>
+  <rect x="502" y="0" width="10" height="512" fill="#404040" rx="0" ry="16"/>
+
+  <!-- Inner bevel highlight -->
+  <rect x="10" y="10" width="492" height="6" fill="#EFEFEF"/>
+  <rect x="10" y="10" width="6" height="492" fill="#EFEFEF"/>
+  <!-- Inner bevel shadow -->
+  <rect x="10" y="496" width="492" height="6" fill="#808080"/>
+  <rect x="496" y="10" width="6" height="492" fill="#808080"/>
+
+  <!-- Windows 98 title bar -->
+  <rect x="16" y="16" width="480" height="58" fill="url(#titleGrad)" rx="2"/>
+
+  <!-- Title bar icon (mini plane) -->
+  <text x="26" y="53" font-family="Arial" font-size="28" fill="white">✈</text>
+
+  <!-- Title bar text -->
+  <text x="62" y="53" font-family="'Arial', sans-serif" font-size="20" font-weight="bold" fill="white" letter-spacing="0.5">Vacation Budget</text>
+
+  <!-- Window control buttons (Win98 style) -->
+  <!-- Minimize -->
+  <rect x="408" y="22" width="36" height="24" fill="#C0C0C0"/>
+  <rect x="409" y="23" width="34" height="22" fill="#C0C0C0"/>
+  <rect x="409" y="23" width="34" height="1" fill="#FFFFFF"/>
+  <rect x="409" y="23" width="1" height="22" fill="#FFFFFF"/>
+  <rect x="409" y="44" width="34" height="1" fill="#404040"/>
+  <rect x="443" y="23" width="1" height="22" fill="#404040"/>
+  <rect x="414" y="39" width="22" height="3" fill="#000000"/>
+
+  <!-- Maximize -->
+  <rect x="448" y="22" width="36" height="24" fill="#C0C0C0"/>
+  <rect x="449" y="23" width="34" height="1" fill="#FFFFFF"/>
+  <rect x="449" y="23" width="1" height="22" fill="#FFFFFF"/>
+  <rect x="449" y="44" width="34" height="1" fill="#404040"/>
+  <rect x="483" y="23" width="1" height="22" fill="#404040"/>
+  <rect x="452" y="26" width="28" height="16" fill="none" stroke="#000000" stroke-width="2"/>
+  <rect x="452" y="26" width="28" height="4" fill="#000000"/>
+
+  <!-- Close X button (red on hover in 98) -->
+  <rect x="448" y="22" width="0" height="0" fill="none"/>
+
+  <!-- Main content area (inset panel) -->
+  <!-- Sunken inset border -->
+  <rect x="20" y="78" width="472" height="418" fill="#808080"/>
+  <rect x="21" y="79" width="470" height="416" fill="#404040"/>
+  <rect x="22" y="80" width="468" height="414" fill="#DFDFDF"/>
+  <rect x="23" y="81" width="466" height="412" fill="#FFFFFF"/>
+  <!-- Content fill -->
+  <rect x="24" y="82" width="464" height="410" fill="#C0C0C0"/>
+
+  <!-- "SG" main letters — bold, Win98 navy blue -->
+  <text
+    x="256" y="370"
+    font-family="'Arial Black', 'Arial', sans-serif"
+    font-size="240"
+    font-weight="900"
+    fill="#000080"
+    text-anchor="middle"
+    dominant-baseline="auto"
+    letter-spacing="-8"
+  >SG</text>
+
+  <!-- Subtle drop-shadow for depth (Win98 3D text trick) -->
+  <text
+    x="258" y="372"
+    font-family="'Arial Black', 'Arial', sans-serif"
+    font-size="240"
+    font-weight="900"
+    fill="#808080"
+    text-anchor="middle"
+    dominant-baseline="auto"
+    letter-spacing="-8"
+    opacity="0.18"
+  >SG</text>
+  <!-- Re-draw SG on top of shadow -->
+  <text
+    x="256" y="370"
+    font-family="'Arial Black', 'Arial', sans-serif"
+    font-size="240"
+    font-weight="900"
+    fill="#000080"
+    text-anchor="middle"
+    dominant-baseline="auto"
+    letter-spacing="-8"
+  >SG</text>
+
+  <!-- Small tagline text -->
+  <text x="256" y="460" font-family="'Arial', sans-serif" font-size="22" fill="#404040" text-anchor="middle" letter-spacing="3">VACATION BUDGET</text>
+  <text x="256" y="486" font-family="'Arial', sans-serif" font-size="16" fill="#808080" text-anchor="middle" letter-spacing="1">sgolas.com</text>
+</svg>

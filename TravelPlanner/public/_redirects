@@ -1,0 +1,4 @@
+# SPA fallback — everything that isn't a real file or /api/* function
+# falls through to the app shell. Cloudflare Pages Functions (/api/*) take
+# precedence over this rule.
+/*    /index.html   200

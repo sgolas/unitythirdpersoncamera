@@ -3,6 +3,7 @@ import { Trash2, MapPin, Phone, FileUp, Loader2, Pencil, FileText, Ticket, Walle
 import { useAccommodation, useTrip, useTravelers, authorColor } from '../../hooks/useTrip';
 import { put, remove } from '../../db/database';
 import type { Accommodation } from '../../types';
+import { AddressText } from '../AddressText';
 import { money } from '../../types';
 import { fmtDate, todayStr, tripLength } from '../../utils/format';
 import { TabHeader, Sheet, Field, TextInput, TextArea, FormFooter, Fab, EmptyState, ConfirmDelete, CostField } from '../ui';
@@ -228,7 +229,7 @@ function StayDetail({ stay: s, currency, onClose, onViewPdf }: {
             <p className="text-sm font-semibold text-slate-700">{fmtDate(s.checkOut)}</p>
           </div>
         </div>
-        {s.address && <Row icon={<MapPin size={16} />} label="Address" value={s.address} />}
+        {s.address && <Row icon={<MapPin size={16} />} label="Address" value={<AddressText address={s.address} />} />}
         {s.confirmation && <Row icon={<Ticket size={16} />} label="Confirmation" value={s.confirmation} />}
         {s.cost > 0 && <Row icon={<Wallet size={16} />} label="Cost" value={money(s.cost, s.costCurrency ?? currency)} />}
         {s.contact && <Row icon={<Phone size={16} />} label="Contact" value={s.contact} />}

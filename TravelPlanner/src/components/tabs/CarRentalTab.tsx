@@ -3,6 +3,7 @@ import { Phone, Car, Plus, X, Loader, ImageIcon, MapPin, Ticket, User, Wallet, F
 import { useCarRentals, useTrip, useTravelers, authorColor } from '../../hooks/useTrip';
 import { put, remove } from '../../db/database';
 import type { CarRental } from '../../types';
+import { AddressText } from '../AddressText';
 import { money } from '../../types';
 import { fmtDate, fmtTime, todayStr } from '../../utils/format';
 import { TabHeader, Sheet, Field, TextInput, TextArea, FormFooter, Fab, EmptyState, ConfirmDelete, CostField, Overlay } from '../ui';
@@ -92,9 +93,15 @@ export function CarRentalTab() {
         <RentalSheet rental={editing} currency={cur} onClose={() => { setAdding(false); setEditing(null); }} />
       )}
       {viewing && (() => {
+        const puWhen = viewing.pickupDate ? `· ${fmtDate(viewing.pickupDate)}${viewing.pickupTime ? ` ${fmtTime(viewing.pickupTime)}` : ''}` : '';
+        const doWhen = viewing.dropoffDate ? `· ${fmtDate(viewing.dropoffDate)}${viewing.dropoffTime ? ` ${fmtTime(viewing.dropoffTime)}` : ''}` : '';
         const rows: DetailRow[] = [
-          { icon: <MapPin size={16} />, label: 'Pick-up', value: `${viewing.pickupLocation || '—'}${viewing.pickupDate ? ` · ${fmtDate(viewing.pickupDate)}${viewing.pickupTime ? ` ${fmtTime(viewing.pickupTime)}` : ''}` : ''}` },
-          { icon: <MapPin size={16} />, label: 'Drop-off', value: viewing.dropoffLocation ? `${viewing.dropoffLocation}${viewing.dropoffDate ? ` · ${fmtDate(viewing.dropoffDate)}${viewing.dropoffTime ? ` ${fmtTime(viewing.dropoffTime)}` : ''}` : ''}` : '' },
+          { icon: <MapPin size={16} />, label: 'Pick-up', value: viewing.pickupLocation
+              ? <AddressText address={viewing.pickupLocation} suffix={puWhen ? <span className="text-slate-400">{puWhen}</span> : undefined} />
+              : (puWhen || '') },
+          { icon: <MapPin size={16} />, label: 'Drop-off', value: viewing.dropoffLocation
+              ? <AddressText address={viewing.dropoffLocation} suffix={doWhen ? <span className="text-slate-400">{doWhen}</span> : undefined} />
+              : '' },
           { icon: <Ticket size={16} />, label: 'Reservation', value: viewing.confirmation },
           { icon: <User size={16} />, label: 'Driver', value: viewing.driver },
           { icon: <Phone size={16} />, label: 'Contact', value: viewing.contact },

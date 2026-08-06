@@ -3,6 +3,7 @@ import { ArrowRight, MapPin, Ticket, Armchair, Wallet, FileText } from 'lucide-r
 import { useTransport, useTrip, useTravelers, authorColor } from '../../hooks/useTrip';
 import { put, remove } from '../../db/database';
 import type { Transport, TransportMode } from '../../types';
+import { AddressText } from '../AddressText';
 import { money } from '../../types';
 import { fmtDate, fmtTime, todayStr } from '../../utils/format';
 import { TabHeader, Sheet, Field, TextInput, TextArea, Select, FormFooter, Fab, EmptyState, ConfirmDelete, CostField } from '../ui';
@@ -113,8 +114,8 @@ export function TransportTab() {
       {viewing && (() => {
         const m = modeMeta(viewing.mode);
         const rows: DetailRow[] = [
-          { icon: <MapPin size={16} />, label: 'From', value: viewing.fromPlace },
-          { icon: <MapPin size={16} />, label: 'To', value: viewing.toPlace },
+          { icon: <MapPin size={16} />, label: 'From', value: viewing.fromPlace ? <AddressText address={viewing.fromPlace} /> : '' },
+          { icon: <MapPin size={16} />, label: 'To', value: viewing.toPlace ? <AddressText address={viewing.toPlace} /> : '' },
           { label: 'Depart', value: `${fmtDate(viewing.departDate)}${viewing.departTime ? ` · ${fmtTime(viewing.departTime)}` : ''}` },
           { label: 'Arrive', value: viewing.arriveDate ? `${fmtDate(viewing.arriveDate)}${viewing.arriveTime ? ` · ${fmtTime(viewing.arriveTime)}` : ''}` : '' },
           { icon: <Ticket size={16} />, label: 'Confirmation', value: viewing.confirmation },

@@ -3,6 +3,7 @@ import { MapPin, Clock, CalendarDays, Wallet, FileText } from 'lucide-react';
 import { useItinerary, useTrip, useTransport, useAccommodation, useCarRentals, useTravelers, authorColor } from '../../hooks/useTrip';
 import { put, remove } from '../../db/database';
 import type { ItineraryEvent } from '../../types';
+import { AddressText } from '../AddressText';
 import { money } from '../../types';
 import { convert } from '../../lib/currency';
 import { fmtDate, fmtTime, fmtDateLong, dateRange, todayStr } from '../../utils/format';
@@ -183,7 +184,7 @@ export function ItineraryTab({ onNavigate }: { onNavigate?: (v: TimelineNav) => 
         const m = catMeta(viewing.category as Cat);
         const rows: DetailRow[] = [
           { icon: <CalendarDays size={16} />, label: 'When', value: `${fmtDate(viewing.date)}${viewing.startTime ? ` · ${fmtTime(viewing.startTime)}${viewing.endTime ? ` – ${fmtTime(viewing.endTime)}` : ''}` : ''}` },
-          { icon: <MapPin size={16} />, label: 'Location', value: viewing.place },
+          { icon: <MapPin size={16} />, label: 'Location', value: viewing.place ? <AddressText address={viewing.place} /> : '' },
           { label: 'Category', value: `${m.emoji} ${m.label}` },
           { icon: <Wallet size={16} />, label: 'Cost', value: viewing.cost > 0 ? money(viewing.cost, viewing.costCurrency ?? cur) : '' },
           { icon: <FileText size={16} />, label: 'Notes', value: viewing.notes },

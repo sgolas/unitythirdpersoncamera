@@ -4,6 +4,7 @@ import { useActivities, useTrip, useBudgetSheets, useTravelers, authorColor } fr
 import { put, remove } from '../../db/database';
 import type { Activity, BudgetSheet, TripMeta } from '../../types';
 import { money } from '../../types';
+import { AddressText } from '../AddressText';
 import { fmtDate, fmtTime, todayStr } from '../../utils/format';
 import { TabHeader, Sheet, Field, TextInput, TextArea, Select, FormFooter, Fab, EmptyState, ConfirmDelete, CostField } from '../ui';
 import { PlaceInput } from '../PlaceInput';
@@ -226,7 +227,7 @@ function ActivityDetail({ activity: a, currency, onClose, onViewPdf }: {
       {a.provider && <p className="text-teal-600 font-semibold -mt-1 mb-2 flex items-center gap-1"><Tag size={13} /> {a.provider}</p>}
       <div className="bg-white rounded-2xl">
         {whenLabel(a) && <Row icon={<Clock size={16} />} label="When" value={whenLabel(a)} />}
-        {a.location && <Row icon={<MapPin size={16} />} label="Location" value={a.location} />}
+        {a.location && <Row icon={<MapPin size={16} />} label="Location" value={<AddressText address={a.location} />} />}
         {a.confirmation && <Row icon={<Ticket size={16} />} label="Confirmation" value={a.confirmation} />}
         {a.cost > 0 && <Row icon={<Wallet size={16} />} label="Cost" value={money(a.cost, a.costCurrency ?? currency)} />}
         {a.notes && <Row icon={<FileText size={16} />} label="Notes" value={a.notes} />}
